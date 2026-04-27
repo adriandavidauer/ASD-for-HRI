@@ -191,19 +191,24 @@ class ClassifyVVAD(SequentialProcessor):
 
 class GetShapeFeatures(Processor):
     """Processor to extract shape features from cropped RGB face using dlib's shape predictor."""
-    def __init__(self, shape_predictor_path=None):
+    def __init__(self, architecture='FaceShape', shape_predictor_path=None):
         super(GetShapeFeatures, self).__init__()
         if shape_predictor_path is None:
             shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
         self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
+        self.architecture = architecture
 
     def call(self, image):
         shape = self.predictor(image, dlib.rectangle(
                 0, 0, image.shape[1], image.shape[0]))
-        return shape.parts()
+        if self.architecture == 'LipShape':
+            # return only lip landmarks (48-67)
+            return shape.parts()[48:68]
+        else:
+            return shape.parts()
 
 
 if __name__ == '__main__':
     # load Processor for testing
-    test_classiffier = ClassifyVVAD(architecture='FaceShape')
+    test_classiffier = ClassifyVVAD(architecture='LipShape')
     # TODO: run processor for testing
