@@ -1,1 +1,3 @@
 pypaz @ git+https://github.com/adriandavidauer/paz.git #TODO: change after PR is merged
+dlib
+tqdm
