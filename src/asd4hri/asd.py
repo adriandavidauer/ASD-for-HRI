@@ -18,6 +18,12 @@ from paz.datasets import get_class_names
 from paz.pipelines import PreprocessImage
 from paz import processors as pr
 from paz.abstract import Processor, SequentialProcessor
+from paz.backend.camera import VideoPlayer, Camera
+import paz.pipelines.detection as dt
+
+
+
+
 
 from keras.models import load_model, Sequential
 from keras.layers import Dense, Input, LSTM, TimeDistributed, BatchNormalization, Flatten
@@ -158,12 +164,16 @@ class ClassifyVVAD(SequentialProcessor):
         if 'Shape' in architecture:
             # empty preprocess for shape features
             preprocess = SequentialProcessor()
-            preprocess.add(GetShapeFeatures())
+            preprocess.add(GetShapeFeatures(architecture=architecture))
 
         else:
             preprocess = PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0))
         self.buffer_images = pr.BufferImages(input_size, stride=stride)
         preprocess.add(self.buffer_images)
+
+        if 'Shape' in architecture:
+            preprocess.add(NormalizeShapeSample())
+
 
         self.add(pr.PredictWithNones(self.classifier, preprocess))
 
@@ -189,6 +199,52 @@ class ClassifyVVAD(SequentialProcessor):
         # AveragePredictions
         self.avg.predictions.clear()
 
+
+class NormalizeShapeSample(Processor):
+    """Processor to normalize a faceShape or LipShape sample"""
+    def __init__(self):
+        super(NormalizeShapeSample, self).__init__()
+
+    def _getDist(self, sample):
+        """
+        calcing the distance vectors for a sample
+
+        :param sample: the sample we want the distances to be calculated
+        :type sample: numpy array
+        """
+        # print(f'{type(sample)=}')
+        outSample = np.empty(sample.shape)  # this sets the dtype to np.float64
+        base = sample[0][0]
+        # print('SAMPLESHAPE: {}  -  should be (38, 68, 2)'.format(sample.shape))
+        # print("BASE for sample: {}".format(base))
+        # TODO: is there a faster way than a loop? Matrix substraction?
+        for frame_num, frame in enumerate(sample):
+            newFrame = np.empty(frame.shape)
+            for pos_num, pos in enumerate(frame):
+                # calc distance to base
+                xdist = pos[0] - base[0]
+                ydist = pos[1] - base[1]
+                newFrame[pos_num] = [xdist, ydist]
+            outSample[frame_num] = newFrame
+        return outSample
+
+    def _normalize(self, arr):
+        """
+        Normalizes the features of the the array to [-1, 1]. 
+        """
+        arrMax = np.max(arr)
+        arrMin = np.min(arr)
+        absMax = np.max([np.abs(arrMax), np.abs(arrMin)])
+        return arr/absMax
+    
+    def call(self, sample):
+        if sample is None:
+            return None
+        outputArray = self._getDist(sample[0]) # a batch of samples with size 1 is used for the model predicition
+        outputArray =  np.array([self._normalize(outputArray)]) # a batch of samples with size 1 is used for the model predicition
+        print(f'{outputArray=}')
+        return outputArray
+
 class GetShapeFeatures(Processor):
     """Processor to extract shape features from cropped RGB face using dlib's shape predictor."""
     def __init__(self, architecture='FaceShape', shape_predictor_path=None):
@@ -199,16 +255,145 @@ class GetShapeFeatures(Processor):
         self.architecture = architecture
 
     def call(self, image):
-        shape = self.predictor(image, dlib.rectangle(
+        shape = self.shape_predictor(image, dlib.rectangle(
                 0, 0, image.shape[1], image.shape[0]))
         if self.architecture == 'LipShape':
             # return only lip landmarks (48-67)
-            return shape.parts()[48:68]
+            return np.array([(p.x, p.y) for p in shape.parts()[48:68]]) 
         else:
-            return shape.parts()
+            return np.array([(p.x, p.y) for p in shape.parts()])
 
+class DetectVVAD(Processor):
+    """Visual Voice Activity Detection classification and detection pipeline.
+
+    # Example
+        ``` python
+        from paz.backend.camera import VideoPlayer, Camera
+        import paz.pipelines.detection as dt
+
+        detect = DetectVVAD()
+
+        pipeline = dt.DetectVVAD()
+        # To input multiple images, use a camera or a prerecorded video
+        camera = Camera(args.camera_id)
+        player = VideoPlayer((640, 480), pipeline, camera)
+        player.run()
+        ```
+
+    # Returns
+        Dictionary with ``image`` and ``boxes2D``.
+
+    # Returns
+        A function that takes an RGB image and outputs the predictions
+        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
+        The corresponding values of these keys contain the image with the drawn
+        inferences and a list of ``paz.abstract.messages.Boxes2D``.
+        Note multiple images are needed to produce a prediction.
+
+    # Arguments
+        architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D',
+            'CNN2Plus1D_Filters' and 'CNN2Plus1D_Light'
+        stride: Integer. How many frames are between the predictions (computational expansive (low stride) vs
+            high latency (high stride))
+        averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
+        average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set averaging_window_size to 1 to
+            disable averaging
+    """
+
+    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
+                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]],min_frames=38,patience=5):
+        super(DetectVVAD, self).__init__()
+        self.offsets = offsets
+        self.colors = colors
+        self.min_frames = int(min_frames)
+        self.patience = int(patience)
+        self.absent_counts = []
+        
+        #detection
+        self.copy = pr.Copy()
+        self.detect = dt.HaarCascadeFrontalFace()
+        self.square = SequentialProcessor()
+        self.square.add(pr.SquareBoxes2D())
+        self.square.add(pr.OffsetBoxes2D(offsets))
+        self.clip = pr.ClipBoxes2D()
+        self.crop = pr.CropBoxes2D()
+
+        
+        self.vvad_args = dict(
+            stride=stride,
+            averaging_window_size=averaging_window_size,
+            average_type=str(average_type),
+            architecture=architecture
+        )
+        self.classifiers = []  
+        self.adders = [] 
+        self.frame_counts = [] 
+        self.miss_counts  = []     
+
+        _tmp = ClassifyVVAD(**self.vvad_args)
+        self.class_names = list(_tmp.class_names)  
+        del _tmp
+      
+        self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
+        self.wrap = pr.WrapOutput(['image', 'boxes2D'])
+
+    def call(self, image):
+        image_copy = self.copy(image)
+        boxes2D = self.detect(image_copy)['boxes2D']
+        boxes2D = self.square(boxes2D)
+        boxes2D = self.clip(image, boxes2D)
+        cropped_images = self.crop(image, boxes2D)
+
+        N = len(cropped_images)
+
+        # one (classifier, adder) pair per face slot
+        while len(self.adders) < N:
+            clf = ClassifyVVAD(**self.vvad_args)
+            self.classifiers.append(clf)
+            self.adders.append(pr.AddClassAndScoreToBoxes(clf))
+            self.frame_counts.append(0)
+            self.miss_counts.append(0)
+            self.absent_counts.append(0)
+
+        # Increment counters for the first N slots (faces we actually saw this frame)
+        for i in range(N):
+            self.frame_counts[i] += 1
+            self.miss_counts[i] = 0
+            self.absent_counts[i] = 0
+
+        # Reset counters
+        for i in range(N, len(self.adders)):
+            self.miss_counts[i] += 1
+            self.absent_counts[i] += 1
+            if self.miss_counts[i] > self.patience:
+                # clear counter and clear the VVAD temporal buffer
+                self.frame_counts[i] = 0
+                self.classifiers[i].reset() 
+                self.miss_counts[i] = 0
+        # Drop dangling tail slots that have been absent long enough
+        while len(self.adders) > N and self.absent_counts[-1] >= self.min_frames:
+            self.adders.pop()
+            self.classifiers.pop()
+            self.frame_counts.pop()
+            self.miss_counts.pop()
+            self.absent_counts.pop()
+
+        # Classify and update only the slots that have matured enough frames
+        updated_boxes = []
+        for i, (adder, crop, box) in enumerate(zip(self.adders, cropped_images, boxes2D)):
+            updated = adder([crop], [box])[0] 
+            if self.frame_counts[i] >= self.min_frames:
+                updated_boxes.append(updated)
+
+        boxes2D = updated_boxes
+        image = self.draw(image, boxes2D)
+        return self.wrap(image, boxes2D)
 
 if __name__ == '__main__':
     # load Processor for testing
-    test_classiffier = ClassifyVVAD(architecture='LipShape')
+    #test_classiffier = ClassifyVVAD(architecture='LipShape')
     # TODO: run processor for testing
+    pipeline = DetectVVAD(architecture='FaceShape')
+    camera = Camera(0)
+    player = VideoPlayer((640, 480), pipeline, camera)
+    player.run()
