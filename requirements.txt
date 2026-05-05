@@ -1,1 +1,4 @@
 pypaz @ git+https://github.com/adriandavidauer/paz.git #TODO: change after PR is merged
+pandas
+wget
+yt-dlp
