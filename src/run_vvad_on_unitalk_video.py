@@ -1,19 +1,18 @@
 """Evaluate UniTalk val split with the DetectVVAD pipeline from pypaz.
 
 Every frame is passed through dt.DetectVVAD().  At frames that have ground-truth
-annotations, predicted bounding boxes are matched to GT boxes by IoU, and three
-metrics are accumulated:
+annotations, predicted bounding boxes are matched to GT boxes by IoU
 
-  1. Entity detection rate  – fraction of GT entities that had ≥1 spatial match
-  2. Frame accuracy         – fraction of annotated frames where all matches are correct
-  3. GT-row detection rate  – % of GT annotation rows correctly predicted
-
-An annotated output video is written showing GT boxes (yellow) and predicted
-boxes (green = correct, red = wrong).
+An annotated output video is written showing:
+    Colour scheme (BGR):
+      green - ground truth (GT)
+      red    (0,0,255)     – matched to GT, correct label
+      yellow (0,255,255)   – matched to GT, wrong label
+      black  (0,0,0)       – unmatched (no GT box overlaps sufficiently)
 
 Usage:
     # single video
-    python run_vvad_on_unitalk_video.py --data_dir data/ --video qv3-HaaxGUc
+    python run_vvad_on_unitalk_video.py --data_dir data/ --video qv3-HaaxGUc --enable_logging
 
     # all val videos
     python run_vvad_on_unitalk_video.py --data_dir data/
@@ -44,8 +43,6 @@ LOGGER = logging.getLogger('UniTalk_VVAD')
 _LABEL_MAP = {
     'SPEAKING_AUDIBLE':       'speaking',
     'NOT_SPEAKING':           'not-speaking',
-    'SPEAKING_NOT_AUDIBLE':   'speaking',
-    'SPEAKING_BUT_NOT_AUDIBLE': 'speaking',
 }
 
 
@@ -267,9 +264,6 @@ def _draw_gt_box(bgr, bbox_pixel, entity_id, vvad_label, matched, best_iou, best
 
     - Filled circle  → this GT was matched to a prediction.
     - Hollow circle  → no prediction was matched (missed detection).
-    - Text shows best IoU and containment against any prediction, even when
-      below the acceptance threshold, so you can see exactly why a box was
-      or was not matched.
     """
     x1, y1, x2, y2 = (int(v) for v in bbox_pixel)
     color = (0, 255, 0)                                            # green
@@ -280,38 +274,53 @@ def _draw_gt_box(bgr, bbox_pixel, entity_id, vvad_label, matched, best_iou, best
     else:
         cv2.circle(bgr, (cx, cy), 5, (0, 128, 0), 1)              # hollow  → missed
     header = f'GT {entity_id} {vvad_label}'
-    iou_txt = f'IoU:{best_iou:.2f} cont:{best_cont:.2f}'
     cv2.putText(bgr, header,  (x1, max(8,  y1 - 13)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.32, color, 1, cv2.LINE_AA)
-    cv2.putText(bgr, iou_txt, (x1, max(18, y1 - 3)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.30, color, 1, cv2.LINE_AA)
 
 
-def _draw_pred_box(bgr, pred_box, best_iou, best_cont):
-    """Draw a pipeline-detected bounding box in red with its best IoU score."""
+
+def _draw_pred_box(bgr, pred_box, best_iou, best_cont, status):
+    """Draw a pipeline-detected bounding box with a status-coded colour.
+
+    Colour scheme (BGR):
+      red    (0,0,255)     – matched to GT, correct label
+      yellow (0,255,255)   – matched to GT, wrong label
+      black  (0,0,0)       – unmatched (no GT box overlaps sufficiently)
+
+    Args:
+        status: 'correct' | 'wrong' | 'unmatched'
+    """
     pred_label = getattr(pred_box, 'class_name', None)
     if pred_label is None:
         return
     x1, y1, x2, y2 = (int(v) for v in pred_box.coordinates)
-    color = (0, 0, 255)                                            # red
+
+    color = {
+        'correct':   (0, 0, 255),     # red
+        'wrong':     (0, 255, 255),   # yellow
+        'unmatched': (0, 0, 0),       # black
+    }.get(status, (0, 0, 255))
+
     cv2.rectangle(bgr, (x1, y1), (x2, y2), color, 2)
     w = bgr.shape[1]
-    tx, ty = max(0, min(x1, w - 180)), max(20, y1 - 4)
-    cv2.putText(bgr, f'PRED {pred_label} IoU:{best_iou:.2f} cont:{best_cont:.2f}',
+    tx, ty = max(0, min(x1, w - 190)), max(20, y1 - 4)
+    cv2.putText(bgr,
+                f'PRED {pred_label} [{status}] IoU:{best_iou:.2f} cont:{best_cont:.2f}',
                 (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 0.30, color, 1, cv2.LINE_AA)
 
 
 def _draw_frame_summary(bgr, frame_idx, n_gt, n_pred, n_matched, n_correct):
     h = bgr.shape[0]
-    txt = (f'Frame {frame_idx} | GT:{n_gt}(green)  PRED:{n_pred}(red)'
-           f'  matched:{n_matched}  correct:{n_correct}')
+    n_wrong     = n_matched - n_correct
+    n_unmatched = n_pred - n_matched
+    txt = (f'Frame {frame_idx} | GT:{n_gt}(green)  '
+           f'correct:{n_correct}(red) wrong:{n_wrong}(yellow) unmatched:{n_unmatched}(black)')
     cv2.putText(bgr, txt, (10, max(20, h - 15)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
 
 # ── statistics accumulator ────────────────────────────────────────────────────
 
-PIPELINE_BUFFER = 36   # DetectVVAD accumulates this many frames before producing output
 
 
 class Stats:
@@ -354,14 +363,13 @@ class Stats:
         for a in all_annots:
             self.entity_gt_rows[a['entity_id']] += 1
 
-        # ── annotation-frame level ────────────────────────────────────────────
-        self.total_annotated_frames      = 0
-        self.annot_frames_no_predictions = 0  # GT exists but pipeline returned nothing
-        self.correct_frames              = 0  # frames where ALL matches are correct
-
-        # ── GT-row level ──────────────────────────────────────────────────────
-        self.total_gt_rows   = 0
-        self.correct_gt_rows = 0
+        # ── annotation-frame / timestamp level ───────────────────────────────
+        # Each unique frame_timestamp maps to one annotated frame.
+        # A timestamp is "correct" when every GT entity in that frame was both
+        # spatially matched to a prediction AND given the right label.
+        self.total_annotated_frames      = 0   # = total unique timestamps evaluated
+        self.annot_frames_no_predictions = 0   # GT exists but pipeline returned nothing
+        self.correct_timestamps          = 0   # timestamps where ALL entities correct
 
     # ── called for every frame ────────────────────────────────────────────────
 
@@ -375,14 +383,15 @@ class Stats:
     # ── called only for annotation frames ─────────────────────────────────────
 
     def update(self, pred_boxes, gt_boxes_pixel, matches):
-        """Record GT-matching results for one annotated frame."""
-        self.total_annotated_frames  += 1
-        self.total_gt_rows           += len(gt_boxes_pixel)
-        self.preds_on_annot_frames   += len(pred_boxes)
+        """Record GT-matching results for one annotated frame (= one timestamp)."""
+        self.total_annotated_frames += 1
+        self.preds_on_annot_frames  += len(pred_boxes)
         if not pred_boxes:
             self.annot_frames_no_predictions += 1
 
-        n_correct = 0
+        # collect which GT indices were correctly predicted in this frame
+        correctly_predicted_gt = set()
+
         for pi, gi, _iou in matches:
             pred_label = getattr(pred_boxes[pi], 'class_name', None)
             gt  = gt_boxes_pixel[gi]
@@ -399,17 +408,17 @@ class Stats:
 
             is_correct = pred_label == gt['vvad_label']
             if is_correct:
-                n_correct                += 1
-                self.correct_predictions += 1
-                self.correct_gt_rows     += 1
-                self.entity_correct[eid] += 1
+                self.correct_predictions    += 1
+                self.entity_correct[eid]    += 1
+                correctly_predicted_gt.add(gi)
                 if pred_label == 'speaking':
                     self.correct_speaking     += 1
                 elif pred_label == 'not-speaking':
                     self.correct_not_speaking += 1
 
-        if matches and n_correct == len(matches):
-            self.correct_frames += 1
+        # timestamp is correct only when every GT entity was correctly predicted
+        if len(correctly_predicted_gt) == len(gt_boxes_pixel):
+            self.correct_timestamps += 1
 
     # ── derived metrics ───────────────────────────────────────────────────────
 
@@ -420,20 +429,17 @@ class Stats:
 
     @property
     def prediction_accuracy_pct(self):
-        """% of predictions on annotation frames that were correct."""
+        """% of matched predictions on annotation frames that were correct."""
         return 100.0 * self.correct_predictions / max(1, self.preds_on_annot_frames)
+
+    @property
+    def timestamp_accuracy_pct(self):
+        """% of timestamps where every GT entity was correctly predicted."""
+        return 100.0 * self.correct_timestamps / max(1, self.total_annotated_frames)
 
     @property
     def entity_detection_rate(self):
         return len(self.detected_entities) / max(1, len(self.gt_entities))
-
-    @property
-    def frame_accuracy(self):
-        return self.correct_frames / max(1, self.total_annotated_frames)
-
-    @property
-    def gt_row_detection_pct(self):
-        return 100.0 * self.correct_gt_rows / max(1, self.total_gt_rows)
 
 
 # ── core: single-pass video evaluation ───────────────────────────────────────
@@ -472,14 +478,13 @@ def evaluate_video(video_path, annots, iou_threshold, output_path):
     frame_map = _build_frame_map(annots, native_fps, width, height)
     max_frame  = max(frame_map) if frame_map else 0
 
-    pipeline = dt.DetectVVAD()
+    # This function call parameters increase the number of predictions returned since stride is reduced and min_frames for buffer is also reduced
+    pipeline = dt.DetectVVAD(stride=1, averaging_window_size=1, min_frames=25, patience=10)
     stats    = Stats(annots, total_video_frames)
     t0       = time.time()
 
     LOGGER.info('Total frames in video : %d  (%.1f s @ %.2f fps)',
                 total_video_frames, total_video_frames / native_fps, native_fps)
-    LOGGER.info('Pipeline buffer       : %d frames (predictions begin after frame %d)',
-                PIPELINE_BUFFER, PIPELINE_BUFFER)
 
     frame_idx         = 0
     empty_run_start   = None   # first frame of a consecutive no-prediction run
@@ -584,6 +589,16 @@ def evaluate_video(video_path, annots, iou_threshold, output_path):
                             else 'unmatched',
                         )
 
+                # build per-prediction status for colour coding
+                pred_status = {}
+                for pi, gi, _ in matches:
+                    pred_label = getattr(pred_boxes[pi], 'class_name', None)
+                    pred_status[pi] = (
+                        'correct' if pred_label == gt_boxes[gi]['vvad_label'] else 'wrong'
+                    )
+                for pi in range(len(pred_boxes)):
+                    pred_status.setdefault(pi, 'unmatched')
+
                 # green: GT boxes with IoU diagnostic
                 for gi, gt in enumerate(gt_boxes):
                     b = gt_best[gi]
@@ -592,11 +607,12 @@ def evaluate_video(video_path, annots, iou_threshold, output_path):
                                  matched=gi in matched_gt_indices,
                                  best_iou=b['iou'], best_cont=b['containment'])
 
-                # red: ALL pipeline detections with their best IoU against any GT
+                # red/yellow/black: ALL pipeline detections, colour-coded by status
                 for pi, pred in enumerate(pred_boxes):
                     b = pred_best[pi]
                     _draw_pred_box(out_bgr, pred,
-                                   best_iou=b['iou'], best_cont=b['containment'])
+                                   best_iou=b['iou'], best_cont=b['containment'],
+                                   status=pred_status[pi])
 
                 _draw_frame_summary(out_bgr, frame_idx,
                                     n_gt=len(gt_boxes), n_pred=len(pred_boxes),
@@ -642,7 +658,6 @@ def print_video_stats(video_id, video_path, output_path, stats, elapsed):
     LOGGER.info('  ┌─ Frame overview ─────────────────────────────────────')
     LOGGER.info('  │  Total frames in video       : %d', stats.total_video_frames)
     LOGGER.info('  │  Frames fed to pipeline      : %d', stats.frames_fed_to_pipeline)
-    LOGGER.info('  │  Pipeline buffer size        : %d frames', PIPELINE_BUFFER)
     LOGGER.info('  │  Frames actually evaluated   : %d'
                 '  (frames where pipeline returned ≥1 prediction)',
                 stats.frames_actually_evaluated)
@@ -688,20 +703,13 @@ def print_video_stats(video_id, video_path, output_path, stats, elapsed):
     LOGGER.info('  │  (an entity is "detected" when ≥1 frame has a spatial match)')
     LOGGER.info('  │')
 
-    # ── Frame accuracy ────────────────────────────────────────────────────────
-    LOGGER.info('  ├─ Frame accuracy ────────────────────────────────────')
-    LOGGER.info('  │  Correct frames    : %d / %d  (%.1f%%)',
-                stats.correct_frames, stats.total_annotated_frames,
-                100 * stats.frame_accuracy)
-    LOGGER.info('  │  (a frame is "correct" when every GT↔pred match has the right label)')
-    LOGGER.info('  │')
-
-    # ── GT-row detection rate ─────────────────────────────────────────────────
-    LOGGER.info('  └─ GT-row detection rate ─────────────────────────────')
-    LOGGER.info('     Correct GT rows   : %d / %d  (%.2f%%)',
-                stats.correct_gt_rows, stats.total_gt_rows,
-                stats.gt_row_detection_pct)
-    LOGGER.info('     (each CSV row counts; correct = spatial match + correct label)')
+    # ── Timestamp accuracy ────────────────────────────────────────────────────
+    LOGGER.info('  └─ Timestamp accuracy ────────────────────────────────')
+    LOGGER.info('     Total timestamps evaluated  : %d', stats.total_annotated_frames)
+    LOGGER.info('     Correct timestamps          : %d  (%.2f%%)',
+                stats.correct_timestamps, stats.timestamp_accuracy_pct)
+    LOGGER.info('     (a timestamp is correct when ALL GT entities in that frame')
+    LOGGER.info('      were spatially matched and given the right label)')
 
     # per-entity breakdown (debug log only)
     LOGGER.debug('')
@@ -730,10 +738,8 @@ def print_aggregate_stats(all_stats):
     cnsp= sum(s.correct_not_speaking        for s in all_stats)
     det = sum(len(s.detected_entities)      for s in all_stats)
     tot = sum(len(s.gt_entities)            for s in all_stats)
-    cf  = sum(s.correct_frames              for s in all_stats)
+    ct  = sum(s.correct_timestamps          for s in all_stats)
     tf  = sum(s.total_annotated_frames      for s in all_stats)
-    cg  = sum(s.correct_gt_rows             for s in all_stats)
-    tg  = sum(s.total_gt_rows               for s in all_stats)
 
     LOGGER.info('')
     LOGGER.info('═' * 62)
@@ -750,10 +756,9 @@ def print_aggregate_stats(all_stats):
                 100 * cnsp / max(1, nsp), cnsp, nsp)
     LOGGER.info('  Entity detection rate         : %d / %d  (%.1f%%)',
                 det, tot, 100 * det / max(1, tot))
-    LOGGER.info('  Frame accuracy                : %d / %d  (%.1f%%)',
-                cf, tf, 100 * cf / max(1, tf))
-    LOGGER.info('  GT-row detection rate         : %d / %d  (%.2f%%)',
-                cg, tg, 100 * cg / max(1, tg))
+    LOGGER.info('  Timestamp accuracy            : %d / %d  (%.2f%%)',
+                ct, tf, 100 * ct / max(1, tf))
+    LOGGER.info('  (timestamp correct = all GT entities in that frame matched + right label)')
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
