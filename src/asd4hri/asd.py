@@ -134,7 +134,7 @@ class ClassifyVVAD(SequentialProcessor):
         input_size: Tuple of integers. Input shape to the model in following format: (frames, height, width, channels)
             e.g. (38, 96, 96, 3).
         architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D',
-            'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers' and 'CNN2Plus1D_Light'
+            'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
         stride: Integer. How many frames are between the predictions (computational expansive (low update rate) vs
             high latency (high update rate))
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
@@ -153,7 +153,7 @@ class ClassifyVVAD(SequentialProcessor):
             self.classifier = CNN2Plus1D(weights='VVAD_LRS3',
                                          architecture=str(architecture))
         elif architecture == 'LipShape':
-            self.classifier = load_model(str(Path(__file__).absolute().parent.parent / "models" / 'lipFeatureModel.keras'))
+            self.classifier = load_model(str(Path(__file__).absolute().parent.parent  / "models" / 'paz_LipShape_0.8958.keras'))
             input_size = (38, 20, 2)
         elif architecture == 'FaceShape':
             self.classifier = load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras'))
@@ -213,17 +213,17 @@ class NormalizeShapeSample(Processor):
         :type sample: numpy array
         """
         # print(f'{type(sample)=}')
-        outSample = np.empty(sample.shape)  # this sets the dtype to np.float64
+        outSample = np.empty(sample.shape, dtype=np.float64)  # this sets the dtype to np.float64
         base = sample[0][0]
         # print('SAMPLESHAPE: {}  -  should be (38, 68, 2)'.format(sample.shape))
         # print("BASE for sample: {}".format(base))
         # TODO: is there a faster way than a loop? Matrix substraction?
         for frame_num, frame in enumerate(sample):
-            newFrame = np.empty(frame.shape)
+            newFrame = np.empty(frame.shape, dtype=np.float64)
             for pos_num, pos in enumerate(frame):
                 # calc distance to base
-                xdist = pos[0] - base[0]
-                ydist = pos[1] - base[1]
+                xdist = float(pos[0]) - float(base[0])
+                ydist = float(pos[1]) - float(base[1])
                 newFrame[pos_num] = [xdist, ydist]
             outSample[frame_num] = newFrame
         return outSample
@@ -242,7 +242,7 @@ class NormalizeShapeSample(Processor):
             return None
         outputArray = self._getDist(sample[0]) # a batch of samples with size 1 is used for the model predicition
         outputArray =  np.array([self._normalize(outputArray)]) # a batch of samples with size 1 is used for the model predicition
-        print(f'{outputArray=}')
+        # print(f'{outputArray=}')
         return outputArray
 
 class GetShapeFeatures(Processor):
@@ -292,7 +292,7 @@ class DetectVVAD(Processor):
 
     # Arguments
         architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D',
-            'CNN2Plus1D_Filters' and 'CNN2Plus1D_Light'
+            'CNN2Plus1D_Filters' and 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
         stride: Integer. How many frames are between the predictions (computational expansive (low stride) vs
             high latency (high stride))
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
@@ -301,7 +301,7 @@ class DetectVVAD(Processor):
     """
 
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
-                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]],min_frames=38,patience=5):
+                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
         super(DetectVVAD, self).__init__()
         self.offsets = offsets
         self.colors = colors
