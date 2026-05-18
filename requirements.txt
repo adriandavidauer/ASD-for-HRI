@@ -1,1 +1,6 @@
-pypaz @ git+https://github.com/adriandavidauer/paz.git #TODO: change after PR is merged
+pypaz @ git+https://github.com/adriandavidauer/paz.git #TODO: change after PR is merged and package released
+dlib
+tqdm
+h5py
+scikit-learn
+tensorboard
