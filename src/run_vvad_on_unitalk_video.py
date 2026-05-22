@@ -372,18 +372,11 @@ class Stats:
         self.preds_on_annot_frames    = 0   # pred boxes returned on annotation frames
         self.correct_predictions      = 0   # those that matched GT with correct label
 
-        # per-label breakdown: matched predictions and correctness
-        self.speaking_predictions     = 0
-        self.correct_speaking         = 0   # TP for speaking
-        self.not_speaking_predictions = 0
-        self.correct_not_speaking     = 0   # TP for not-speaking
-
-        # F1/Precision/Recall: FP and FN per class
-        # TP_speaking = correct_speaking, TP_not_speaking = correct_not_speaking
-        self.fp_speaking      = 0   # pred=speaking, gt≠speaking OR unmatched speaking pred
-        self.fn_speaking      = 0   # gt=speaking, pred≠speaking OR unmatched speaking GT
-        self.fp_not_speaking  = 0
-        self.fn_not_speaking  = 0
+        # Binary classification counters (positive class = speaking)
+        self.tp = 0   # pred=speaking,     gt=speaking
+        self.tn = 0   # pred=not-speaking, gt=not-speaking
+        self.fp = 0   # pred=speaking,     gt=not-speaking OR unmatched speaking pred
+        self.fn = 0   # pred=not-speaking, gt=speaking
 
         # ── entity-level ──────────────────────────────────────────────────────
         self.gt_entities            = set(a['entity_id'] for a in all_annots)
@@ -466,35 +459,28 @@ class Stats:
                 self.detected_entities.add(eid)
                 self.entity_matched[eid] += 1
 
-                if pred_label == 'speaking':
-                    self.speaking_predictions += 1
-                elif pred_label == 'not-speaking':
-                    self.not_speaking_predictions += 1
-
                 is_correct = pred_label == gt_label
-                if is_correct:                          # matched + correct label → TP
+                if is_correct:
                     self.correct_predictions += 1
                     self.entity_correct[eid] += 1
                     correctly_predicted_gt.add(gi)
                     if pred_label == 'speaking':
-                        self.correct_speaking += 1
-                    elif pred_label == 'not-speaking':
-                        self.correct_not_speaking += 1
-                else:                                   # matched + wrong label → FP + FN
-                    if pred_label == 'speaking' and gt_label == 'not-speaking':
-                        self.fp_speaking     += 1
-                        self.fn_not_speaking += 1
-                    elif pred_label == 'not-speaking' and gt_label == 'speaking':
-                        self.fp_not_speaking += 1
-                        self.fn_speaking     += 1
+                        self.tp += 1
+                    else:
+                        self.tn += 1
+                else:
+                    if pred_label == 'speaking':   # pred=speaking, gt=not-speaking
+                        self.fp += 1
+                    else:                          # pred=not-speaking, gt=speaking
+                        self.fn += 1
 
-            for pi in range(len(pred_boxes)):           # unmatched prediction → FP
+            for pi in range(len(pred_boxes)):           # unmatched prediction
                 if pi not in matched_pi:
                     pred_label = getattr(pred_boxes[pi], 'class_name', None)
                     if pred_label == 'speaking':
-                        self.fp_speaking     += 1
+                        self.fp += 1
                     elif pred_label == 'not-speaking':
-                        self.fp_not_speaking += 1
+                        self.tn += 1
 
         # timestamp is correct only when every GT entity was correctly predicted
         if len(correctly_predicted_gt) == len(gt_boxes_pixel):
@@ -521,37 +507,19 @@ class Stats:
     def entity_detection_rate(self):
         return len(self.detected_entities) / max(1, len(self.gt_entities))
 
-    # ── per-class Precision / Recall / F1 ────────────────────────────────────
-    # TP_speaking = correct_speaking; TP_not_speaking = correct_not_speaking
+    # ── Precision / Recall / F1 (binary, positive class = speaking) ─────────
 
     @property
-    def precision_speaking(self):
-        tp = self.correct_speaking
-        return tp / max(1, tp + self.fp_speaking)
+    def precision(self):
+        return self.tp / max(1, self.tp + self.fp)
 
     @property
-    def recall_speaking(self):
-        tp = self.correct_speaking
-        return tp / max(1, tp + self.fn_speaking)
+    def recall(self):
+        return self.tp / max(1, self.tp + self.fn)
 
     @property
-    def f1_speaking(self):
-        p, r = self.precision_speaking, self.recall_speaking
-        return 2 * p * r / max(1e-9, p + r)
-
-    @property
-    def precision_not_speaking(self):
-        tp = self.correct_not_speaking
-        return tp / max(1, tp + self.fp_not_speaking)
-
-    @property
-    def recall_not_speaking(self):
-        tp = self.correct_not_speaking
-        return tp / max(1, tp + self.fn_not_speaking)
-
-    @property
-    def f1_not_speaking(self):
-        p, r = self.precision_not_speaking, self.recall_not_speaking
+    def f1(self):
+        p, r = self.precision, self.recall
         return 2 * p * r / max(1e-9, p + r)
 
     def entities_below_consecutive_threshold(self, threshold=CONSECUTIVE_FRAME_THRESHOLD):
@@ -817,32 +785,22 @@ def print_video_stats(video_id, video_path, output_path, stats, elapsed):
     LOGGER.info('  │')
 
     # ── Prediction accuracy ───────────────────────────────────────────────────
-    sp_acc  = (100.0 * stats.correct_speaking     / max(1, stats.speaking_predictions))
-    nsp_acc = (100.0 * stats.correct_not_speaking / max(1, stats.not_speaking_predictions))
     LOGGER.info('  ├─ Prediction accuracy (annotation frames only) ───────')
     LOGGER.info('  │  Predictions on annot frames     : %d', stats.preds_on_annot_frames)
-    LOGGER.info('  │  Overall correct                 : %d / %d  (%.2f%%)',
+    LOGGER.info('  │  Overall correct (TP+TN)         : %d / %d  (%.2f%%)',
                 stats.correct_predictions, stats.preds_on_annot_frames,
                 stats.prediction_accuracy_pct)
-    LOGGER.info('  │  Speaking     predictions        : %d  →  correct %d  (%.2f%%)',
-                stats.speaking_predictions, stats.correct_speaking, sp_acc)
-    LOGGER.info('  │  Not-speaking predictions        : %d  →  correct %d  (%.2f%%)',
-                stats.not_speaking_predictions, stats.correct_not_speaking, nsp_acc)
     LOGGER.info('  │  (correct = spatially matched to a GT box + right label)')
     LOGGER.info('  │')
 
-    # ── Per-class Precision / Recall / F1 ────────────────────────────────────
-    LOGGER.info('  ├─ Per-class Precision / Recall / F1 ────────────────')
-    LOGGER.info('  │                        TP    FP    FN    P       R       F1')
-    LOGGER.info('  │  speaking          : %4d  %4d  %4d  %.3f   %.3f   %.3f',
-                stats.correct_speaking, stats.fp_speaking, stats.fn_speaking,
-                stats.precision_speaking, stats.recall_speaking, stats.f1_speaking)
-    LOGGER.info('  │  not-speaking      : %4d  %4d  %4d  %.3f   %.3f   %.3f',
-                stats.correct_not_speaking, stats.fp_not_speaking, stats.fn_not_speaking,
-                stats.precision_not_speaking, stats.recall_not_speaking,
-                stats.f1_not_speaking)
-    LOGGER.info('  │  (TP = matched pair with correct label; FP = wrong-label match or'
-                ' unmatched pred; FN = unmatched GT or wrong-label match)')
+    # ── Precision / Recall / F1 (binary, positive = speaking) ───────────────
+    LOGGER.info('  ├─ Precision / Recall / F1 (positive class = speaking) ─')
+    LOGGER.info('  │    TP    FN    FP    TN    P       R       F1')
+    LOGGER.info('  │  %4d  %4d  %4d  %4d  %.3f   %.3f   %.3f',
+                stats.tp, stats.fn, stats.fp, stats.tn,
+                stats.precision, stats.recall, stats.f1)
+    LOGGER.info('  │  (TP/TN = correct label; FP = wrong-label or unmatched speaking pred;'
+                ' FN = wrong-label match pred=not-speaking gt=speaking)')
     LOGGER.info('  │')
 
     # ── Missed detections (GT exists, pipeline returned nothing) ─────────────
@@ -909,14 +867,10 @@ def print_aggregate_stats(all_stats):
     tp   = sum(s.total_predictions           for s in all_stats)
     cp   = sum(s.correct_predictions         for s in all_stats)
     pa   = sum(s.preds_on_annot_frames       for s in all_stats)
-    sp   = sum(s.speaking_predictions        for s in all_stats)
-    csp  = sum(s.correct_speaking            for s in all_stats)
-    fpsp = sum(s.fp_speaking                 for s in all_stats)
-    fnsp = sum(s.fn_speaking                 for s in all_stats)
-    nsp  = sum(s.not_speaking_predictions    for s in all_stats)
-    cnsp = sum(s.correct_not_speaking        for s in all_stats)
-    fpns = sum(s.fp_not_speaking             for s in all_stats)
-    fnns = sum(s.fn_not_speaking             for s in all_stats)
+    atp  = sum(s.tp                          for s in all_stats)
+    atn  = sum(s.tn                          for s in all_stats)
+    afp  = sum(s.fp                          for s in all_stats)
+    afn  = sum(s.fn                          for s in all_stats)
     det  = sum(len(s.detected_entities)      for s in all_stats)
     tot  = sum(len(s.gt_entities)            for s in all_stats)
     ct   = sum(s.correct_timestamps          for s in all_stats)
@@ -928,12 +882,9 @@ def print_aggregate_stats(all_stats):
     below_count = sum(len(s.entities_below_consecutive_threshold()) for s in all_stats)
 
     # aggregate F1
-    p_sp  = csp  / max(1, csp  + fpsp)
-    r_sp  = csp  / max(1, csp  + fnsp)
-    f1_sp = 2 * p_sp * r_sp / max(1e-9, p_sp + r_sp)
-    p_ns  = cnsp / max(1, cnsp + fpns)
-    r_ns  = cnsp / max(1, cnsp + fnns)
-    f1_ns = 2 * p_ns * r_ns / max(1e-9, p_ns + r_ns)
+    p_agg  = atp / max(1, atp + afp)
+    r_agg  = atp / max(1, atp + afn)
+    f1_agg = 2 * p_agg * r_agg / max(1e-9, p_agg + r_agg)
 
     LOGGER.info('')
     LOGGER.info('═' * 62)
@@ -947,12 +898,10 @@ def print_aggregate_stats(all_stats):
     LOGGER.info('  Overall prediction accuracy       : %.2f%%  (%d / %d)',
                 100 * cp / max(1, pa), cp, pa)
     LOGGER.info('')
-    LOGGER.info('  Per-class Precision / Recall / F1:')
-    LOGGER.info('                        TP    FP    FN    P       R       F1')
-    LOGGER.info('  speaking          : %4d  %4d  %4d  %.3f   %.3f   %.3f',
-                csp, fpsp, fnsp, p_sp, r_sp, f1_sp)
-    LOGGER.info('  not-speaking      : %4d  %4d  %4d  %.3f   %.3f   %.3f',
-                cnsp, fpns, fnns, p_ns, r_ns, f1_ns)
+    LOGGER.info('  Precision / Recall / F1 (positive = speaking):')
+    LOGGER.info('    TP    TN    FP    FN    P       R       F1')
+    LOGGER.info('  %4d  %4d  %4d  %4d  %.3f   %.3f   %.3f',
+                atp, atn, afp, afn, p_agg, r_agg, f1_agg)
     LOGGER.info('')
     LOGGER.info('  Missed detections (GT, 0 detections): %d / %d  (%.1f%%)',
                 mnd, tf, 100 * mnd / max(1, tf))
@@ -976,8 +925,6 @@ def write_result_file(result_dir, video_id, stats, elapsed):
     below = stats.entities_below_consecutive_threshold()
     below_pct = 100.0 * len(below) / max(1, len(stats.gt_entities))
     missed_pct = 100.0 * stats.annot_frames_no_predictions / max(1, stats.total_annotated_frames)
-    sp_acc  = 100.0 * stats.correct_speaking     / max(1, stats.speaking_predictions)
-    nsp_acc = 100.0 * stats.correct_not_speaking / max(1, stats.not_speaking_predictions)
     no_pred_total    = stats.frames_fed_to_pipeline - stats.frames_with_predictions
     no_pred_with_gt  = stats.annot_frames_no_predictions
     no_pred_excl     = stats.no_pred_frames_without_gt
@@ -997,19 +944,13 @@ def write_result_file(result_dir, video_id, stats, elapsed):
         '',
         '── Prediction accuracy (annotation frames only) ──────────',
         f'  Predictions on annot frames     : {stats.preds_on_annot_frames}',
-        f'  Overall correct                 : {stats.correct_predictions} / {stats.preds_on_annot_frames}'
+        f'  Overall correct (TP+TN)         : {stats.correct_predictions} / {stats.preds_on_annot_frames}'
         f'  ({stats.prediction_accuracy_pct:.2f}%)',
-        f'  Speaking   predictions          : {stats.speaking_predictions}'
-        f'  -> correct {stats.correct_speaking}  ({sp_acc:.2f}%)',
-        f'  Not-speaking predictions        : {stats.not_speaking_predictions}'
-        f'  -> correct {stats.correct_not_speaking}  ({nsp_acc:.2f}%)',
         '',
-        '── Per-class Precision / Recall / F1 ─────────────────────',
-        f'{"":22s}  TP    FP    FN    P       R       F1',
-        f'  speaking        : {stats.correct_speaking:4d}  {stats.fp_speaking:4d}  {stats.fn_speaking:4d}'
-        f'  {stats.precision_speaking:.3f}   {stats.recall_speaking:.3f}   {stats.f1_speaking:.3f}',
-        f'  not-speaking    : {stats.correct_not_speaking:4d}  {stats.fp_not_speaking:4d}  {stats.fn_not_speaking:4d}'
-        f'  {stats.precision_not_speaking:.3f}   {stats.recall_not_speaking:.3f}   {stats.f1_not_speaking:.3f}',
+        '── Precision / Recall / F1 (positive class = speaking) ───',
+        f'{"":4s}  TP    TN    FP    FN    P       R       F1',
+        f'      {stats.tp:4d}  {stats.tn:4d}  {stats.fp:4d}  {stats.fn:4d}'
+        f'  {stats.precision:.3f}   {stats.recall:.3f}   {stats.f1:.3f}',
         '',
         '── Missed detections ─────────────────────────────────────',
         f'  GT timestamps with 0 detections : {stats.annot_frames_no_predictions}'
@@ -1069,12 +1010,10 @@ def write_aggregate_result_file(result_dir, all_stats, video_ids):
     tp   = sum(s.total_predictions           for s in all_stats)
     cp   = sum(s.correct_predictions         for s in all_stats)
     pa   = sum(s.preds_on_annot_frames       for s in all_stats)
-    csp  = sum(s.correct_speaking            for s in all_stats)
-    fpsp = sum(s.fp_speaking                 for s in all_stats)
-    fnsp = sum(s.fn_speaking                 for s in all_stats)
-    cnsp = sum(s.correct_not_speaking        for s in all_stats)
-    fpns = sum(s.fp_not_speaking             for s in all_stats)
-    fnns = sum(s.fn_not_speaking             for s in all_stats)
+    atp  = sum(s.tp                          for s in all_stats)
+    atn  = sum(s.tn                          for s in all_stats)
+    afp  = sum(s.fp                          for s in all_stats)
+    afn  = sum(s.fn                          for s in all_stats)
     det  = sum(len(s.detected_entities)      for s in all_stats)
     tot  = sum(len(s.gt_entities)            for s in all_stats)
     ct   = sum(s.correct_timestamps          for s in all_stats)
@@ -1083,12 +1022,9 @@ def write_aggregate_result_file(result_dir, all_stats, video_ids):
     npng = sum(s.no_pred_frames_without_gt   for s in all_stats)
     below_count = sum(len(s.entities_below_consecutive_threshold()) for s in all_stats)
 
-    p_sp  = csp  / max(1, csp  + fpsp)
-    r_sp  = csp  / max(1, csp  + fnsp)
-    f1_sp = 2 * p_sp * r_sp / max(1e-9, p_sp + r_sp)
-    p_ns  = cnsp / max(1, cnsp + fpns)
-    r_ns  = cnsp / max(1, cnsp + fnns)
-    f1_ns = 2 * p_ns * r_ns / max(1e-9, p_ns + r_ns)
+    p_agg  = atp / max(1, atp + afp)
+    r_agg  = atp / max(1, atp + afn)
+    f1_agg = 2 * p_agg * r_agg / max(1e-9, p_agg + r_agg)
 
     lines = [
         f'AGGREGATE  ({len(all_stats)} videos)',
@@ -1103,10 +1039,9 @@ def write_aggregate_result_file(result_dir, all_stats, video_ids):
         '── Prediction accuracy ───────────────────────────────────',
         f'  Overall accuracy                : {100 * cp / max(1, pa):.2f}%  ({cp} / {pa})',
         '',
-        '── Per-class Precision / Recall / F1 ─────────────────────',
-        f'{"":22s}  TP    FP    FN    P       R       F1',
-        f'  speaking        : {csp:4d}  {fpsp:4d}  {fnsp:4d}  {p_sp:.3f}   {r_sp:.3f}   {f1_sp:.3f}',
-        f'  not-speaking    : {cnsp:4d}  {fpns:4d}  {fnns:4d}  {p_ns:.3f}   {r_ns:.3f}   {f1_ns:.3f}',
+        '── Precision / Recall / F1 (positive class = speaking) ───',
+        f'{"":4s}  TP    TN    FP    FN    P       R       F1',
+        f'      {atp:4d}  {atn:4d}  {afp:4d}  {afn:4d}  {p_agg:.3f}   {r_agg:.3f}   {f1_agg:.3f}',
         '',
         '── Missed detections ─────────────────────────────────────',
         f'  GT timestamps with 0 detections : {mnd} / {tf}  ({100 * mnd / max(1, tf):.1f}%)',
