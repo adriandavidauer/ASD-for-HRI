@@ -1,0 +1,32 @@
+# Large runtime data – mount as a volume instead
+data/
+
+# Log files
+logs/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Git history (not needed in the image)
+.git/
+.gitignore
+.gitattributes
+
+# Video and archive files that should never be baked into the image
+*.mp4
+*.avi
+*.mkv
+*.zip
+
+# Editor / OS artefacts
+.DS_Store
+*.swp
+*.swo
+Thumbs.db
