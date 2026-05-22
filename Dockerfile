@@ -10,7 +10,7 @@
 #   docker build -t unitalk-vvad .
 #
 # Run (download + evaluate, data persisted in a named volume):
-#   docker run --rm -v unitalk-data:/app/data unitalk-vvad
+#   docker run --rm -v $(pwd)/data:/app/data unitalk-vvad
 #
 # Skip download if dataset is already present:
 #   docker run --rm -v unitalk-data:/app/data unitalk-vvad --skip_download
@@ -29,17 +29,23 @@ LABEL org.opencontainers.image.title="UniTalk VVAD Pipeline" \
       org.opencontainers.image.description="Download + evaluate DetectVVAD on UniTalk val split"
 
 # ── System packages ────────────────────────────────────────────────────────────
-# ffmpeg       : H264 video encoding used by FFmpegWriter
-# curl         : dataset download (dowload_uni_talk.py uses curl subprocess)
-# git          : required to pip-install pypaz directly from GitHub
-# libgl1       : OpenCV runtime dependency (libGL.so.1)
-# libglib2.0-0 : OpenCV runtime dependency (libgthread-2.0.so.0)
+# ffmpeg         : H264 video encoding used by FFmpegWriter
+# curl           : dataset download (dowload_uni_talk.py uses curl subprocess)
+# git            : required to pip-install pypaz directly from GitHub
+# libgl1         : OpenCV runtime dependency (libGL.so.1)
+# libglib2.0-0   : OpenCV runtime dependency (libgthread-2.0.so.0)
+# build-essential: gcc/g++/make required to compile dlib from source
+# cmake          : build system required by dlib's CMake-based build
+# libopenblas-dev: BLAS library for dlib linear algebra routines
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         curl \
         git \
         libgl1 \
         libglib2.0-0 \
+        build-essential \
+        cmake \
+        libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

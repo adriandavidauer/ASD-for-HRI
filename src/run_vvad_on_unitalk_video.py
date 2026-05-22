@@ -455,7 +455,7 @@ class Stats:
         #   matched + correct label   → TP
         #   matched + wrong label     → FP (pred class) + FN (GT class)
         #   unmatched prediction      → FP
-        #   unmatched GT box          → FN
+        #   unmatched GT box          → not counted (detection failure, not classification)
         if pred_boxes:
             for pi, gi, _iou in matches:
                 pred_label = getattr(pred_boxes[pi], 'class_name', None)
@@ -495,13 +495,6 @@ class Stats:
                         self.fp_speaking     += 1
                     elif pred_label == 'not-speaking':
                         self.fp_not_speaking += 1
-
-            for gi, gt in enumerate(gt_boxes_pixel):    # unmatched GT box → FN
-                if gi not in matched_gi:
-                    if gt['vvad_label'] == 'speaking':
-                        self.fn_speaking     += 1
-                    else:
-                        self.fn_not_speaking += 1
 
         # timestamp is correct only when every GT entity was correctly predicted
         if len(correctly_predicted_gt) == len(gt_boxes_pixel):

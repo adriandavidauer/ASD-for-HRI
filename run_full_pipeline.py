@@ -2,26 +2,24 @@
 Full UniTalk VVAD evaluation pipeline.
 
 Steps:
-  1. (Optional) Download the UniTalk val split via src/dowload_uni_talk.py
-  2. Evaluate VVAD on each video in <data_dir>/videos/val/
+  1. Ensure annotation CSV is present (downloads if missing via src/dowload_uni_talk.py)
+  2. Evaluate VVAD on each video in <data_dir>/videos/val/ — missing videos are
+     downloaded automatically from YouTube via yt-dlp before evaluation
   3. Write per-video result files to <data_dir>/results/<video_id>_results.csv
   4. Write aggregate results to <data_dir>/results/aggregate_results.csv
 
 Usage:
-    # Download + evaluate every val video
+    # Auto mode: download missing videos on demand, then evaluate
     python run_full_pipeline.py --data_dir data/
 
-    # Dataset already present – skip download
-    python run_full_pipeline.py --data_dir data/ --skip_download
+    # Evaluate only – skip any downloads (videos must already be present)
+    python run_full_pipeline.py --data_dir data/ --no_download
 
     # Resume an interrupted run (skips videos whose result file already exists)
-    python run_full_pipeline.py --data_dir data/ --skip_download --resume
+    python run_full_pipeline.py --data_dir data/ --resume
 
     # Single video (useful for testing)
-    python run_full_pipeline.py --data_dir data/ --skip_download --video qv3-HaaxGUc
-
-    # Also download full YouTube videos (slow, requires yt-dlp)
-    python run_full_pipeline.py --data_dir data/ --download_videos
+    python run_full_pipeline.py --data_dir data/ --video qv3-HaaxGUc
 """
 
 import argparse
@@ -234,6 +232,48 @@ def fetch_video_list(dest: Path = _ROOT / 'video_list' / 'val.csv') -> None:
         raise
 
 
+# ── per-video YouTube download ────────────────────────────────────────────────
+
+def _load_url_map(video_list_path: Path) -> dict:
+    """Return {video_id: youtube_url} from video_list/val.csv."""
+    url_map = {}
+    if not video_list_path.exists():
+        return url_map
+    with open(video_list_path) as f:
+        for line in f:
+            url = line.strip()
+            if not url or url == 'Link':
+                continue
+            vid = url.split('v=')[-1]
+            url_map[vid] = url
+    return url_map
+
+
+def _ensure_video(vid: str, url: str, video_dir: Path) -> bool:
+    """Download a single YouTube video via yt-dlp if not already present.
+
+    Returns True when the file exists after the attempt.
+    """
+    target = video_dir / f'{vid}.mp4'
+    if target.exists():
+        return True
+
+    os.makedirs(str(video_dir), exist_ok=True)
+    LOGGER.info('Video not found locally — downloading %s', vid)
+    result = subprocess.run([
+        'yt-dlp',
+        '--extractor-args', 'youtube:player_client=tv_embedded',
+        '-f', 'bestvideo[vcodec^=avc1]+bestaudio/bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best',
+        '--merge-output-format', 'mp4',
+        '-o', str(video_dir / '%(id)s.%(ext)s'),
+        url,
+    ])
+    if result.returncode != 0:
+        LOGGER.warning('yt-dlp failed for %s', vid)
+        return False
+    return target.exists()
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def parse_args():
@@ -242,10 +282,8 @@ def parse_args():
     )
     p.add_argument('--data_dir', default='data',
                    help='Root data directory (default: data/)')
-    p.add_argument('--skip_download', action='store_true',
-                   help='Skip dataset download (dataset already present in data_dir)')
-    p.add_argument('--download_videos', action='store_true',
-                   help='Also download full YouTube videos via yt-dlp (slow)')
+    p.add_argument('--no_download', action='store_true',
+                   help='Skip all downloads; fail if a video is missing instead of fetching it')
     p.add_argument('--resume', action='store_true',
                    help='Skip videos whose <video_id>_results.csv already exists')
     p.add_argument('--video', default=None,
@@ -297,12 +335,10 @@ def run_evaluation(args):
 
     if not csv_path.exists():
         LOGGER.error('Annotation CSV not found: %s', csv_path)
-        LOGGER.error('Run without --skip_download, or check that data_dir is correct.')
+        LOGGER.error('Remove --no_download or check that data_dir is correct.')
         sys.exit(1)
 
-    if not video_dir.exists():
-        LOGGER.error('Video directory not found: %s', video_dir)
-        sys.exit(1)
+    url_map = _load_url_map(_ROOT / 'video_list' / 'val.csv')
 
     all_annots = load_annotations(str(csv_path))
     video_ids  = [args.video] if args.video else sorted(all_annots)
@@ -314,6 +350,7 @@ def run_evaluation(args):
     LOGGER.info('  results    : %s', result_dir)
     LOGGER.info('  output_dir : %s', output_dir)
     LOGGER.info('  resume     : %s', args.resume)
+    LOGGER.info('  no_download: %s', args.no_download)
     LOGGER.info('=' * 62)
 
     os.makedirs(str(output_dir), exist_ok=True)
@@ -332,9 +369,19 @@ def run_evaluation(args):
         LOGGER.info('── [%d/%d] %s %s', i, len(video_ids), vid, '─' * max(0, 40 - len(vid)))
 
         if not video_path.exists():
-            LOGGER.warning('Video file not found, skipping: %s', video_path)
-            skipped.append((vid, 'video file missing'))
-            continue
+            if args.no_download:
+                LOGGER.warning('Video file not found, skipping: %s', video_path)
+                skipped.append((vid, 'video file missing'))
+                continue
+            url = url_map.get(vid)
+            if not url:
+                LOGGER.warning('No YouTube URL found for %s — cannot download, skipping.', vid)
+                skipped.append((vid, 'no URL in video list'))
+                continue
+            if not _ensure_video(vid, url, video_dir):
+                LOGGER.warning('Download failed for %s, skipping.', vid)
+                skipped.append((vid, 'download failed'))
+                continue
 
         annots = all_annots.get(vid, [])
         if not annots:
@@ -395,11 +442,18 @@ def main():
     # ── Step 0: Ensure video_list/val.csv is present ──────────────────────────
     fetch_video_list()
 
-    # ── Step 1: Download ──────────────────────────────────────────────────────
-    if not args.skip_download:
-        run_download(data_dir, args.download_videos)
+    # ── Step 1: Ensure annotation CSV is present ───────────────────────────────
+    # The annotation CSV is required before evaluation; videos are downloaded
+    # on demand per-video in the evaluation loop (unless --no_download is set).
+    csv_path = data_dir / 'csv' / 'val_orig.csv'
+    if not csv_path.exists():
+        if args.no_download:
+            LOGGER.error('Annotation CSV not found and --no_download is set: %s', csv_path)
+            raise SystemExit(1)
+        LOGGER.info('Annotation CSV missing — downloading dataset metadata.')
+        run_download(data_dir, download_videos=False)
     else:
-        LOGGER.info('Skipping download (--skip_download).')
+        LOGGER.info('Annotation CSV already present — skipping metadata download.')
 
     # ── Step 2 & 3: Evaluate + write per-video result files ───────────────────
     all_stats, processed_vids, skipped, failed = run_evaluation(args)
