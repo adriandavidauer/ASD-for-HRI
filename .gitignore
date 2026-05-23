@@ -1,3 +1,5 @@
+# datasepecific
+**video_list**
 # Keras and Tensorboard
 *.keras
 logs/

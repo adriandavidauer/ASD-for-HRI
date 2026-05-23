@@ -23,7 +23,7 @@
 #       --skip_download --video qv3-HaaxGUc
 # ──────────────────────────────────────────────────────────────────────────────
 
-FROM python:3.11-slim
+FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
 LABEL org.opencontainers.image.title="UniTalk VVAD Pipeline" \
       org.opencontainers.image.description="Download + evaluate DetectVVAD on UniTalk val split"
@@ -54,9 +54,9 @@ WORKDIR /app
 # TensorFlow is installed first (large, slow to resolve) so Docker can cache
 # this layer independently from the lighter packages in requirements.txt.
 # pypaz lists tensorflow as a dependency and will reuse the pinned version.
-RUN pip install --no-cache-dir \
-    tensorflow==2.21.0 \
-    numpy==2.4.4
+# RUN pip install --no-cache-dir \
+#     tensorflow==2.21.0 \
+#     numpy==2.4.4
 
 COPY requirements.txt .
 # requirements.txt installs: pypaz (from GitHub), pandas, yt-dlp, wget

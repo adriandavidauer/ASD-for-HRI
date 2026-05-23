@@ -34,10 +34,10 @@ from pathlib import Path
 
 # ── make src/ importable ──────────────────────────────────────────────────────
 _ROOT = Path(__file__).parent
-_SRC  = _ROOT / 'src'
+_SRC  = _ROOT 
 sys.path.insert(0, str(_SRC))
 
-from run_vvad_on_unitalk_video import (     # noqa: E402
+from asd4hri.run_vvad_on_unitalk_video import (     # noqa: E402
     load_annotations,
     evaluate_video,
     print_video_stats,
@@ -295,6 +295,8 @@ def parse_args():
                         '(default: <data_dir>/output_videos/val)')
     p.add_argument('--enable_logging', action='store_true',
                    help='Write per-video debug log files under logs/')
+    p.add_argument('--architecture', default='CNN2Plus1D_Light', choices=['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape', 'FaceShape'],
+                   help="String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'")
     return p.parse_args()
 
 
@@ -396,7 +398,7 @@ def run_evaluation(args):
 
         try:
             stats, actual_out, elapsed = evaluate_video(
-                str(video_path), annots, args.iou_threshold, str(output_path)
+                str(video_path), annots, args.iou_threshold, str(output_path), architecture=args.architecture
             )
             print_video_stats(vid, str(video_path), actual_out, stats, elapsed)
             write_result_csv(str(result_dir), vid, stats, elapsed)
