@@ -1,6 +1,6 @@
 """Evaluate UniTalk val split with the DetectVVAD pipeline from pypaz.
 
-Every frame is passed through dt.DetectVVAD().  At frames that have ground-truth
+Every frame is passed through DetectVVAD().  At frames that have ground-truth
 annotations, predicted bounding boxes are matched to GT boxes by IoU
 
 An annotated output video is written showing:
@@ -30,7 +30,8 @@ from datetime import datetime
 
 import cv2
 import numpy as np
-import paz.pipelines.detection as dt
+# import paz.pipelines.detection as dt
+from .asd import DetectVVAD
 from paz.backend.boxes import compute_iou as _paz_iou
 
 TARGET_FPS = 25
@@ -595,7 +596,7 @@ def _build_frame_map(annots, native_fps, width, height, video_id=None):
     return frame_map
 
 
-def evaluate_video(video_path, annots, iou_threshold, output_path, video_id=None):
+def evaluate_video(video_path, annots, iou_threshold, output_path, video_id=None, architecture='CNN2Plus1D_Light'):
     """Run DetectVVAD on every frame; evaluate and annotate at GT timestamps.
 
     Single pass: pipeline output, GT matching, drawing, and video writing all
@@ -609,6 +610,7 @@ def evaluate_video(video_path, annots, iou_threshold, output_path, video_id=None
         video_id:      expected video_id; annotations not matching this id are
                        dropped before building the frame map.  Inferred from the
                        first annotation's 'video_id' field when not supplied.
+        architecture:  which DetectVVAD architecture to use (default 'CNN2Plus1D_Light')
 
     Returns:
         tuple[Stats, str, float]: (stats, actual_output_path, elapsed_seconds)
@@ -623,7 +625,7 @@ def evaluate_video(video_path, annots, iou_threshold, output_path, video_id=None
     max_frame  = max(frame_map) if frame_map else 0
 
     # This function call parameters increase the number of predictions returned since stride is reduced and min_frames for buffer is also reduced
-    pipeline = dt.DetectVVAD(stride=1, averaging_window_size=1, min_frames=25, patience=10)
+    pipeline = DetectVVAD(stride=1, averaging_window_size=1, min_frames=25, patience=10, architecture=architecture)
     stats    = Stats(annots, total_video_frames)
     t0       = time.time()
 
