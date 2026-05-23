@@ -13,6 +13,24 @@ RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 
 ## Addinitional Deps for dlib and downloading
 RUN apt-get update && apt-get install -y libopenblas-dev curl
-## TODO: mount volume for input video and output results
-## TODO: adjust command for correct script and arguments
-CMD ["python", "src/run_vvad_on_ava_video.py"]
+# ── Application source ────────────────────────────────────────────────────────
+COPY src/           src/
+COPY video_list/    video_list/
+
+# ── Data volume ───────────────────────────────────────────────────────────────
+# Mount a volume here to persist downloaded data and evaluation outputs across
+# container runs.  Expected sub-directories created by the pipeline:
+#   data/csv/              annotation CSVs (val_orig.csv)
+#   data/videos/val/       full YouTube videos (if --download_videos is set)
+#   data/clips_videos/val/ short clip videos (downloaded by default)
+#   data/clips_audios/val/ short clip audio  (downloaded by default)
+#   data/output_videos/val annotated output MP4s
+#   data/results/          per-video and aggregate result text files
+VOLUME ["/app/data"]
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+# Default behaviour: download the dataset then evaluate all val videos.
+# Any extra flags passed to `docker run` are appended to CMD and forwarded
+# to run_full_pipeline.py (e.g. --skip_download, --resume, --video ID).
+ENTRYPOINT ["python", "src/run_full_pipeline.py"]
+CMD ["--data_dir", "/app/data"]

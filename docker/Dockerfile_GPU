@@ -82,5 +82,5 @@ VOLUME ["/app/data"]
 # Default behaviour: download the dataset then evaluate all val videos.
 # Any extra flags passed to `docker run` are appended to CMD and forwarded
 # to run_full_pipeline.py (e.g. --skip_download, --resume, --video ID).
-ENTRYPOINT ["python", "run_full_pipeline.py"]
+ENTRYPOINT ["python", "src/run_full_pipeline.py"]
 CMD ["--data_dir", "/app/data"]
