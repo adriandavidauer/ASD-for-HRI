@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y libopenblas-dev curl
 COPY src/           src/
 COPY video_list/    video_list/
 
+RUN python src/initialize_models.py
+
 # ── Data volume ───────────────────────────────────────────────────────────────
 # Mount a volume here to persist downloaded data and evaluation outputs across
 # container runs.  Expected sub-directories created by the pipeline:
