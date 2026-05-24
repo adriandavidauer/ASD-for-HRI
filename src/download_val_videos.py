@@ -59,8 +59,8 @@ def download_video(url: str) -> None:
             ydl.download([url])
     except (ExtractorError, DownloadError) as exc:
         message = str(exc)
-        if "private video" in message.lower():
-            print(f"Skipping {url} — private video")
+        if "private video" in message.lower() or "video unavailable" in message.lower():
+            print(f"Skipping {url} — private video or no longer available")
             return
         raise
 
