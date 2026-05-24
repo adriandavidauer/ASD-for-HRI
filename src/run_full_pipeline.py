@@ -297,6 +297,8 @@ def parse_args():
                    help='Write per-video debug log files under logs/')
     p.add_argument('--architecture', default='CNN2Plus1D_Light', choices=['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape', 'FaceShape'],
                    help="String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'")
+    p.add_argument('--log_file', default=None,
+                   help='Path for the main log file (default: logs/pipeline_<timestamp>.log)')
     return p.parse_args()
 
 
@@ -433,7 +435,7 @@ def print_run_summary(video_ids, processed_vids, skipped, failed, result_dir):
 
 def main():
     args = parse_args()
-    setup_logging(to_file=args.enable_logging)
+    setup_logging(to_file=args.enable_logging, log_file=args.log_file)
 
     data_dir   = Path(args.data_dir)
     result_dir = data_dir / 'results'

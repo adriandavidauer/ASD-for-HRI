@@ -65,7 +65,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ── Application source ────────────────────────────────────────────────────────
 COPY src/           src/
 COPY video_list/    video_list/
-COPY run_full_pipeline.py .
+
+## TODO: initialize DetectVVAD once for every arcitecture so it downloads the models into the conatainer already
+
 
 # ── Data volume ───────────────────────────────────────────────────────────────
 # Mount a volume here to persist downloaded data and evaluation outputs across
