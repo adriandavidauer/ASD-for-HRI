@@ -31,24 +31,6 @@ HF_BASE = "https://huggingface.co/datasets/plnguyen2908/UniTalk-ASD/blob/main"
 
 
 
-def download_and_extract(blob_url: str, output_path: str):
-    """Download a zip from HuggingFace (blob URL) and extract it next to output_path."""
-    raw_url = blob_url.replace("/blob/", "/resolve/")
-    out_dir = os.path.dirname(output_path)
-    os.makedirs(out_dir, exist_ok=True)
-    # clean prior
-    if os.path.isdir(output_path):
-        shutil.rmtree(output_path)
-    elif os.path.exists(output_path):
-        os.remove(output_path)
-    # download
-    subprocess.run(["curl", "-L", "-o", output_path, raw_url], check=True)
-    # unzip & delete zip
-    with zipfile.ZipFile(output_path, 'r') as z:
-        z.extractall(path=out_dir)
-    os.remove(output_path)
-
-
 def download_youtube_video(url: str, output_dir: str) -> bool:
     """Download a full YouTube video as mp4 via yt-dlp.  Returns True on success."""
     os.makedirs(output_dir, exist_ok=True)
@@ -79,27 +61,21 @@ def download_csv(video_id: str, csv_dir: str, split: str = "val") -> str:
 
 # ── main entry point used by the pipeline ─────────────────────────────────────
 
-def download_video_and_csv(video_id: str, url: str, video_dir: str, csv_dir: str,
-                           split: str = "val", download_videos: bool = True):
-    """Fetch a single video and its annotation CSV, skipping anything already present.
+def download_video(video_id: str, url: str, video_dir: str, download_videos: bool = True):
+    """Fetch a single full video, skipping it if already present.
 
     Args:
-        video_id:        YouTube id, used for the on-disk filenames.
+        video_id:        YouTube id, used for the on-disk filename.
         url:             YouTube watch URL.
         video_dir:       directory the <video_id>.mp4 file lives in.
-        csv_dir:         directory the <video_id>.csv annotation file lives in.
-        split:           dataset split for the HuggingFace CSV path (default 'val').
-        download_videos: when False, never fetch the video (only the CSV).
+        download_videos: when False, never fetch the video.
 
     Returns:
-        tuple[str, str]: (video_path, csv_path).
+        str: video_path.
     """
     os.makedirs(video_dir, exist_ok=True)
-    os.makedirs(csv_dir, exist_ok=True)
     video_path = os.path.join(video_dir, f"{video_id}.mp4")
-    csv_path = os.path.join(csv_dir, f"{video_id}.csv")
 
-    # a) Full video
     if os.path.exists(video_path):
         logger.info(f"[skip] video already present: {video_path}")
     elif download_videos:
@@ -108,14 +84,7 @@ def download_video_and_csv(video_id: str, url: str, video_dir: str, csv_dir: str
     else:
         logger.info(f"[skip] video download disabled, missing: {video_path}")
 
-    # b) Annotation CSV
-    if os.path.exists(csv_path):
-        logger.info(f"[skip] csv already present: {csv_path}")
-    else:
-        logger.info(f"[download] csv {video_id}")
-        download_csv(video_id, csv_dir, split=split)
-
-    return video_path, csv_path
+    return video_path
 
 
 # ── standalone full-dataset download ──────────────────────────────────────────
@@ -135,10 +104,11 @@ def main():
     split = args.split
     video_dir = os.path.join(args.save_path, "videos", split)
     csv_dir = os.path.join(args.save_path, "csv")
-    for sub in ["csv", f"clips_videos/{split}", f"clips_audios/{split}", f"videos/{split}"]:
+    for sub in ["csv", f"videos/{split}"]:
         os.makedirs(os.path.join(args.save_path, sub), exist_ok=True)
 
     start = time.time()
+    df_list = []
     with open(os.path.join("video_list", f"{split}.csv"), "r") as f:
         for line in f:
             link = line.strip()
@@ -146,17 +116,32 @@ def main():
                 continue
             video_id = link.split("v=")[-1]
 
-            # Full video + per-video annotation CSV (skips files already on disk).
-            download_video_and_csv(video_id, link, video_dir, csv_dir,
-                                   split=split, download_videos=args.download_videos)
+            # Full video (skips files already on disk).
+            download_video(video_id, link, video_dir,
+                           download_videos=args.download_videos)
 
-            # Clip-level video / audio archives.
-            for kind in ("clips_videos", "clips_audios"):
-                blob_url = f"{HF_BASE}/{kind}/{split}/{video_id}.zip"
-                out_zip = os.path.join(args.save_path, kind, split, f"{video_id}.zip")
-                download_and_extract(blob_url, out_zip)
+            csv_url = (
+                f"https://huggingface.co/datasets/"
+                f"plnguyen2908/UniTalk-ASD/blob/main/"
+                f"csv/{split}/{video_id}.csv"
+            )
+            out_csv = os.path.join(args.save_path, "csv", f"{split}_{video_id}.csv")
+            raw_csv = csv_url.replace("/blob/", "/resolve/")
+            subprocess.run(["curl", "-L", "-o", out_csv, raw_csv], check=True)
 
-    logger.info(f"The whole script runs in {time.time() - start} seconds")
+            # push to list before writing into a big file
+            df = pd.read_csv(out_csv, header=None, names=CSV_COLUMNS)
+            df_list.append(df)
+
+            os.remove(out_csv)
+
+    # Merge & write {split}_orig.csv
+    if df_list:
+        merged = pd.concat(df_list, ignore_index=True)
+        out_merged = os.path.join(args.save_path, "csv", f"{split}_orig.csv")
+        merged.to_csv(out_merged, index=False)
+        logger.info(f"Wrote merged CSV for {split}: {out_merged}")
+
 
 
 if __name__ == "__main__":

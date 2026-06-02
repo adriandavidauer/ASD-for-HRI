@@ -1,11 +1,5 @@
 """
 Full UniTalk VVAD evaluation pipeline.
-
-Walks the video_list, and for every (video_id, url) pair downloads the full
-video and its per-video annotation CSV on demand (skipping anything already on
-disk), runs DetectVVAD, and writes a per-video predictions CSV.  With --debug it
-also renders an annotated output video overlaying pipeline predictions on the
-ground-truth boxes.
 """
 
 import argparse
@@ -22,8 +16,8 @@ sys.path.insert(0, str(_SRC))
 
 import cv2
 
-from run_vvad_on_unitalk_video import run_vvad_on_video
-from download_uni_talk import download_video_and_csv
+from asd4hri.run_vvad_on_unitalk_video import run_vvad_on_video
+from download_uni_talk import download_video
 from helpers import (
     setup_logging,
     load_annotations,
@@ -31,8 +25,6 @@ from helpers import (
     build_frame_map,
     create_writer,
     draw_annotated_frame,
-    read_video_metadata,
-    TARGET_FPS,
 )
 from stats import compute_iou_matrix, match_predictions_to_gt
 
@@ -54,12 +46,8 @@ def parse_args():
                    help='Dataset split (default: val)')
     p.add_argument('--no_download', action='store_true',
                    help='Skip all downloads; fail if a video is missing instead of fetching it')
-    p.add_argument('--resume', action='store_true',
-                   help='Skip videos whose <video_id>_results.csv already exists')
     p.add_argument('--video', default=None,
                    help='Evaluate a single video_id only')
-    p.add_argument('--iou_threshold', type=float, default=0.5,
-                   help='IoU threshold for GT-prediction matching (default: 0.5)')
     p.add_argument('--predictions_dir', default=None,
                    help='Directory for per-video predictions CSVs '
                         '(default: <data_dir>/predictions)')
@@ -69,7 +57,10 @@ def parse_args():
     p.add_argument('--debug', action='store_true',
                    help='Render an annotated output video overlaying pipeline '
                         'predictions on the ground-truth boxes (default: off)')
-    p.add_argument('--log_file', default=None,
+    p.add_argument('--iou_threshold', type=float, default=0.5,
+                   help='IoU threshold for GT-prediction matching in --debug overlays '
+                        '(default: 0.5)')
+    p.add_argument('--architecture', default='CNN2Plus1D_Light',
                    help='Override the auto-generated log file path')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Also emit INFO-level messages on the console')
@@ -108,11 +99,14 @@ def render_debug_video(video_path, predictions_csv, annots_df,
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if not fps:
+        raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
     by_frame = load_predictions_csv(predictions_csv)
-    frame_map = build_frame_map(annots_df, TARGET_FPS, width, height, video_id=video_id)
+    frame_map = build_frame_map(annots_df, fps, width, height, video_id=video_id)
 
-    writer, out_path = create_writer(output_video_path, TARGET_FPS, width, height)
+    writer, out_path = create_writer(output_video_path, fps, width, height)
     LOGGER.info('debug video=%s output=%s', video_id, out_path)
 
     frame_idx = 0
@@ -135,7 +129,7 @@ def render_debug_video(video_path, predictions_csv, annots_df,
 
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
-def run_pipeline_phase(args, video_list, result_dir):
+def run_pipeline_phase(args, video_list, result_dir,architecture):
     """Download data on demand, run DetectVVAD on every video, write predictions.
 
     With --debug, also renders an annotated output video per processed video.
@@ -157,9 +151,19 @@ def run_pipeline_phase(args, video_list, result_dir):
         os.makedirs(str(output_videos_dir), exist_ok=True)
 
     LOGGER.info('phase=pipeline videos=%d result_dir=%s aggregate_time=%s '
-                'resume=%s no_download=%s debug=%s',
+                'no_download=%s debug=%s',
                 len(video_list), result_dir, aggregate_time_csv,
-                args.resume, args.no_download, args.debug)
+                args.no_download, args.debug)
+
+
+    annots_df = None
+    if args.debug:
+        annotations_csv = csv_dir / f'{args.split}_orig.csv'
+        if annotations_csv.exists():
+            annots_df = load_annotations(str(annotations_csv))
+        else:
+            LOGGER.warning('debug overlay disabled reason=no_annotation_csv path=%s',
+                           annotations_csv)
 
     processed = []
     skipped = []
@@ -167,17 +171,13 @@ def run_pipeline_phase(args, video_list, result_dir):
 
     for i, (vid, url) in enumerate(video_list, 1):
         video_path = video_dir / f'{vid}.mp4'
-        csv_path = csv_dir / f'{vid}.csv'
         predictions_csv = result_dir / f'{vid}.csv'
 
         LOGGER.info('phase=pipeline video=%s index=%d/%d', vid, i, len(video_list))
 
-        # Fetch the video + annotation CSV on demand (download_video_and_csv
-        # skips whatever already exists on disk).
         if not args.no_download:
             try:
-                download_video_and_csv(vid, url, str(video_dir), str(csv_dir),
-                                       split=args.split, download_videos=True)
+                download_video(vid, url, str(video_dir), download_videos=True)
             except Exception:
                 LOGGER.exception('Download failed video=%s', vid)
                 skipped.append((vid, 'download failed'))
@@ -189,30 +189,27 @@ def run_pipeline_phase(args, video_list, result_dir):
             skipped.append((vid, 'video file missing'))
             continue
 
-        # Run the pipeline (unless resuming and predictions already exist).
-        if args.resume and predictions_csv.exists():
-            LOGGER.info('Reusing predictions video=%s path=%s', vid, predictions_csv)
-        else:
-            try:
-                run_vvad_on_video(
-                    str(video_path), str(predictions_csv),
-                    aggregate_time_csv=str(aggregate_time_csv), video_id=vid
-                )
-            except Exception as exc:
-                LOGGER.exception('Pipeline failed video=%s', vid)
-                failed.append((vid, str(exc)))
-                continue
+
+        try:
+            run_vvad_on_video(
+                str(video_path), str(predictions_csv),
+                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture
+            )
+        except Exception as exc:
+            LOGGER.exception('Pipeline failed video=%s', vid)
+            failed.append((vid, str(exc)))
+            continue
         processed.append(vid)
 
         # Optional annotated debug video (predictions overlaid on ground truth).
-        if args.debug:
-            if not csv_path.exists():
-                LOGGER.warning('debug skipped video=%s reason=no_annotation_csv', vid)
+        if args.debug and annots_df is not None:
+            video_annots = annots_df[annots_df['video_id'] == vid]
+            if video_annots.empty:
+                LOGGER.warning('debug skipped video=%s reason=no_annotations_for_video', vid)
             else:
                 try:
-                    annots_df = load_annotations(str(csv_path))
                     out_path = output_videos_dir / f'{vid}_debug.mp4'
-                    render_debug_video(str(video_path), str(predictions_csv), annots_df,
+                    render_debug_video(str(video_path), str(predictions_csv), video_annots,
                                        str(out_path), args.iou_threshold, vid)
                 except Exception:
                     LOGGER.exception('debug video failed video=%s', vid)
@@ -223,10 +220,6 @@ def run_pipeline_phase(args, video_list, result_dir):
 # ── summary ───────────────────────────────────────────────────────────────────
 
 def print_run_summary(video_list, processed, skipped, failed, result_dir):
-    LOGGER.info('')
-    LOGGER.info('=' * 62)
-    LOGGER.info('RUN SUMMARY')
-    LOGGER.info('=' * 62)
     LOGGER.info('  Total videos found    : %d', len(video_list))
     LOGGER.info('  Successfully evaluated: %d', len(processed))
     LOGGER.info('  Skipped               : %d', len(skipped))
@@ -251,7 +244,7 @@ def main():
                 data_dir.resolve(), log_path,
                 datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
-    video_list_path = Path(_ROOT / 'video_list' / 'val.csv')
+    video_list_path = Path(_ROOT.parent / 'video_list' / 'val.csv')
     if not os.path.exists(video_list_path):
         urllib.request.urlretrieve(_VIDEO_LIST_URL,video_list_path )
     video_list = load_video_list(video_list_path)
@@ -262,8 +255,7 @@ def main():
             LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
 
-    # ── Step 1: pipeline pass — downloads on demand, writes predictions ───────
-    processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir)
+    processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir, architecture=args.architecture)
 
     print_run_summary(video_list, processed, skipped, failed, result_dir)
 
@@ -276,3 +268,4 @@ if __name__ == '__main__':
     except Exception as exc:
         LOGGER.exception('Fatal: %s', exc)
         raise SystemExit(1)
+

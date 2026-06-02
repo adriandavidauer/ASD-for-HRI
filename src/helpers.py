@@ -11,8 +11,6 @@ import pandas as pd
 
 LOGGER = logging.getLogger(__name__)
 
-TARGET_FPS = 25.0  # ground truth has same FPS
-
 _LABEL_MAP = {
     'SPEAKING_AUDIBLE': 'speaking',
     'NOT_SPEAKING':     'not-speaking',
@@ -22,8 +20,8 @@ _PredBox = namedtuple('_PredBox', ['coordinates', 'class_name'])
 
 
 def setup_logging(log_name="unitalk", verbose=False):
-    os.makedirs('logs', exist_ok=True)
-    path = f'logs/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
+    os.makedirs('/app/data/logs', exist_ok=True)
+    path = f'/app/data/logs/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
 
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
@@ -161,7 +159,9 @@ def read_video_metadata(path):
     if not cap.isOpened():
         raise RuntimeError(f'Cannot open video: {path}')
     try:
-        fps = cap.get(cv2.CAP_PROP_FPS) or TARGET_FPS
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if not fps:
+            raise RuntimeError(f'Cannot read FPS from video: {path}')
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         ret, frame = cap.read()
         if not ret:
@@ -193,7 +193,8 @@ def build_frame_map(annots_df, fps, width, height, video_id=None):
 
     Args:
         annots_df: DataFrame returned by load_annotations().
-        fps:       frame rate predictions were written at (pass TARGET_FPS).
+        fps:       the video's native frame rate (predictions are keyed by
+                   native frame index, so GT must use the same fps).
         width:     video width in pixels (to scale normalised x coords).
         height:    video height in pixels (to scale normalised y coords).
         video_id:  when given, only rows for this video_id are used.
