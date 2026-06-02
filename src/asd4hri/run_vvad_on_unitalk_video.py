@@ -20,13 +20,15 @@ LOGGER = logging.getLogger('uniTalk_VVAD')
 _PREDICTION_FIELDS = ['frame_idx', 'timestamp', 'label', 'x1', 'y1', 'x2', 'y2']
 _AGGREGATE_TIME_FIELDS = ['video_id', 'elapsed_seconds', 'frames_processed', 'fps_processed']
 
-def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes):
-
+def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes, width, height):
+    """Write one row per predicted box with bbox coords normalised to [0, 1].
+    """
     for pred in pred_boxes:
         label = getattr(pred, 'class_name', '') or ''
         x1, y1, x2, y2 = pred.coordinates
         writer.writerow([frame_idx, f'{timestamp:.6f}', label,
-                         f'{x1:.2f}', f'{y1:.2f}', f'{x2:.2f}', f'{y2:.2f}'])
+                         f'{x1 / width:.6f}', f'{y1 / height:.6f}',
+                         f'{x2 / width:.6f}', f'{y2 / height:.6f}'])
 
 
 def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processed,fps):
@@ -90,6 +92,7 @@ def run_vvad_on_video(video_path,
                 if not is_frame_received:
                     LOGGER.warning('Frame not received or End of stream')
                     break
+                height, width = frame.shape[:2]
                 try:
                     output= pipeline(frame)
                     if output is None:
@@ -102,7 +105,8 @@ def run_vvad_on_video(video_path,
 
                 timestamp = frame_idx / native_fps
                 if pred_boxes != []:
-                    _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes)
+                    _write_prediction_rows(writer, frame_idx, timestamp,
+                                           pred_boxes, width, height)
 
                 frame_idx += 1
     finally:
