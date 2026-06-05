@@ -7,6 +7,8 @@ import logging
 import os
 import time
 
+from .asd import DetectVVAD
+
 import cv2
 import paz.pipelines.detection as dt
 
@@ -76,7 +78,7 @@ def run_vvad_on_video(video_path,
         raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
 
-    pipeline = dt.DetectVVAD(stride=1, averaging_window_size=1, min_frames=25, patience=10,architecture=architecture)
+    pipeline = DetectVVAD(stride=1, averaging_window_size=1, min_frames=25, patience=10,architecture=architecture)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     t0 = time.time()

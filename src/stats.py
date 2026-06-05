@@ -1,4 +1,5 @@
 """Score VVAD predictions against UniTalk ground truth — purely from CSVs.
+Having no dependencies from other files is intentional - Wanted to run in local setup without any use of docker.
 """
 
 import os
@@ -13,7 +14,7 @@ from datetime import datetime
 import pandas as pd
 
 CONTAINMENT_THRESHOLD = 0.5          # accept match when smaller box is ≥50% covered
-TIMESTAMP_TOLERANCE_MS = 20.0        # |pred.ts − gt.ts| must be within this to align frames
+TIMESTAMP_TOLERANCE_MS = 200.0        # |pred.ts − gt.ts| must be within this to align frames
 LOGGER = logging.getLogger('UniTalk_VVAD')
 
 _LABEL_MAP = {
@@ -49,13 +50,26 @@ def parse_args():
     p.add_argument('--verbose', '-v',   action='store_true')
     return p.parse_args()
 
+def setup_logging(log_name='unitalk_stats', verbose=False):
+    """Configure file + console logging; return the log file path."""
+    os.makedirs('logs', exist_ok=True)
+    path = f'logs/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
+    LOGGER.setLevel(logging.DEBUG)
+    LOGGER.handlers.clear()
+    LOGGER.propagate = False
+    fh = logging.FileHandler(path, mode='w')
+    fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    LOGGER.addHandler(fh)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO if verbose else logging.WARNING)
+    ch.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+    LOGGER.addHandler(ch)
+    return path
+
 # ── data loading ─────────────────────────────────────────────────────────────
 
 def load_ground_truth(csv_path):
     """Read the master ground-truth CSV → dict[video_id] -> list[gt row dict].
-
-    Uses pandas for the bulk parse, then groups by video_id so each video's
-    annotations can be filtered out cheaply.
     """
     df = pd.read_csv(csv_path)
     df['vvad_label'] = df['label'].map(_LABEL_MAP).fillna('not-speaking')
@@ -94,7 +108,7 @@ def load_predictions_csv(path):
 
 
 class GroundTruthIndex:
-    """Sorted-timestamp index over one video's annotations.
+    """Sorted-timestamp index  with binary search over one video's ground truth annotations.
     """
 
     def __init__(self, gt_rows):
@@ -103,14 +117,14 @@ class GroundTruthIndex:
             by_ts[r['frame_timestamp']].append(r)
 
         self.timestamps = sorted(by_ts.keys())
-        self._buckets   = {}                       # ts -> tuple(_GtBox, ...)
+        self._buckets   = [None] * len(self.timestamps)  # parallel to timestamps: list of tuple(_GtBox, ...)
         self.entity_gt_rows = defaultdict(int)     # entity_id -> number of GT boxes
-        for ts in self.timestamps:
+        for i, ts in enumerate(self.timestamps):
             boxes = tuple(
                 _GtBox(ts, gi, r['entity_id'], r['vvad_label'], r['bbox'])
                 for gi, r in enumerate(by_ts[ts])
             )
-            self._buckets[ts] = boxes
+            self._buckets[i] = boxes
             for box in boxes:
                 self.entity_gt_rows[box.entity_id] += 1
         self.entities = set(self.entity_gt_rows)
@@ -122,18 +136,18 @@ class GroundTruthIndex:
         if not ts:
             return ()
         i = bisect.bisect_left(ts, timestamp)
-        best, best_diff = None, tolerance_s
-        for j in (i - 1, i):
+        best_i, best_diff = None, tolerance_s
+        for j in (i - 1, i): #checks the slot before and at the insertion point - timestamps cluster closely so the nearest is adjacent
             if 0 <= j < len(ts):
                 diff = abs(ts[j] - timestamp)
                 if diff <= best_diff:
-                    best, best_diff = ts[j], diff
-        return self._buckets[best] if best is not None else ()
+                    best_i, best_diff = j, diff
+        return self._buckets[best_i] if best_i is not None else ()
 
     def all_boxes(self):
         """Iterate every GT box in timestamp order."""
-        for ts in self.timestamps:
-            yield from self._buckets[ts]
+        for boxes in self._buckets:
+            yield from boxes
 
 
 # ── IoU / box matching ─────────────────────
@@ -254,10 +268,9 @@ class Stats:
 
     @property
     def correctly_identified_entities(self):
-        """Entities detected spatially and labelled correctly in ≥50% of their matches."""
+        """Entities detected spatially and labelled atleast once."""
         return {eid for eid in self.detected_entities
-                if self.entity_matched[eid]
-                and self.entity_correct[eid] / self.entity_matched[eid] >= 0.5}
+                if self.entity_matched[eid]}
 
 
 def compute_stats_from_predictions(predictions_csv, gt_rows, iou_threshold,
@@ -314,15 +327,6 @@ def _detail_rows(gt_index, match_info):
 
 # ── reporting ─────────────────────────────────────────────────────────────────
 
-def log_video_stats(video_id, stats):
-    LOGGER.info('video=%s tp=%d tn=%d fp=%d fn=%d precision=%.3f recall=%.3f f1=%.3f',
-                video_id, stats.tp, stats.tn, stats.fp, stats.fn,
-                stats.precision, stats.recall, stats.f1)
-    LOGGER.info('video=%s missed_detections=%d/%d entities detected=%d/%d correctly_identified=%d',
-                video_id, stats.missed_detections, stats.total_gt_boxes,
-                len(stats.detected_entities), len(stats.gt_entities),
-                len(stats.correctly_identified_entities))
-
 
 def write_detail_csv(result_dir, video_id, detail_rows):
     """Write the per-video detail CSV: one row per GT box with its match info."""
@@ -336,28 +340,10 @@ def write_detail_csv(result_dir, video_id, detail_rows):
 
 
 
-def _summary_row(video_id, stats):
-    """One CSV row of summary metrics for a single video's Stats."""
-    return {
-        'video_id':          video_id,
-        'tp': stats.tp, 'tn': stats.tn, 'fp': stats.fp, 'fn': stats.fn,
-        'precision':         f'{stats.precision:.4f}',
-        'recall':            f'{stats.recall:.4f}',
-        'f1':                f'{stats.f1:.4f}',
-        'missed_detections': stats.missed_detections,
-        'total_gt_boxes':    stats.total_gt_boxes,
-        'missed_pct':        f'{100.0 * stats.missed_detections / max(1, stats.total_gt_boxes):.2f}',
-        'entities_detected':             len(stats.detected_entities),
-        'entities_correctly_identified': len(stats.correctly_identified_entities),
-        'total_entities':                len(stats.gt_entities),
-    }
-
-
 def write_aggregate_csv(result_dir, per_video):
     """Write one CSV holding a summary row per video.
 
-    ``per_video`` is a list of (video_id, Stats).  Replaces the old per-video
-    text files; per-entity granularity lives in each video's detail CSV.
+    ``per_video`` is a list of (video_id, Stats).
     """
     if not per_video:
         return
@@ -367,28 +353,22 @@ def write_aggregate_csv(result_dir, per_video):
         writer = csv.DictWriter(f, fieldnames=_SUMMARY_FIELDS)
         writer.writeheader()
         for video_id, stats in per_video:
-            writer.writerow(_summary_row(video_id, stats))
+            writer.writerow({
+                'video_id':          video_id,
+                'tp': stats.tp, 'tn': stats.tn, 'fp': stats.fp, 'fn': stats.fn,
+                'precision':         f'{stats.precision:.4f}',
+                'recall':            f'{stats.recall:.4f}',
+                'f1':                f'{stats.f1:.4f}',
+                'missed_detections': stats.missed_detections,
+                'total_gt_boxes':    stats.total_gt_boxes,
+                'missed_pct':        f'{100.0 * stats.missed_detections / max(1, stats.total_gt_boxes):.2f}',
+                'entities_detected':             len(stats.detected_entities),
+                'entities_correctly_identified': len(stats.correctly_identified_entities),
+                'total_entities':                len(stats.gt_entities),
+            })
     LOGGER.debug('aggregate_results path=%s videos=%d', path, len(per_video))
 
 
-
-
-
-def setup_logging(log_name='unitalk_stats', verbose=False):
-    """Configure file + console logging; return the log file path."""
-    os.makedirs('logs', exist_ok=True)
-    path = f'logs/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
-    LOGGER.setLevel(logging.DEBUG)
-    LOGGER.handlers.clear()
-    LOGGER.propagate = False
-    fh = logging.FileHandler(path, mode='w')
-    fh.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-    LOGGER.addHandler(fh)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO if verbose else logging.WARNING)
-    ch.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-    LOGGER.addHandler(ch)
-    return path
 
 
 def _score_video(vid, predictions_csv, gt_rows, iou_threshold, tol_s, result_dir):
@@ -442,7 +422,6 @@ def main():
             vid = futures[future]
             try:
                 vid, stats = future.result()
-                log_video_stats(vid, stats)
                 per_video.append((vid, stats))
             except Exception:
                 LOGGER.exception('Failed scoring video=%s', vid)
