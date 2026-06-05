@@ -24,9 +24,8 @@ from helpers import (
     load_predictions_csv,
     build_frame_map,
     create_writer,
-    draw_annotated_frame,
+    annotate_debug_frame,
 )
-from stats import compute_iou_matrix, match_predictions_to_gt
 
 LOGGER = logging.getLogger('pipeline')
 
@@ -48,7 +47,7 @@ def parse_args():
                    help='Skip all downloads; fail if a video is missing instead of fetching it')
     p.add_argument('--video', default=None,
                    help='Evaluate a single video_id only')
-    p.add_argument('--predictions_dir', default=None,
+    p.add_argument('--predictions_dir', default="predictions",
                    help='Directory for per-video predictions CSVs '
                         '(default: <data_dir>/predictions)')
     p.add_argument('--output_videos_dir', default=None,
@@ -87,10 +86,7 @@ def load_video_list(video_list_path: Path):
 def render_debug_video(video_path, predictions_csv, annots_df,
                        output_video_path, iou_threshold, video_id):
     """Render an annotated video overlaying predictions and ground-truth boxes.
-
-    Loads the per-video annotations (DataFrame) and the predictions CSV, matches
-    them per frame, and draws both with helpers.draw_annotated_frame so the
-    colours match the evaluation report (green=GT, red=correct, yellow=wrong,
+     (green=GT, red=correct, yellow=wrong,
     black=unmatched prediction).
     """
     cap = cv2.VideoCapture(video_path)
@@ -117,9 +113,7 @@ def render_debug_video(video_path, predictions_csv, annots_df,
                 break
             pred_boxes = by_frame.get(frame_idx, [])
             gt_boxes = frame_map.get(frame_idx, [])
-            iou_matrix = compute_iou_matrix(pred_boxes, gt_boxes)
-            matches = match_predictions_to_gt(pred_boxes, gt_boxes, iou_threshold, iou_matrix)
-            draw_annotated_frame(frame, frame_idx, gt_boxes, pred_boxes, matches, iou_matrix)
+            annotate_debug_frame(frame, frame_idx, pred_boxes, gt_boxes, iou_threshold)
             writer.write(frame)
             frame_idx += 1
     finally:
@@ -238,7 +232,8 @@ def main():
     log_path = setup_logging('pipeline', args.verbose)
 
     data_dir = Path(args.data_dir)
-    result_dir = data_dir / 'predictions'
+   
+    result_dir = Path(data_dir / args.predictions_dir)
 
     LOGGER.info('run start data_dir=%s log_file=%s started_at=%s',
                 data_dir.resolve(), log_path,

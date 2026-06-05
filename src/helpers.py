@@ -7,9 +7,13 @@ from datetime import datetime
 import subprocess
 
 import cv2
+import numpy as np
 import pandas as pd
+from paz.backend.boxes import compute_iou as _paz_iou
 
 LOGGER = logging.getLogger(__name__)
+
+CONTAINMENT_THRESHOLD = 0.5  # accept a match when the smaller box is ≥50% covered
 
 _LABEL_MAP = {
     'SPEAKING_AUDIBLE': 'speaking',
@@ -105,11 +109,6 @@ def draw_annotated_frame(out_bgr, frame_idx, gt_boxes, pred_boxes, matches, iou_
     n_correct   = sum(1 for pi, gi, _ in matches
                       if getattr(pred_boxes[pi], 'class_name', None) == gt_boxes[gi]['vvad_label'])
 
-    gt_best = {
-        gi: (max((iou_matrix[(pi, gi)] for pi in range(len(pred_boxes))), key=lambda s: s['iou'])
-             if pred_boxes else {'iou': 0.0, 'containment': 0.0})
-        for gi in range(len(gt_boxes))
-    }
     pred_best = {
         pi: (max((iou_matrix[(pi, gi)] for gi in range(len(gt_boxes))), key=lambda s: s['iou'])
              if gt_boxes else {'iou': 0.0, 'containment': 0.0})
@@ -153,31 +152,73 @@ def draw_annotated_frame(out_bgr, frame_idx, gt_boxes, pred_boxes, matches, iou_
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
 
-def read_video_metadata(path):
-    """Return (fps, width, height, total_frames) without holding the capture open."""
-    cap = cv2.VideoCapture(path)
-    if not cap.isOpened():
-        raise RuntimeError(f'Cannot open video: {path}')
-    try:
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if not fps:
-            raise RuntimeError(f'Cannot read FPS from video: {path}')
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        ret, frame = cap.read()
-        if not ret:
-            raise RuntimeError(f'Cannot read first frame: {path}')
-        h, w = frame.shape[:2]
-        return float(fps), w, h, total_frames
-    finally:
-        cap.release()
+# ── IoU / box matching ────────────────────────────────────────────────────────
+
+def _iou(a, b):
+    return float(_paz_iou(np.array(a, np.float32), np.array([b], np.float32))[0])
+
+
+def _containment(a, b):
+    """Fraction of the smaller box covered by the intersection."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    iw = max(0.0, min(ax2, bx2) - max(ax1, bx1))
+    ih = max(0.0, min(ay2, by2) - max(ay1, by1))
+    inter = iw * ih
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    return inter / max(1e-6, min(area_a, area_b))
+
+
+def compute_iou_matrix(pred_boxes, gt_boxes):
+    """Compute IoU and containment for every GT↔pred pair."""
+    scores = {}
+    for pi, pred in enumerate(pred_boxes):
+        pc = pred.coordinates
+        for gi, gt in enumerate(gt_boxes):
+            gc = gt['bbox_pixel']
+            scores[(pi, gi)] = {
+                'iou':         _iou(pc, gc),
+                'containment': _containment(pc, gc),
+            }
+    return scores
+
+
+def match_predictions_to_gt(pred_boxes, gt_boxes, iou_threshold, iou_matrix=None):
+    """Greedy highest-IoU matching; accept on IoU≥thresh OR containment≥CONTAINMENT_THRESHOLD."""
+    if iou_matrix is None:
+        iou_matrix = compute_iou_matrix(pred_boxes, gt_boxes)
+    matches, used = [], set()
+    for pi, _pred in enumerate(pred_boxes):
+        best_iou = best_cont = 0.0
+        best_gi = None
+        for gi in range(len(gt_boxes)):
+            if gi in used:
+                continue
+            s = iou_matrix[(pi, gi)]
+            iou = s['iou']
+            cont = s['containment']
+            if iou > best_iou or (iou == best_iou and cont > best_cont):
+                best_iou, best_cont, best_gi = iou, cont, gi
+        if best_gi is not None and (
+            best_iou >= iou_threshold or best_cont >= CONTAINMENT_THRESHOLD
+        ):
+            matches.append((pi, best_gi, best_iou))
+            used.add(best_gi)
+    return matches
+
+
+def annotate_debug_frame(frame, frame_idx, pred_boxes, gt_boxes, iou_threshold):
+    """Match this frame's predictions to GT and draw the annotated overlay in place.
+    """
+    iou_matrix = compute_iou_matrix(pred_boxes, gt_boxes)
+    matches = match_predictions_to_gt(pred_boxes, gt_boxes, iou_threshold, iou_matrix)
+    draw_annotated_frame(frame, frame_idx, gt_boxes, pred_boxes, matches, iou_matrix)
 
 
 def load_annotations(csv_path):
     """Load a UniTalk per-video annotation CSV from *csv_path* and return a DataFrame.
 
-    The CSV is expected to have the standard UniTalk header (video_id,
-    frame_timestamp, entity_box_x1..y2, label, entity_id, ...).  A derived
-    'vvad_label' column is added so callers don't have to re-map labels.
     """
     df = pd.read_csv(csv_path)
     df['vvad_label'] = df['label'].map(_LABEL_MAP).fillna('not-speaking')
@@ -218,10 +259,6 @@ def build_frame_map(annots_df, fps, width, height, video_id=None):
 
 def load_predictions_csv(path):
     """Read a predictions CSV → dict[frame_idx] -> list[_PredBox].
-
-    Sentinel rows (empty label) ensure every processed frame appears in the
-    map even when the pipeline returned no detections, so record_frame() runs
-    for every sampled frame.
     """
     by_frame = defaultdict(list)
     with open(path, newline='') as f:

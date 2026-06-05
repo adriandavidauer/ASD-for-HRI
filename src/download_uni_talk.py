@@ -7,9 +7,7 @@ import argparse
 import logging
 import os
 import subprocess
-import shutil
 import time
-import zipfile
 
 import pandas as pd
 
@@ -26,9 +24,8 @@ CSV_COLUMNS = [
     "label_id", "instance_id",
 ]
 
-# HuggingFace dataset base (blob form; download_and_extract / download_csv swap in /resolve/).
+# HuggingFace dataset base (blob form; swapped to /resolve/ when downloading).
 HF_BASE = "https://huggingface.co/datasets/plnguyen2908/UniTalk-ASD/blob/main"
-
 
 
 def download_youtube_video(url: str, output_dir: str) -> bool:
