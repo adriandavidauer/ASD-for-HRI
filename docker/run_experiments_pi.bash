@@ -1,40 +1,39 @@
 #!/bin/bash
 ## ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
-# Experiment 1
+
+# "Args": [
+#             "src/run_full_pipeline.py",
+#             "--data_dir",
+#             "/app/data",
+#             "--no_download",
+#             "--predictions_dir",
+#             "predictions_vvadlstmlatest",
+#             "--architecture",
+#             "VVAD-LRS3-LSTM"
+# TODO: adjust sliding window
 export MODEL=LipShape
-docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
-# move the results to a specific destination not to be overwritten by the next experiment
-mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
+docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --no_download --predictions_dir "predictions_${MODEL}_fast" --architecture $MODEL --stride 38
 
 export MODEL=CNN2Plus1D_Light
-docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
-# move the results to a specific destination not to be overwritten by the next experiment
-mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
-
-export MODEL=VVAD-LRS3-LSTM
-docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
-# move the results to a specific destination not to be overwritten by the next experiment
-mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
+docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --no_download --predictions_dir "predictions_${MODEL}" --architecture $MODEL
 
 export MODEL=CNN2Plus1D
-docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
-# move the results to a specific destination not to be overwritten by the next experiment
-mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
+docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --no_download --predictions_dir "predictions_${MODEL}" --architecture $MODEL
 
 export MODEL=CNN2Plus1D_Filters
-docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
-# move the results to a specific destination not to be overwritten by the next experiment
-mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
+docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --no_download --predictions_dir "predictions_${MODEL}" --architecture $MODEL
 
 export MODEL=CNN2Plus1D_Layers
-docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
-# move the results to a specific destination not to be overwritten by the next experiment
-mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
+docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --no_download --predictions_dir "predictions_${MODEL}" --architecture $MODEL
+
+export MODEL=VVAD-LRS3-LSTM
+docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --no_download --predictions_dir "predictions_${MODEL}" --architecture $MODEL
 
 
 
 ## Not trained atm
 # export MODEL=FaceShape
-# docker run -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
+# docker run --name ${MODEL} -v $HOME/ASD-for-HRI/data:/app/data asd4hri --data_dir /app/data --log_file /app/data/logs/$MODEL.log --architecture $MODEL
 # # move the results to a specific destination not to be overwritten by the next experiment
 # mv $HOME/ASD-for-HRI/data/results $HOME/ASD-for-HRI/data/${MODEL}_results
+

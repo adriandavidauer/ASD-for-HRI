@@ -49,7 +49,7 @@ def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processe
 def run_vvad_on_video(video_path,
                       predictions_csv=None,
                       aggregate_time_csv='results/aggregate_time.csv',
-                      video_id=None, architecture='CNN2Plus1D_Light'):
+                      video_id=None, architecture='CNN2Plus1D_Light', stride=1):
     """Run DetectVVAD on one video and write predictions + timing rows.
 
     Args:
@@ -78,7 +78,7 @@ def run_vvad_on_video(video_path,
         raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
 
-    pipeline = DetectVVAD(stride=1, averaging_window_size=1, min_frames=25, patience=10,architecture=architecture)
+    pipeline = DetectVVAD(stride=stride, averaging_window_size=1, min_frames=25, patience=10,architecture=architecture)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     t0 = time.time()

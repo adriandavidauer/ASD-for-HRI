@@ -61,6 +61,8 @@ def parse_args():
                         '(default: 0.5)')
     p.add_argument('--architecture', default='CNN2Plus1D_Light',
                    help='Override the auto-generated log file path')
+    p.add_argument('--stride', default=1, 
+                   help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Also emit INFO-level messages on the console')
     return p.parse_args()
@@ -123,7 +125,7 @@ def render_debug_video(video_path, predictions_csv, annots_df,
 
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
-def run_pipeline_phase(args, video_list, result_dir,architecture):
+def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
     """Download data on demand, run DetectVVAD on every video, write predictions.
 
     With --debug, also renders an annotated output video per processed video.
@@ -187,7 +189,7 @@ def run_pipeline_phase(args, video_list, result_dir,architecture):
         try:
             run_vvad_on_video(
                 str(video_path), str(predictions_csv),
-                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture
+                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)
@@ -250,7 +252,7 @@ def main():
             LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
 
-    processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir, architecture=args.architecture)
+    processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir, architecture=args.architecture, stride=args.stride)
 
     print_run_summary(video_list, processed, skipped, failed, result_dir)
 
