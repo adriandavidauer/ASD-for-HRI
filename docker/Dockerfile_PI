@@ -36,3 +36,5 @@ VOLUME ["/app/data"]
 # to run_full_pipeline.py (e.g. --skip_download, --resume, --video ID).
 ENTRYPOINT ["python", "src/run_full_pipeline.py"]
 CMD ["--data_dir", "/app/data"]
+
+

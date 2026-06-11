@@ -1,10 +1,5 @@
 # ── UniTalk VVAD full evaluation pipeline ─────────────────────────────────────
 #
-# Runs run_full_pipeline.py which:
-#   1. Downloads the UniTalk val split (CSV, clip videos, clip audio)
-#   2. Evaluates DetectVVAD on every val video
-#   3. Writes per-video result files → /app/data/results/<video_id>_results.txt
-#   4. Writes aggregate results     → /app/data/results/aggregate_results.txt
 #
 # Build:
 #   docker build -t unitalk-vvad .
@@ -13,15 +8,12 @@
 #   docker run --rm -v $(pwd)/data:/app/data unitalk-vvad
 #
 # Skip download if dataset is already present:
-#   docker run --rm -v unitalk-data:/app/data unitalk-vvad --skip_download
+#   docker run --rm -v unitalk-data:/app/data unitalk-vvad --no_download
 #
 # Resume an interrupted run:
-#   docker run --rm -v unitalk-data:/app/data unitalk-vvad --skip_download --resume
+#   docker run --rm -v unitalk-data:/app/data unitalk-vvad --no_download --resume
 #
-# Single video (useful for testing):
-#   docker run --rm -v unitalk-data:/app/data unitalk-vvad \
-#       --skip_download --video qv3-HaaxGUc
-# ──────────────────────────────────────────────────────────────────────────────
+
 
 FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
@@ -66,7 +58,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/           src/
 COPY video_list/    video_list/
 
-RUN pip install tensorflow[and-cuda]==2.20.0
+
+RUN pip install tensorflow[and-cuda]==2.18.0
+
+# Use TF's pip-bundled CUDA/cuDNN 9.3 instead of the base image's cuDNN 9.1
+ENV NV_PIP_LIB=/usr/local/lib/python3.10/dist-packages/nvidia
+ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LIB}/cuda_runtime/lib:${NV_PIP_LIB}/cuda_nvrtc/lib:${NV_PIP_LIB}/cufft/lib:${NV_PIP_LIB}/curand/lib:${NV_PIP_LIB}/cusolver/lib:${NV_PIP_LIB}/cusparse/lib:${NV_PIP_LIB}/nccl/lib:${LD_LIBRARY_PATH}
+
 RUN python src/initialize_models.py
 
 # ── Data volume ───────────────────────────────────────────────────────────────

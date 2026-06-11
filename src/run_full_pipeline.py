@@ -1,49 +1,30 @@
 """
 Full UniTalk VVAD evaluation pipeline.
-
-Steps:
-  1. Ensure annotation CSV is present (downloads if missing via src/dowload_uni_talk.py)
-  2. Evaluate VVAD on each video in <data_dir>/videos/val/ — missing videos are
-     downloaded automatically from YouTube via yt-dlp before evaluation
-  3. Write per-video result files to <data_dir>/results/<video_id>_results.csv
-  4. Write aggregate results to <data_dir>/results/aggregate_results.csv
-
-Usage:
-    # Auto mode: download missing videos on demand, then evaluate
-    python run_full_pipeline.py --data_dir data/
-
-    # Evaluate only – skip any downloads (videos must already be present)
-    python run_full_pipeline.py --data_dir data/ --no_download
-
-    # Resume an interrupted run (skips videos whose result file already exists)
-    python run_full_pipeline.py --data_dir data/ --resume
-
-    # Single video (useful for testing)
-    python run_full_pipeline.py --data_dir data/ --video qv3-HaaxGUc
 """
 
 import argparse
-import csv
 import logging
 import os
-import subprocess
 import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-# ── make src/ importable ──────────────────────────────────────────────────────
-_ROOT = Path(__file__).parent
-_SRC  = _ROOT 
+_ROOT = Path(__file__).resolve().parent
+_SRC = _ROOT / 'src'
 sys.path.insert(0, str(_SRC))
 
-from asd4hri.run_vvad_on_unitalk_video import (     # noqa: E402
-    load_annotations,
-    evaluate_video,
-    print_video_stats,
-    print_aggregate_stats,
+import cv2
+
+from asd4hri.run_vvad_on_unitalk_video import run_vvad_on_video
+from download_uni_talk import download_video
+from helpers import (
     setup_logging,
-    CONSECUTIVE_FRAME_THRESHOLD,
+    load_annotations,
+    load_predictions_csv,
+    build_frame_map,
+    create_writer,
+    annotate_debug_frame,
 )
 
 LOGGER = logging.getLogger('pipeline')
@@ -54,374 +35,189 @@ _VIDEO_LIST_URL = (
 )
 
 
-# ── CSV result writers ────────────────────────────────────────────────────────
-
-_PER_VIDEO_FIELDS = [
-    'video_id', 'elapsed_s',
-    'total_video_frames', 'frames_fed_to_pipeline', 'frames_with_predictions',
-    'frames_no_predictions', 'no_pred_frames_with_gt', 'no_pred_frames_without_gt',
-    'total_predictions', 'preds_on_annot_frames',
-    'correct_predictions', 'prediction_accuracy_pct',
-    'speaking_predictions', 'correct_speaking', 'fp_speaking', 'fn_speaking',
-    'precision_speaking', 'recall_speaking', 'f1_speaking',
-    'not_speaking_predictions', 'correct_not_speaking', 'fp_not_speaking', 'fn_not_speaking',
-    'precision_not_speaking', 'recall_not_speaking', 'f1_not_speaking',
-    'total_annotated_frames', 'annot_frames_no_predictions', 'missed_detection_pct',
-    'gt_entities', 'detected_entities', 'entity_detection_rate_pct',
-    f'entities_below_{CONSECUTIVE_FRAME_THRESHOLD}_consec_frames',
-    'correct_timestamps', 'timestamp_accuracy_pct',
-]
-
-
-def _per_video_row(video_id, stats, elapsed):
-    below = stats.entities_below_consecutive_threshold()
-    no_pred_total = stats.frames_fed_to_pipeline - stats.frames_with_predictions
-    missed_pct = 100.0 * stats.annot_frames_no_predictions / max(1, stats.total_annotated_frames)
-    return {
-        'video_id': video_id,
-        'elapsed_s': round(elapsed, 2),
-        'total_video_frames': stats.total_video_frames,
-        'frames_fed_to_pipeline': stats.frames_fed_to_pipeline,
-        'frames_with_predictions': stats.frames_with_predictions,
-        'frames_no_predictions': no_pred_total,
-        'no_pred_frames_with_gt': stats.annot_frames_no_predictions,
-        'no_pred_frames_without_gt': stats.no_pred_frames_without_gt,
-        'total_predictions': stats.total_predictions,
-        'preds_on_annot_frames': stats.preds_on_annot_frames,
-        'correct_predictions': stats.correct_predictions,
-        'prediction_accuracy_pct': round(stats.prediction_accuracy_pct, 4),
-        'speaking_predictions': stats.speaking_predictions,
-        'correct_speaking': stats.correct_speaking,
-        'fp_speaking': stats.fp_speaking,
-        'fn_speaking': stats.fn_speaking,
-        'precision_speaking': round(stats.precision_speaking, 4),
-        'recall_speaking': round(stats.recall_speaking, 4),
-        'f1_speaking': round(stats.f1_speaking, 4),
-        'not_speaking_predictions': stats.not_speaking_predictions,
-        'correct_not_speaking': stats.correct_not_speaking,
-        'fp_not_speaking': stats.fp_not_speaking,
-        'fn_not_speaking': stats.fn_not_speaking,
-        'precision_not_speaking': round(stats.precision_not_speaking, 4),
-        'recall_not_speaking': round(stats.recall_not_speaking, 4),
-        'f1_not_speaking': round(stats.f1_not_speaking, 4),
-        'total_annotated_frames': stats.total_annotated_frames,
-        'annot_frames_no_predictions': stats.annot_frames_no_predictions,
-        'missed_detection_pct': round(missed_pct, 4),
-        'gt_entities': len(stats.gt_entities),
-        'detected_entities': len(stats.detected_entities),
-        'entity_detection_rate_pct': round(100.0 * stats.entity_detection_rate, 4),
-        f'entities_below_{CONSECUTIVE_FRAME_THRESHOLD}_consec_frames': len(below),
-        'correct_timestamps': stats.correct_timestamps,
-        'timestamp_accuracy_pct': round(stats.timestamp_accuracy_pct, 4),
-    }
-
-
-def write_result_csv(result_dir, video_id, stats, elapsed):
-    """Write per-video evaluation stats to <result_dir>/<video_id>_results.csv."""
-    os.makedirs(result_dir, exist_ok=True)
-    path = os.path.join(result_dir, f'{video_id}_results.csv')
-    row = _per_video_row(video_id, stats, elapsed)
-    with open(path, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=_PER_VIDEO_FIELDS)
-        writer.writeheader()
-        writer.writerow(row)
-    LOGGER.info('Results written to %s', path)
-
-
-def write_aggregate_result_csv(result_dir, all_stats, video_ids):
-    """Write all per-video rows plus an aggregate row to <result_dir>/aggregate_results.csv."""
-    if not all_stats:
-        return
-    os.makedirs(result_dir, exist_ok=True)
-    path = os.path.join(result_dir, 'aggregate_results.csv')
-
-    csp  = sum(s.correct_speaking        for s in all_stats)
-    fpsp = sum(s.fp_speaking             for s in all_stats)
-    fnsp = sum(s.fn_speaking             for s in all_stats)
-    cnsp = sum(s.correct_not_speaking    for s in all_stats)
-    fpns = sum(s.fp_not_speaking         for s in all_stats)
-    fnns = sum(s.fn_not_speaking         for s in all_stats)
-    cp   = sum(s.correct_predictions     for s in all_stats)
-    pa   = sum(s.preds_on_annot_frames   for s in all_stats)
-    ct   = sum(s.correct_timestamps      for s in all_stats)
-    tf   = sum(s.total_annotated_frames  for s in all_stats)
-    det  = sum(len(s.detected_entities)  for s in all_stats)
-    tot  = sum(len(s.gt_entities)        for s in all_stats)
-    mnd  = sum(s.annot_frames_no_predictions for s in all_stats)
-    below_count = sum(len(s.entities_below_consecutive_threshold()) for s in all_stats)
-
-    p_sp  = csp  / max(1, csp  + fpsp)
-    r_sp  = csp  / max(1, csp  + fnsp)
-    f1_sp = 2 * p_sp * r_sp / max(1e-9, p_sp + r_sp)
-    p_ns  = cnsp / max(1, cnsp + fpns)
-    r_ns  = cnsp / max(1, cnsp + fnns)
-    f1_ns = 2 * p_ns * r_ns / max(1e-9, p_ns + r_ns)
-
-    agg_row = {
-        'video_id': 'AGGREGATE',
-        'elapsed_s': '',
-        'total_video_frames': sum(s.total_video_frames for s in all_stats),
-        'frames_fed_to_pipeline': sum(s.frames_fed_to_pipeline for s in all_stats),
-        'frames_with_predictions': sum(s.frames_with_predictions for s in all_stats),
-        'frames_no_predictions': sum(
-            s.frames_fed_to_pipeline - s.frames_with_predictions for s in all_stats
-        ),
-        'no_pred_frames_with_gt': mnd,
-        'no_pred_frames_without_gt': sum(s.no_pred_frames_without_gt for s in all_stats),
-        'total_predictions': sum(s.total_predictions for s in all_stats),
-        'preds_on_annot_frames': pa,
-        'correct_predictions': cp,
-        'prediction_accuracy_pct': round(100.0 * cp / max(1, pa), 4),
-        'speaking_predictions': sum(s.speaking_predictions for s in all_stats),
-        'correct_speaking': csp,
-        'fp_speaking': fpsp,
-        'fn_speaking': fnsp,
-        'precision_speaking': round(p_sp, 4),
-        'recall_speaking': round(r_sp, 4),
-        'f1_speaking': round(f1_sp, 4),
-        'not_speaking_predictions': sum(s.not_speaking_predictions for s in all_stats),
-        'correct_not_speaking': cnsp,
-        'fp_not_speaking': fpns,
-        'fn_not_speaking': fnns,
-        'precision_not_speaking': round(p_ns, 4),
-        'recall_not_speaking': round(r_ns, 4),
-        'f1_not_speaking': round(f1_ns, 4),
-        'total_annotated_frames': tf,
-        'annot_frames_no_predictions': mnd,
-        'missed_detection_pct': round(100.0 * mnd / max(1, tf), 4),
-        'gt_entities': tot,
-        'detected_entities': det,
-        'entity_detection_rate_pct': round(100.0 * det / max(1, tot), 4),
-        f'entities_below_{CONSECUTIVE_FRAME_THRESHOLD}_consec_frames': below_count,
-        'correct_timestamps': ct,
-        'timestamp_accuracy_pct': round(100.0 * ct / max(1, tf), 4),
-    }
-
-    with open(path, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=_PER_VIDEO_FIELDS)
-        writer.writeheader()
-        for vid, s in zip(video_ids, all_stats):
-            writer.writerow(_per_video_row(vid, s, 0))
-        writer.writerow(agg_row)
-    LOGGER.info('Aggregate results written to %s', path)
-
-
-# ── video-list bootstrap ──────────────────────────────────────────────────────
-
-def fetch_video_list(dest: Path = _ROOT / 'video_list' / 'val.csv') -> None:
-    """Download video_list/val.csv from the UniTalk GitHub repo.
-
-    Creates the video_list/ directory if it does not exist, then fetches the
-    raw CSV from GitHub and writes it to *dest*.  Skips the download if the
-    file is already present.
-
-    Args:
-        dest: Destination path for the CSV (default: <project_root>/video_list/val.csv).
-    """
-    if dest.exists():
-        LOGGER.info('video_list already present: %s', dest)
-        return
-
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    LOGGER.info('Fetching video list from %s', _VIDEO_LIST_URL)
-    try:
-        urllib.request.urlretrieve(_VIDEO_LIST_URL, dest)
-        LOGGER.info('Saved video list to %s  (%d bytes)', dest, dest.stat().st_size)
-    except Exception as exc:
-        LOGGER.error('Failed to download video list: %s', exc)
-        raise
-
-
-# ── per-video YouTube download ────────────────────────────────────────────────
-
-def _load_url_map(video_list_path: Path) -> dict:
-    """Return {video_id: youtube_url} from video_list/val.csv."""
-    url_map = {}
-    if not video_list_path.exists():
-        return url_map
-    with open(video_list_path) as f:
-        for line in f:
-            url = line.strip()
-            if not url or url == 'Link':
-                continue
-            vid = url.split('v=')[-1]
-            url_map[vid] = url
-    return url_map
-
-
-def _ensure_video(vid: str, url: str, video_dir: Path) -> bool:
-    """Download a single YouTube video via yt-dlp if not already present.
-
-    Returns True when the file exists after the attempt.
-    """
-    target = video_dir / f'{vid}.mp4'
-    if target.exists():
-        return True
-
-    os.makedirs(str(video_dir), exist_ok=True)
-    LOGGER.info('Video not found locally — downloading %s', vid)
-    result = subprocess.run([
-        'yt-dlp',
-        '--extractor-args', 'youtube:player_client=tv_embedded',
-        '-f', 'bestvideo[vcodec^=avc1]+bestaudio/bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best',
-        '--merge-output-format', 'mp4',
-        '-o', str(video_dir / '%(id)s.%(ext)s'),
-        url,
-    ])
-    if result.returncode != 0:
-        LOGGER.warning('yt-dlp failed for %s', vid)
-        return False
-    return target.exists()
-
-
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
 def parse_args():
     p = argparse.ArgumentParser(
         description='Download UniTalk val set and evaluate VVAD on every video.'
     )
     p.add_argument('--data_dir', default='data',
                    help='Root data directory (default: data/)')
+    p.add_argument('--split', default='val',
+                   help='Dataset split (default: val)')
     p.add_argument('--no_download', action='store_true',
                    help='Skip all downloads; fail if a video is missing instead of fetching it')
-    p.add_argument('--resume', action='store_true',
-                   help='Skip videos whose <video_id>_results.csv already exists')
     p.add_argument('--video', default=None,
-                   help='Evaluate a single video_id only (skips aggregate output)')
+                   help='Evaluate a single video_id only')
+    p.add_argument('--predictions_dir', default="predictions",
+                   help='Directory for per-video predictions CSVs '
+                        '(default: <data_dir>/predictions)')
+    p.add_argument('--output_videos_dir', default=None,
+                   help='Directory for --debug annotated videos '
+                        '(default: <data_dir>/output_videos/<split>)')
+    p.add_argument('--debug', action='store_true',
+                   help='Render an annotated output video overlaying pipeline '
+                        'predictions on the ground-truth boxes (default: off)')
     p.add_argument('--iou_threshold', type=float, default=0.5,
-                   help='IoU threshold for GT-prediction matching (default: 0.5)')
-    p.add_argument('--output_dir', default=None,
-                   help='Directory for annotated output videos '
-                        '(default: <data_dir>/output_videos/val)')
-    p.add_argument('--enable_logging', action='store_true',
-                   help='Write per-video debug log files under logs/')
-    p.add_argument('--architecture', default='CNN2Plus1D_Light', choices=['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape', 'FaceShape'],
-                   help="String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'")
-    p.add_argument('--log_file', default=None,
-                   help='Path for the main log file (default: logs/pipeline_<timestamp>.log)')
+                   help='IoU threshold for GT-prediction matching in --debug overlays '
+                        '(default: 0.5)')
+    p.add_argument('--architecture', default='CNN2Plus1D_Light',
+                   help='Override the auto-generated log file path')
+    p.add_argument('--stride', default=1, 
+                   help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
+    p.add_argument('--verbose', '-v', action='store_true',
+                   help='Also emit INFO-level messages on the console')
     return p.parse_args()
 
 
-# ── download step ─────────────────────────────────────────────────────────────
-
-def run_download(data_dir: Path, download_videos: bool):
-    """Run src/dowload_uni_talk.py from the project root (it needs video_list/ nearby)."""
-    script = _SRC / 'dowload_uni_talk.py'
-    if not script.exists():
-        LOGGER.error('Download script not found: %s', script)
-        sys.exit(1)
-
-    cmd = [sys.executable, str(script), '--save_path', str(data_dir.resolve())]
-    if download_videos:
-        cmd.append('--download_videos')
-
-    LOGGER.info('=' * 62)
-    LOGGER.info('STEP 1 — Downloading UniTalk val split')
-    LOGGER.info('Command : %s', ' '.join(cmd))
-    LOGGER.info('Working : %s', _ROOT)
-    LOGGER.info('=' * 62)
-
-    result = subprocess.run(cmd, cwd=str(_ROOT))
-    if result.returncode != 0:
-        LOGGER.error('Download failed (exit %d). Aborting.', result.returncode)
-        sys.exit(result.returncode)
-    LOGGER.info('Download complete.')
-
-
-# ── per-video evaluation loop ─────────────────────────────────────────────────
-
-def run_evaluation(args):
-    data_dir   = Path(args.data_dir)
-    result_dir = data_dir / 'results'
-    csv_path   = data_dir / 'csv' / 'val_orig.csv'
-    video_dir  = data_dir / 'videos' / 'val'
-    output_dir = Path(args.output_dir) if args.output_dir else data_dir / 'output_videos' / 'val'
-
-    if not csv_path.exists():
-        LOGGER.error('Annotation CSV not found: %s', csv_path)
-        LOGGER.error('Remove --no_download or check that data_dir is correct.')
-        sys.exit(1)
-
-    url_map = _load_url_map(_ROOT / 'video_list' / 'val.csv')
-
-    all_annots = load_annotations(str(csv_path))
-    video_ids  = [args.video] if args.video else sorted(all_annots)
-
-    LOGGER.info('')
-    LOGGER.info('=' * 62)
-    LOGGER.info('STEP 2 — Evaluating VVAD on %d video(s)', len(video_ids))
-    LOGGER.info('  data_dir   : %s', data_dir)
-    LOGGER.info('  results    : %s', result_dir)
-    LOGGER.info('  output_dir : %s', output_dir)
-    LOGGER.info('  resume     : %s', args.resume)
-    LOGGER.info('  no_download: %s', args.no_download)
-    LOGGER.info('=' * 62)
-
-    os.makedirs(str(output_dir), exist_ok=True)
-
-    all_stats      = []
-    processed_vids = []
-    skipped        = []
-    failed         = []
-
-    for i, vid in enumerate(video_ids, 1):
-        video_path  = video_dir / f'{vid}.mp4'
-        result_file = result_dir / f'{vid}_results.csv'
-        output_path = output_dir / f'{vid}_vvad.mp4'
-
-        LOGGER.info('')
-        LOGGER.info('── [%d/%d] %s %s', i, len(video_ids), vid, '─' * max(0, 40 - len(vid)))
-
-        if not video_path.exists():
-            if args.no_download:
-                LOGGER.warning('Video file not found, skipping: %s', video_path)
-                skipped.append((vid, 'video file missing'))
+def load_video_list(video_list_path: Path):
+    """Return an ordered list of (video_id, youtube_url) from video_list/<split>.csv."""
+    items = []
+    if not video_list_path.exists():
+        return items
+    with open(video_list_path) as f:
+        for line in f:
+            url = line.strip()
+            if not url or url == 'Link':
                 continue
-            url = url_map.get(vid)
-            if not url:
-                LOGGER.warning('No YouTube URL found for %s — cannot download, skipping.', vid)
-                skipped.append((vid, 'no URL in video list'))
-                continue
-            if not _ensure_video(vid, url, video_dir):
-                LOGGER.warning('Download failed for %s, skipping.', vid)
+            vid = url.split('v=')[-1]
+            items.append((vid, url))
+    return items
+
+
+# ── debug rendering ───────────────────────────────────────────────────────────
+
+def render_debug_video(video_path, predictions_csv, annots_df,
+                       output_video_path, iou_threshold, video_id):
+    """Render an annotated video overlaying predictions and ground-truth boxes.
+     (green=GT, red=correct, yellow=wrong,
+    black=unmatched prediction).
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f'Cannot open video: {video_path}')
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if not fps:
+        raise RuntimeError(f'Cannot read FPS from video: {video_path}')
+
+    by_frame = load_predictions_csv(predictions_csv)
+    frame_map = build_frame_map(annots_df, fps, width, height, video_id=video_id)
+
+    writer, out_path = create_writer(output_video_path, fps, width, height)
+    LOGGER.info('debug video=%s output=%s', video_id, out_path)
+
+    frame_idx = 0
+    try:
+        while True:
+            is_frame_received, frame = cap.read()
+            if not is_frame_received:
+                break
+            pred_boxes = by_frame.get(frame_idx, [])
+            gt_boxes = frame_map.get(frame_idx, [])
+            annotate_debug_frame(frame, frame_idx, pred_boxes, gt_boxes, iou_threshold)
+            writer.write(frame)
+            frame_idx += 1
+    finally:
+        cap.release()
+        writer.release()
+
+
+# ── pipeline pass ─────────────────────────────────────────────────────────────
+
+def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
+    """Download data on demand, run DetectVVAD on every video, write predictions.
+
+    With --debug, also renders an annotated output video per processed video.
+
+    Returns:
+        tuple[list[str], list[tuple], list[tuple]]:
+            (processed, skipped, failed)
+    """
+    data_dir = Path(args.data_dir)
+    video_dir = data_dir / 'videos' / args.split
+    csv_dir = data_dir / 'csv'
+    
+    aggregate_time_csv = result_dir / 'aggregate_time.csv'
+
+    os.makedirs(str(result_dir), exist_ok=True)
+    output_videos_dir= None
+    if args.debug:
+        output_videos_dir = data_dir / 'output_videos'
+        os.makedirs(str(output_videos_dir), exist_ok=True)
+
+    LOGGER.info('phase=pipeline videos=%d result_dir=%s aggregate_time=%s '
+                'no_download=%s debug=%s',
+                len(video_list), result_dir, aggregate_time_csv,
+                args.no_download, args.debug)
+
+
+    annots_df = None
+    if args.debug:
+        annotations_csv = csv_dir / f'{args.split}_orig.csv'
+        if annotations_csv.exists():
+            annots_df = load_annotations(str(annotations_csv))
+        else:
+            LOGGER.warning('debug overlay disabled reason=no_annotation_csv path=%s',
+                           annotations_csv)
+
+    processed = []
+    skipped = []
+    failed = []
+
+    for i, (vid, url) in enumerate(video_list, 1):
+        video_path = video_dir / f'{vid}.mp4'
+        predictions_csv = result_dir / f'{vid}.csv'
+
+        LOGGER.info('phase=pipeline video=%s index=%d/%d', vid, i, len(video_list))
+
+        if not args.no_download:
+            try:
+                download_video(vid, url, str(video_dir), download_videos=True)
+            except Exception:
+                LOGGER.exception('Download failed video=%s', vid)
                 skipped.append((vid, 'download failed'))
                 continue
 
-        annots = all_annots.get(vid, [])
-        if not annots:
-            LOGGER.warning('No GT annotations for %s, skipping.', vid)
-            skipped.append((vid, 'no annotations'))
+        if not video_path.exists():
+            LOGGER.warning('Skipping video=%s reason=video_file_missing path=%s',
+                           vid, video_path)
+            skipped.append((vid, 'video file missing'))
             continue
 
-        if args.resume and result_file.exists():
-            LOGGER.info('Result file already exists — skipping (--resume). %s', result_file)
-            skipped.append((vid, 'already done'))
-            continue
 
         try:
-            stats, actual_out, elapsed = evaluate_video(
-                str(video_path), annots, args.iou_threshold, str(output_path), architecture=args.architecture
+            run_vvad_on_video(
+                str(video_path), str(predictions_csv),
+                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride
             )
-            print_video_stats(vid, str(video_path), actual_out, stats, elapsed)
-            write_result_csv(str(result_dir), vid, stats, elapsed)
-            all_stats.append(stats)
-            processed_vids.append(vid)
         except Exception as exc:
-            LOGGER.exception('Error processing %s: %s', vid, exc)
+            LOGGER.exception('Pipeline failed video=%s', vid)
             failed.append((vid, str(exc)))
+            continue
+        processed.append(vid)
 
-    return all_stats, processed_vids, skipped, failed
+        # Optional annotated debug video (predictions overlaid on ground truth).
+        if args.debug and annots_df is not None:
+            video_annots = annots_df[annots_df['video_id'] == vid]
+            if video_annots.empty:
+                LOGGER.warning('debug skipped video=%s reason=no_annotations_for_video', vid)
+            else:
+                try:
+                    out_path = output_videos_dir / f'{vid}_debug.mp4'
+                    render_debug_video(str(video_path), str(predictions_csv), video_annots,
+                                       str(out_path), args.iou_threshold, vid)
+                except Exception:
+                    LOGGER.exception('debug video failed video=%s', vid)
+
+    return processed, skipped, failed
 
 
 # ── summary ───────────────────────────────────────────────────────────────────
 
-def print_run_summary(video_ids, processed_vids, skipped, failed, result_dir):
-    LOGGER.info('')
-    LOGGER.info('=' * 62)
-    LOGGER.info('RUN SUMMARY')
-    LOGGER.info('=' * 62)
-    LOGGER.info('  Total videos found    : %d', len(video_ids))
-    LOGGER.info('  Successfully evaluated: %d', len(processed_vids))
+def print_run_summary(video_list, processed, skipped, failed, result_dir):
+    LOGGER.info('  Total videos found    : %d', len(video_list))
+    LOGGER.info('  Successfully evaluated: %d', len(processed))
     LOGGER.info('  Skipped               : %d', len(skipped))
     for vid, reason in skipped:
         LOGGER.info('    %-30s  (%s)', vid, reason)
@@ -435,51 +231,30 @@ def print_run_summary(video_ids, processed_vids, skipped, failed, result_dir):
 
 def main():
     args = parse_args()
-    setup_logging(to_file=args.enable_logging, log_file=args.log_file)
+    log_path = setup_logging('pipeline', args.verbose)
 
-    data_dir   = Path(args.data_dir)
-    result_dir = data_dir / 'results'
+    data_dir = Path(args.data_dir)
+   
+    result_dir = Path(data_dir / args.predictions_dir)
 
-    LOGGER.info('UniTalk VVAD full pipeline  |  %s', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    LOGGER.info('data_dir : %s', data_dir.resolve())
+    LOGGER.info('run start data_dir=%s log_file=%s started_at=%s',
+                data_dir.resolve(), log_path,
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
-    # ── Step 0: Ensure video_list/val.csv is present ──────────────────────────
-    fetch_video_list()
+    video_list_path = Path(_ROOT.parent / 'video_list' / 'val.csv')
+    if not os.path.exists(video_list_path):
+        urllib.request.urlretrieve(_VIDEO_LIST_URL,video_list_path )
+    video_list = load_video_list(video_list_path)
 
-    # ── Step 1: Ensure annotation CSV is present ───────────────────────────────
-    # The annotation CSV is required before evaluation; videos are downloaded
-    # on demand per-video in the evaluation loop (unless --no_download is set).
-    csv_path = data_dir / 'csv' / 'val_orig.csv'
-    if not csv_path.exists():
-        if args.no_download:
-            LOGGER.error('Annotation CSV not found and --no_download is set: %s', csv_path)
+    if args.video:
+        video_list = [(v, u) for v, u in video_list if v == args.video]
+        if not video_list:
+            LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
-        LOGGER.info('Annotation CSV missing — downloading dataset metadata.')
-        run_download(data_dir, download_videos=False)
-    else:
-        LOGGER.info('Annotation CSV already present — skipping metadata download.')
 
-    # ── Step 2 & 3: Evaluate + write per-video result files ───────────────────
-    all_stats, processed_vids, skipped, failed = run_evaluation(args)
+    processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir, architecture=args.architecture, stride=args.stride)
 
-    # ── Step 4: Aggregate ─────────────────────────────────────────────────────
-    if all_stats:
-        LOGGER.info('')
-        LOGGER.info('=' * 62)
-        LOGGER.info('STEP 3 — Aggregate statistics (%d video(s))', len(all_stats))
-        LOGGER.info('=' * 62)
-        print_aggregate_stats(all_stats)
-        write_aggregate_result_csv(str(result_dir), all_stats, processed_vids)
-    else:
-        LOGGER.warning('No videos were successfully evaluated — no aggregate file written.')
-
-    # ── Final summary ─────────────────────────────────────────────────────────
-    csv_path  = data_dir / 'csv' / 'val_orig.csv'
-    all_annots = {}
-    if csv_path.exists():
-        all_annots = load_annotations(str(csv_path))
-    video_ids = [args.video] if args.video else sorted(all_annots)
-    print_run_summary(video_ids, processed_vids, skipped, failed, result_dir)
+    print_run_summary(video_list, processed, skipped, failed, result_dir)
 
 
 if __name__ == '__main__':
@@ -490,3 +265,4 @@ if __name__ == '__main__':
     except Exception as exc:
         LOGGER.exception('Fatal: %s', exc)
         raise SystemExit(1)
+
