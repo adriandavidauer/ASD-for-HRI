@@ -14,7 +14,7 @@ from datetime import datetime
 import pandas as pd
 
 CONTAINMENT_THRESHOLD = 0.5          # accept match when smaller box is ≥50% covered
-TIMESTAMP_TOLERANCE_MS = 200.0        # |pred.ts − gt.ts| must be within this to align frames
+TIMESTAMP_TOLERANCE_MS = 20.0        # |pred.ts − gt.ts| must be within this to align frames
 LOGGER = logging.getLogger('UniTalk_VVAD')
 
 _LABEL_MAP = {
@@ -28,7 +28,7 @@ _GtBox   = namedtuple('_GtBox',   ['timestamp', 'index', 'entity_id', 'vvad_labe
 _DETAIL_FIELDS = ['frame_timestamp', 'x1', 'y1', 'x2', 'y2',
                   'iou', 'containment', 'entity_id', 'gt_label', 'pred_label', 'matched']
 
-_SUMMARY_FIELDS = ['video_id', 'tp', 'tn', 'fp', 'fn', 'precision', 'recall', 'f1',
+_SUMMARY_FIELDS = ['video_id', 'tp', 'tn', 'fp', 'fn', 'accuracy', 'precision', 'recall', 'f1',
                    'missed_detections', 'total_gt_boxes', 'missed_pct',
                    'entities_detected', 'entities_correctly_identified', 'total_entities']
 
@@ -52,8 +52,8 @@ def parse_args():
 
 def setup_logging(log_name='unitalk_stats', verbose=False):
     """Configure file + console logging; return the log file path."""
-    os.makedirs('logs', exist_ok=True)
-    path = f'logs/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
+    os.makedirs('logs_stats', exist_ok=True)
+    path = f'logs_stats/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
     LOGGER.setLevel(logging.DEBUG)
     LOGGER.handlers.clear()
     LOGGER.propagate = False
@@ -262,6 +262,16 @@ class Stats:
         return 2 * p * r / max(1e-9, p + r)
 
     @property
+    def accuracy(self):
+        """Label accuracy on matched boxes: entity_correct / entity_matched.
+
+        Counts only spatially-matched GT boxes;
+        """
+        correct = sum(self.entity_correct.values())
+        matched = sum(self.entity_matched.values())
+        return correct / max(1, matched)
+
+    @property
     def missed_detections(self):
         """GT boxes that no prediction matched (detection misses)."""
         return self.total_gt_boxes - self.matched_boxes
@@ -352,10 +362,17 @@ def write_aggregate_csv(result_dir, per_video):
     with open(path, 'a', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=_SUMMARY_FIELDS)
         writer.writeheader()
+
+        tot_tp = tot_tn = tot_fp = tot_fn = 0
+        tot_correct = tot_matched = 0          # for matched-box label accuracy
+        tot_missed = tot_gt_boxes = 0
+        tot_detected = tot_identified = tot_entities = 0
+
         for video_id, stats in per_video:
             writer.writerow({
                 'video_id':          video_id,
                 'tp': stats.tp, 'tn': stats.tn, 'fp': stats.fp, 'fn': stats.fn,
+                'accuracy':          f'{stats.accuracy:.4f}',
                 'precision':         f'{stats.precision:.4f}',
                 'recall':            f'{stats.recall:.4f}',
                 'f1':                f'{stats.f1:.4f}',
@@ -366,6 +383,38 @@ def write_aggregate_csv(result_dir, per_video):
                 'entities_correctly_identified': len(stats.correctly_identified_entities),
                 'total_entities':                len(stats.gt_entities),
             })
+
+            tot_tp += stats.tp
+            tot_tn += stats.tn
+            tot_fp += stats.fp
+            tot_fn += stats.fn
+            tot_correct += sum(stats.entity_correct.values())
+            tot_matched += sum(stats.entity_matched.values())
+            tot_missed += stats.missed_detections
+            tot_gt_boxes += stats.total_gt_boxes
+            tot_detected += len(stats.detected_entities)
+            tot_identified += len(stats.correctly_identified_entities)
+            tot_entities += len(stats.gt_entities)
+
+        # micro-averaged summary row recomputed from the pooled counts
+        micro_precision = tot_tp / max(1, tot_tp + tot_fp)
+        micro_recall    = tot_tp / max(1, tot_tp + tot_fn)
+        micro_f1        = 2 * micro_precision * micro_recall / max(1e-9, micro_precision + micro_recall)
+        micro_accuracy  = tot_correct / max(1, tot_matched)
+        writer.writerow({
+            'video_id':          'micro_average',
+            'tp': tot_tp, 'tn': tot_tn, 'fp': tot_fp, 'fn': tot_fn,
+            'accuracy':          f'{micro_accuracy:.4f}',
+            'precision':         f'{micro_precision:.4f}',
+            'recall':            f'{micro_recall:.4f}',
+            'f1':                f'{micro_f1:.4f}',
+            'missed_detections': tot_missed,
+            'total_gt_boxes':    tot_gt_boxes,
+            'missed_pct':        f'{100.0 * tot_missed / max(1, tot_gt_boxes):.2f}',
+            'entities_detected':             tot_detected,
+            'entities_correctly_identified': tot_identified,
+            'total_entities':                tot_entities,
+        })
     LOGGER.debug('aggregate_results path=%s videos=%d', path, len(per_video))
 
 

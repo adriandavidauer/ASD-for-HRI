@@ -16,6 +16,25 @@ from helpers import setup_logging
 
 LOGGER = logging.getLogger('uniTalk_VVAD')
 
+def parse_args():
+    p = argparse.ArgumentParser(
+        description='Run DetectVVAD on a single video and write a predictions CSV')
+    p.add_argument('--video',          required=True,
+                   help='Path to the input video file')
+    p.add_argument('--predictions',    default=None,
+                   help='Output predictions CSV path '
+                        '(default: results/<video_id>_results.csv)')
+    p.add_argument('--aggregate_time', default='results/aggregate_time.csv',
+                   help='Aggregate time CSV to append to '
+                        '(default: results/aggregate_time.csv)')
+    p.add_argument('--video_id',       default=None,
+                   help='Override the video_id used in logs and the timing row '
+                        '(defaults to the input video basename)')
+    p.add_argument('--log_file',       default=None,
+                   help='Override the auto-generated log file path')
+    p.add_argument('--verbose', '-v',  action='store_true',
+                   help='Also emit INFO-level messages on the console')
+    return p.parse_args()
 
 # ── CSV writers ───────────────────────────────────────────────────────────────
 
@@ -121,26 +140,6 @@ def run_vvad_on_video(video_path,
 
     return frame_idx, elapsed
 
-
-def parse_args():
-    p = argparse.ArgumentParser(
-        description='Run DetectVVAD on a single video and write a predictions CSV')
-    p.add_argument('--video',          required=True,
-                   help='Path to the input video file')
-    p.add_argument('--predictions',    default=None,
-                   help='Output predictions CSV path '
-                        '(default: results/<video_id>_results.csv)')
-    p.add_argument('--aggregate_time', default='results/aggregate_time.csv',
-                   help='Aggregate time CSV to append to '
-                        '(default: results/aggregate_time.csv)')
-    p.add_argument('--video_id',       default=None,
-                   help='Override the video_id used in logs and the timing row '
-                        '(defaults to the input video basename)')
-    p.add_argument('--log_file',       default=None,
-                   help='Override the auto-generated log file path')
-    p.add_argument('--verbose', '-v',  action='store_true',
-                   help='Also emit INFO-level messages on the console')
-    return p.parse_args()
 
 
 def main():
