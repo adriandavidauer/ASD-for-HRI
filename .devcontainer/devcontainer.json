@@ -1,0 +1,14 @@
+{
+  "build": { "dockerfile": "../docker/Dockerfile_GPU",
+             "context": ".." },
+    // Enable GPU support for the container
+    "runArgs": [
+        "--gpus=all"
+    ], 
+    // Mount your host home directory to the container user's home directory
+    "mounts": [
+        "source=${localEnv:HOME},target=/home/vscode/host-home,type=bind,consistency=cached"
+    ],
+    // Ensures permissions align if your local user ID doesn't match the container
+    "updateRemoteUserUID": true
+}
