@@ -79,7 +79,7 @@ def model_row(label):
     return {
         "Model": label,
         "Accuracy": float(micro["accuracy"]),
-        "FPS": fps,
+        "FPS": float(micro["fps"]),
         "F1": float(micro["f1"]),
         "Precision": float(micro["precision"]),
         "Recall": float(micro["recall"]),

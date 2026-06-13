@@ -30,7 +30,8 @@ _DETAIL_FIELDS = ['frame_timestamp', 'x1', 'y1', 'x2', 'y2',
 
 _SUMMARY_FIELDS = ['video_id', 'tp', 'tn', 'fp', 'fn', 'accuracy', 'precision', 'recall', 'f1',
                    'missed_detections', 'total_gt_boxes', 'missed_pct',
-                   'entities_detected', 'entities_correctly_identified', 'total_entities']
+                   'entities_detected', 'entities_correctly_identified', 'total_entities',
+                   'frames_processed', 'elapsed_seconds', 'fps']
 
 def parse_args():
     p = argparse.ArgumentParser(description='Score VVAD prediction CSVs against ground truth')
@@ -105,6 +106,32 @@ def load_predictions_csv(path):
                 row['label'],
             ))
     return by_ts
+
+
+def load_processing_times(predictions_dir):
+    """Read ``aggregate_time.csv`` -> dict[video_id] -> {frames, elapsed, fps}.
+    """
+    path = os.path.join(predictions_dir, 'aggregate_time.csv')
+    if not os.path.isfile(path):
+        LOGGER.warning('aggregate_time.csv not found path=%s', path)
+        return {}
+    by_video = {}
+    with open(path, newline='') as f:
+        for row in csv.DictReader(f):
+            try:
+                frames  = int(row['frames_processed'])
+                elapsed = float(row['elapsed_seconds'])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if elapsed <= 0:
+                continue
+            by_video[row['video_id']] = {
+                'frames_processed': frames,
+                'elapsed_seconds':  elapsed,
+                'fps':              frames / elapsed,
+            }
+    LOGGER.info('processing_times videos=%d path=%s', len(by_video), path)
+    return by_video
 
 
 class GroundTruthIndex:
@@ -350,13 +377,12 @@ def write_detail_csv(result_dir, video_id, detail_rows):
 
 
 
-def write_aggregate_csv(result_dir, per_video):
+def write_aggregate_csv(result_dir, per_video, times_by_video=None):
     """Write one CSV holding a summary row per video.
-
-    ``per_video`` is a list of (video_id, Stats).
     """
     if not per_video:
         return
+    times_by_video = times_by_video or {}
     os.makedirs(result_dir, exist_ok=True)
     path = os.path.join(result_dir, 'aggregate_results.csv')
     with open(path, 'a', newline='') as f:
@@ -367,9 +393,13 @@ def write_aggregate_csv(result_dir, per_video):
         tot_correct = tot_matched = 0          # for matched-box label accuracy
         tot_missed = tot_gt_boxes = 0
         tot_detected = tot_identified = tot_entities = 0
+        tot_frames = 0
+        tot_elapsed = 0.0
+        fps_values = []                        # per-video fps, for the average row
 
         for video_id, stats in per_video:
-            writer.writerow({
+            timing = times_by_video.get(video_id)
+            row = {
                 'video_id':          video_id,
                 'tp': stats.tp, 'tn': stats.tn, 'fp': stats.fp, 'fn': stats.fn,
                 'accuracy':          f'{stats.accuracy:.4f}',
@@ -382,7 +412,12 @@ def write_aggregate_csv(result_dir, per_video):
                 'entities_detected':             len(stats.detected_entities),
                 'entities_correctly_identified': len(stats.correctly_identified_entities),
                 'total_entities':                len(stats.gt_entities),
-            })
+                'frames_processed': timing['frames_processed'],
+                 'elapsed_seconds': f"{timing['elapsed_seconds']:.3f}", 
+                 'fps': f"{timing['fps']:.2f}"
+            }
+                
+            writer.writerow(row)
 
             tot_tp += stats.tp
             tot_tn += stats.tn
@@ -395,12 +430,15 @@ def write_aggregate_csv(result_dir, per_video):
             tot_detected += len(stats.detected_entities)
             tot_identified += len(stats.correctly_identified_entities)
             tot_entities += len(stats.gt_entities)
+            tot_frames  += timing['frames_processed']
+            tot_elapsed += timing['elapsed_seconds']
 
         # micro-averaged summary row recomputed from the pooled counts
         micro_precision = tot_tp / max(1, tot_tp + tot_fp)
         micro_recall    = tot_tp / max(1, tot_tp + tot_fn)
         micro_f1        = 2 * micro_precision * micro_recall / max(1e-9, micro_precision + micro_recall)
         micro_accuracy  = tot_correct / max(1, tot_matched)
+        avg_fps = tot_frames / tot_elapsed
         writer.writerow({
             'video_id':          'micro_average',
             'tp': tot_tp, 'tn': tot_tn, 'fp': tot_fp, 'fn': tot_fn,
@@ -414,6 +452,9 @@ def write_aggregate_csv(result_dir, per_video):
             'entities_detected':             tot_detected,
             'entities_correctly_identified': tot_identified,
             'total_entities':                tot_entities,
+            'frames_processed':  tot_frames ,
+            'elapsed_seconds':   f'{tot_elapsed:.3f}',
+            'fps':               f'{avg_fps:.2f}',
         })
     LOGGER.debug('aggregate_results path=%s videos=%d', path, len(per_video))
 
@@ -438,6 +479,7 @@ def main():
                 args.timestamp_tolerance_ms, log_path)
 
     gt_by_video = load_ground_truth(args.groundtruth_csv)
+    times_by_video = load_processing_times(args.predictions_dir)
     os.makedirs(args.result_dir, exist_ok=True)
 
     if args.video:
@@ -475,7 +517,7 @@ def main():
             except Exception:
                 LOGGER.exception('Failed scoring video=%s', vid)
 
-    write_aggregate_csv(args.result_dir, per_video)
+    write_aggregate_csv(args.result_dir, per_video, times_by_video)
     LOGGER.info('stats run complete videos_scored=%d', len(per_video))
 
 
