@@ -69,8 +69,7 @@ RUN python src/initialize_models.py
 
 
 #### TalkNet
-COPY TalkNet-ASD/requirement.txt TalkNet-ASD/requirement.txt
-RUN pip install -r ./TalkNet-ASD/requirement.txt
+RUN pip install -r src/TalkNet-ASD/requirement.txt
 
 # ── Data volume ───────────────────────────────────────────────────────────────
 # Mount a volume here to persist downloaded data and evaluation outputs across
