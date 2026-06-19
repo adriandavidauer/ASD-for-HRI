@@ -67,6 +67,11 @@ ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LI
 
 RUN python src/initialize_models.py
 
+
+#### TalkNet
+COPY TalkNet-ASD/requirement.txt TalkNet-ASD/requirement.txt
+RUN pip install -r ./TalkNet-ASD/requirement.txt
+
 # ── Data volume ───────────────────────────────────────────────────────────────
 # Mount a volume here to persist downloaded data and evaluation outputs across
 # container runs.  Expected sub-directories created by the pipeline:
