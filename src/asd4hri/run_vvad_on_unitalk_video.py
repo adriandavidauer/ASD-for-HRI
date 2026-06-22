@@ -108,32 +108,44 @@ def run_vvad_on_video(video_path,
             writer = csv.writer(f)
             writer.writerow(_PREDICTION_FIELDS)
 
-            while True:
-                is_frame_received, frame = cap.read()
-                if not is_frame_received:
-                    LOGGER.warning('Frame not received or End of stream')
-                    break
-                height, width = frame.shape[:2]
-                try:
-                    output= pipeline(frame)
-                    if output is None:
-                        continue
-                    pred_boxes = output.get('boxes2D', []) if isinstance(output, dict) else []
-                except Exception as exc:
-                    LOGGER.warning('pipeline_error video=%s frame=%d: %s',
-                                   video_id, frame_idx, exc)
-                    pred_boxes = []
+        frame_idx_list = []
+        timestamp_list = []
+        pred_boxes_list = []
+        while True:
+            is_frame_received, frame = cap.read()
+            if not is_frame_received:
+                LOGGER.warning('Frame not received or End of stream')
+                break
+            height, width = frame.shape[:2]
+            try:
+                output= pipeline(frame)
+                if output is None:
+                    continue
+                pred_boxes = output.get('boxes2D', []) if isinstance(output, dict) else []
+            except Exception as exc:
+                LOGGER.warning('pipeline_error video=%s frame=%d: %s',
+                                video_id, frame_idx, exc)
+                pred_boxes = []
 
-                timestamp = frame_idx / native_fps
-                if pred_boxes != []:
-                    _write_prediction_rows(writer, frame_idx, timestamp,
-                                           pred_boxes, width, height)
+            timestamp = frame_idx / native_fps
+            if pred_boxes != []:
+                frame_idx_list.append(frame_idx)
+                timestamp_list.append(timestamp)
+                pred_boxes_list.append(pred_boxes)
+                
+                
 
-                frame_idx += 1
+            frame_idx += 1
     finally:
         cap.release()
 
     elapsed = time.time() - t0
+
+    with open(predictions_csv, 'a', newline='') as f:
+        writer = csv.writer(f)
+        for frame_idx, timestamp, pred_boxes in zip(frame_idx_list, timestamp_list, pred_boxes_list):
+            _write_prediction_rows(writer, frame_idx, timestamp,
+                                            pred_boxes, width, height)
 
     if aggregate_time_csv is not None:
         append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,native_fps)
