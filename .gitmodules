@@ -1,6 +1,6 @@
 [submodule "TalkNet-ASD"]
 	path = src/TalkNet-ASD
 	url = git@github.com:adriandavidauer/TalkNet-ASD.git
-[submodule "LR-ASD"]
-	path = LR-ASD
+[submodule "src/LR-ASD"]
+	path = src/LR-ASD
 	url = git@github.com:adriandavidauer/LR-ASD.git
