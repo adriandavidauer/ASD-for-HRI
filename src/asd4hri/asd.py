@@ -126,6 +126,20 @@ def buildFeatureLSTM(input_shape, num_lstm_layers=1, lstm_dims=32, num_dense_lay
         # model.build(input_shape)
         return model, modelName    
 
+def load_vvad_classifier(architecture):
+    """Load the Keras classifier model for the given architecture."""
+    assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
+
+    if architecture == 'VVAD-LRS3-LSTM':
+        return VVAD_LRS3_LSTM(weights='VVAD_LRS3')
+    elif architecture.startswith('CNN2Plus1D'):
+        return CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture))
+    elif architecture == 'LipShape':
+        return load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras'))
+    elif architecture == 'FaceShape':
+        return load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras'))
+
+
 class ClassifyVVAD(SequentialProcessor):
     """Visual Voice Activity Detection pipeline for classifying speaking and not speaking from cropped RGB face
     video clips.
@@ -140,23 +154,19 @@ class ClassifyVVAD(SequentialProcessor):
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
         average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set average to 1 to
             disable averaging
+        classifier: Optional pre-loaded model to reuse instead of loading a new one.
     """
     def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, average_type='mean'):
+                 stride=38, averaging_window_size=2, average_type='mean', classifier=None):
         super(ClassifyVVAD, self).__init__()
         assert average_type in Average_Options, f"'{average_type}' is not in {Average_Options}"
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
-        if architecture == 'VVAD-LRS3-LSTM':
-            self.classifier = VVAD_LRS3_LSTM(weights='VVAD_LRS3')
-        elif architecture.startswith('CNN2Plus1D'):
-            self.classifier = CNN2Plus1D(weights='VVAD_LRS3',
-                                         architecture=str(architecture))
-        elif architecture == 'LipShape':
-            self.classifier = load_model(str(Path(__file__).absolute().parent.parent  / "models" / 'paz_LipShape_0.8958.keras'))
+        classifier = classifier if classifier is not None else load_vvad_classifier(architecture)
+
+        if architecture == 'LipShape':
             input_size = (38, 20, 2)
         elif architecture == 'FaceShape':
-            self.classifier = load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras'))
             input_size = (38, 68, 2)
 
         self.class_names = get_class_names('VVAD_LRS3')
@@ -175,7 +185,7 @@ class ClassifyVVAD(SequentialProcessor):
             preprocess.add(NormalizeShapeSample())
 
 
-        self.add(pr.PredictWithNones(self.classifier, preprocess))
+        self.add(pr.PredictWithNones(classifier, preprocess))
 
         weighted_mean = (average_type == 'weighted')
         self.avg = pr.AveragePredictions(averaging_window_size, weighted_mean)
@@ -325,15 +335,14 @@ class DetectVVAD(Processor):
             average_type=str(average_type),
             architecture=architecture
         )
-        self.classifiers = []  
-        self.adders = [] 
-        self.frame_counts = [] 
-        self.miss_counts  = []     
+        self.classifiers = []
+        self.adders = []
+        self.frame_counts = []
+        self.miss_counts  = []
 
-        _tmp = ClassifyVVAD(**self.vvad_args)
-        self.class_names = list(_tmp.class_names)  
-        del _tmp
-      
+        self.shared_classifier = load_vvad_classifier(architecture)
+        self.class_names = list(get_class_names('VVAD_LRS3'))
+
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
@@ -348,7 +357,7 @@ class DetectVVAD(Processor):
 
         # one (classifier, adder) pair per face slot
         while len(self.adders) < N:
-            clf = ClassifyVVAD(**self.vvad_args)
+            clf = ClassifyVVAD(**self.vvad_args, classifier=self.shared_classifier)
             self.classifiers.append(clf)
             self.adders.append(pr.AddClassAndScoreToBoxes(clf))
             self.frame_counts.append(0)
