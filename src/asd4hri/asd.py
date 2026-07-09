@@ -9,6 +9,8 @@ import bz2
 import errno
 import os
 import urllib.request
+from collections import deque
+
 
 # 3rd party imports
 import dlib
@@ -48,8 +50,65 @@ Average_Options = ['mean', 'weighted']
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
+# TODO: make Buffer Batch Ready!
+class BufferFeatures(Processor):
+    """Buffers features (e.g.images) for models that need timeseries of features. The Buffer is working as a FIFO (First In First Out) buffer. 
+    The Buffer handels batches dynamically with multiple buffers internally. It expects a sorted list like object of features as input to match to the internal buffers.
+    The List must be sorted to assure  
+
+    # Arguments
+        input_size: Tuple of integers. Input shape to the model in following format: (timesteps, dim0, dim1, ...) 
+            e.g. (frames, height, width, channels) for video
+        stride: Integer, specifies after how many added features the buffer will return the all buffered features.
+            In a scenario with an already full buffer and a stride of 10,
+            after each 10th call the buffer will be returned.
+            The stride must be smaller than the number of timesteps (the first argument of the input_size).
+        max_consecutive_empty: Integer. Buffer will be cleared after this amount of consecutive empty(None) or no inputs. 
+            None as input is needed if within the sorted list there is no input for an element between two others. 
+            If no input is in the end, the list will just be shorter.
+        dtype: Numpy Datatype for the features. Default is numpy.float64
+
+    # Methods
+        call()
+    """
+    def __init__(self, input_size, stride=25, max_consecutive_empty=5, dtype=np.float64):
+        self.buffer_size = input_size[0]
+        if self.buffer_size < stride:
+            raise ValueError('Buffer size must be equal or larger than stride')
+        super(BufferFeatures, self).__init__()
+        self.stride = stride 
+        self.max_consecutive_empty = max_consecutive_empty
+        
+
+        # Buffers: 
+        self.buffers = []
+        # Counters for return after stride
+        self.timesteps_since_last_return = [] # I have to keep track of that for each internal buffer, because otherwise a full buffer could return even if only input for another buffer came in.
 
 
+    def call(self, batch_of_features):
+        """
+        # Arguments
+            batch_of_features: sorted list like object of features. Must have the shape (N, dim0, dim1, ...) where N is the size of the batch.
+        # Returns
+            Numpy array. Batch of timeseries of features of the shape (M, timesteps, dim0, dim1, ...) where M is the number of internal Buffers that are full.
+            The buffer will return a sorted list of all buffers. When the stride is not reached or the buffer is not full the element will be None.
+        """
+        # TODO: resetting!
+        batch_return = []
+        for i, features in enumerate(batch_of_features):
+            if i == len(self.buffers):
+                self.buffers.append(deque(maxlen=self.buffer_size))
+                self.timesteps_since_last_return.append(0)
+            self.buffers[i].append(features)
+            self.timesteps_since_last_return[i] += 1 
+            if len(self.buffers[i]) == self.buffer_size and self.timesteps_since_last_return[i] >= self.stride:
+                batch_return.append(buffers[i])
+                self.timesteps_since_last_return[i] = 0
+            else:
+                batch_return.append(None)
+
+        return batch_return
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -154,15 +213,14 @@ class ClassifyVVAD(SequentialProcessor):
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
         average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set average to 1 to
             disable averaging
-        classifier: Optional pre-loaded model to reuse instead of loading a new one.
     """
     def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, average_type='mean', classifier=None):
+                 stride=38, averaging_window_size=2, average_type='mean'):
         super(ClassifyVVAD, self).__init__()
         assert average_type in Average_Options, f"'{average_type}' is not in {Average_Options}"
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
-        classifier = classifier if classifier is not None else load_vvad_classifier(architecture)
+        classifier = load_vvad_classifier(architecture)
 
         if architecture == 'LipShape':
             input_size = (38, 20, 2)
@@ -178,7 +236,7 @@ class ClassifyVVAD(SequentialProcessor):
 
         else:
             preprocess = PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0))
-        self.buffer_images = pr.BufferImages(input_size, stride=stride)
+        self.buffer_images = BufferImages(input_size, stride=stride)
         preprocess.add(self.buffer_images)
 
         if 'Shape' in architecture:
@@ -273,21 +331,15 @@ class GetShapeFeatures(Processor):
         else:
             return np.array([(p.x, p.y) for p in shape.parts()])
 
-class DetectVVAD(Processor):
-    """Visual Voice Activity Detection classification and detection pipeline.
+class ASD(Processor):
+    """Active Speaker Detection pipeline.
 
     # Example
         ``` python
-        from paz.backend.camera import VideoPlayer, Camera
-        import paz.pipelines.detection as dt
-
-        detect = DetectVVAD()
-
-        pipeline = dt.DetectVVAD()
-        # To input multiple images, use a camera or a prerecorded video
-        camera = Camera(args.camera_id)
-        player = VideoPlayer((640, 480), pipeline, camera)
-        player.run()
+            pipeline = ASD(architecture='LipShape')
+            camera = Camera(0)
+            player = VideoPlayer((640, 480), pipeline, camera)
+            player.run()
         ```
 
     # Returns
@@ -335,14 +387,13 @@ class DetectVVAD(Processor):
             average_type=str(average_type),
             architecture=architecture
         )
-        self.classifiers = []
-        self.adders = []
-        self.frame_counts = []
-        self.miss_counts  = []
+        self.classifier = pr.AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args))
+        # TODO: Dummy predict to fully initialize
+        
 
-        self.shared_classifier = load_vvad_classifier(architecture)
         self.class_names = list(get_class_names('VVAD_LRS3'))
 
+        # TODO: only draw if enabled
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
@@ -355,14 +406,19 @@ class DetectVVAD(Processor):
 
         N = len(cropped_images)
 
-        # one (classifier, adder) pair per face slot
+        # TODO: add each face in the corresponding buffer
+        # TODO: if we do not have enough buffers create new ones
+        # TODO: get all full buffers and batch predict with self.classifier([crop], [box])
+
+        # one classifier for all buffers
+        # is pr.AddClassAndScoreToBoxes batch safe?
+
         while len(self.adders) < N:
-            clf = ClassifyVVAD(**self.vvad_args, classifier=self.shared_classifier)
-            self.classifiers.append(clf)
             self.adders.append(pr.AddClassAndScoreToBoxes(clf))
             self.frame_counts.append(0)
             self.miss_counts.append(0)
             self.absent_counts.append(0)
+            # TODO: what is the difference between absence counts and miss counts?
 
         # Increment counters for the first N slots (faces we actually saw this frame)
         for i in range(N):
@@ -398,11 +454,21 @@ class DetectVVAD(Processor):
         image = self.draw(image, boxes2D)
         return self.wrap(image, boxes2D)
 
+class DetectVVAD(ASD):
+    """Deprecated Version of ASD.
+    """
+    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
+                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
+        super(DetectVVAD, self).__init__(architecture=architecture, stride=stride,
+                                         averaging_window_size=averaging_window_size,
+                                         average_type=average_type, offsets=offsets,
+                                         colors=colors, min_frames=min_frames, patience=patience)
+        raise DeprecationWarning("DetectVVAD is deprecated. Use ASD instead.")
 if __name__ == '__main__':
     # load Processor for testing
     #test_classiffier = ClassifyVVAD(architecture='LipShape')
-    # TODO: run processor for testing
-    pipeline = DetectVVAD(architecture='FaceShape')
+    # run processor for testing
+    pipeline = ASD(architecture='LipShape')
     camera = Camera(0)
     player = VideoPlayer((640, 480), pipeline, camera)
     player.run()
