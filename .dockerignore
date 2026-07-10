@@ -24,6 +24,9 @@ build/
 *.avi
 *.mkv
 *.zip
+*.wav
+*.jpg
+*.pckl
 
 # Editor / OS artefacts
 .DS_Store

@@ -104,6 +104,7 @@ def run_vvad_on_video(video_path,
     frame_idx = 0
 
     try:
+        #TODO: writing results to file should not be timed - we can store everything in a list and write in the end.
         with open(predictions_csv, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(_PREDICTION_FIELDS)
