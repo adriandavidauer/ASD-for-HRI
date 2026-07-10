@@ -15,6 +15,8 @@
 #
 
 
+# TODO: create non-root User
+
 FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
 LABEL org.opencontainers.image.title="UniTalk VVAD Pipeline" \
@@ -54,10 +56,7 @@ RUN mkdir src
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install .[dev] 
 
-# ── Application source ────────────────────────────────────────────────────────
-COPY src/           src/
 
-RUN pip install --no-deps -e ".[dev]"
 
 
 
@@ -72,7 +71,14 @@ ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LI
 
 
 #### TalkNet
+COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
 RUN pip install -r src/TalkNet-ASD/requirement.txt
+
+
+# ── Application source ────────────────────────────────────────────────────────
+COPY src/           src/
+
+RUN pip install --no-deps -e ".[dev]"
 
 # ── Data volume ───────────────────────────────────────────────────────────────
 # Mount a volume here to persist downloaded data and evaluation outputs across
