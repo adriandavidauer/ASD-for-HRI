@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "my_awesome_project"
-version = "0.1.0"
-description = "A brief description of my awesome Python project"
+name = "asd4hri"
+version = "0.0.0"
+description = "A scalable Active Speaker Detection for Human-Robot Interaction"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "Your Name", email = "your.email@example.com" }
+    { name = "Adrian Auer", email = "adrian.auer@dfki.de" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -17,7 +17,10 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "numpy>=1.24.0",  # TODO: add dependencies here
+    "pypaz @ git+https://github.com/adriandavidauer/paz.git", #TODO: change after PR is merged and package released
+    "dlib", 
+    "keras==3.6.0", 
+    "tqdm"
 ]
 
 [project.optional-dependencies]
@@ -25,10 +28,17 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",  # For generating test coverage reports
     "black>=23.0.0",     # For code formatting
+    "h5py",
+    "scikit-learn",
+    "tensorboard",
+    "pandas",
+    "wget",
+    "yt-dlp"
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]  # Tells setuptools to look inside the src/ folder for packages
+include = ["asd4hri*"]  # The asterisk ensures subpackages inside asd4hri are caught too
 
 [tool.pytest.ini_options]
 minversion = "7.0"
