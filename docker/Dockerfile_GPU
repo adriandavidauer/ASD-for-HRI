@@ -42,21 +42,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# ── Python dependencies ────────────────────────────────────────────────────────
-# TensorFlow is installed first (large, slow to resolve) so Docker can cache
-# this layer independently from the lighter packages in requirements.txt.
-# pypaz lists tensorflow as a dependency and will reuse the pinned version.
-# RUN pip install --no-cache-dir \
-#     tensorflow==2.21.0 \
-#     numpy==2.4.4
 
-COPY requirements.txt .
-# requirements.txt installs: pypaz (from GitHub), pandas, yt-dlp, wget
-RUN pip install --no-cache-dir -r requirements.txt
+
+
+# ── Python dependencies ────────────────────────────────────────────────────────
+COPY pyproject.toml .
+COPY README.md .
+# Create the empty src directory so setuptools doesn't crash
+RUN mkdir src
+# Install dependencies using a persistent pip cache
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install .[dev] 
 
 # ── Application source ────────────────────────────────────────────────────────
 COPY src/           src/
-COPY video_list/    video_list/
+
+RUN pip install --no-deps -e ".[dev]"
+
 
 
 RUN pip install tensorflow[and-cuda]==2.18.0
@@ -65,7 +67,8 @@ RUN pip install tensorflow[and-cuda]==2.18.0
 ENV NV_PIP_LIB=/usr/local/lib/python3.10/dist-packages/nvidia
 ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LIB}/cuda_runtime/lib:${NV_PIP_LIB}/cuda_nvrtc/lib:${NV_PIP_LIB}/cufft/lib:${NV_PIP_LIB}/curand/lib:${NV_PIP_LIB}/cusolver/lib:${NV_PIP_LIB}/cusparse/lib:${NV_PIP_LIB}/nccl/lib:${LD_LIBRARY_PATH}
 
-RUN python src/initialize_models.py
+# RUN python src/initialize_models.py
+# TODO: this needs to come back as soon as the pipeline is fixed
 
 
 #### TalkNet
@@ -86,5 +89,5 @@ VOLUME ["/app/data"]
 # Default behaviour: download the dataset then evaluate all val videos.
 # Any extra flags passed to `docker run` are appended to CMD and forwarded
 # to run_full_pipeline.py (e.g. --skip_download, --resume, --video ID).
-ENTRYPOINT ["python", "src/run_full_pipeline.py"]
+ENTRYPOINT ["python", "src/experiments/run_full_pipeline.py"]
 CMD ["--data_dir", "/app/data"]
