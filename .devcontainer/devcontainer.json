@@ -17,5 +17,11 @@
     // Silences the root pip warning permanently inside the container
     "containerEnv": {
         "PIP_ROOT_USER_ACTION": "ignore"
+    },
+    "customizations": 
+        {"vscode": 
+            {"extensions": 
+            ["ms-python.python"]
+        }
     }
 }

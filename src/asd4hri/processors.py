@@ -80,6 +80,7 @@ class BufferFeatures(Processor):
         self.buffers = []
         # Counters for return after stride
         self.timesteps_since_last_return = [] # I have to keep track of that for each internal buffer, because otherwise a full buffer could return even if only input for another buffer came in.
+        self.missed_consecutive_timesteps = []
 
 
     def call(self, batch_of_features):
@@ -90,18 +91,31 @@ class BufferFeatures(Processor):
             Numpy array. Batch of timeseries of features of the shape (M, timesteps, dim0, dim1, ...) where M is the number of internal Buffers that are full.
             The buffer will return a sorted list of all buffers. When the stride is not reached or the buffer is not full the element will be None.
         """
-        # TODO: resetting!
         batch_return = []
         for i, features in enumerate(batch_of_features):
             if i == len(self.buffers):
                 self.buffers.append(deque(maxlen=self.buffer_size))
                 self.timesteps_since_last_return.append(0)
-            self.buffers[i].append(features)
+                self.missed_consecutive_timesteps.append(0)
+            if features is None:
+                self.missed_consecutive_timesteps[i] += 1
+            else:
+                self.buffers[i].append(features)
+                self.missed_consecutive_timesteps[i] = 0
             self.timesteps_since_last_return[i] += 1 
             if len(self.buffers[i]) == self.buffer_size and self.timesteps_since_last_return[i] >= self.stride:
-                batch_return.append(buffers[i])
+                batch_return.append(self.buffers[i])
                 self.timesteps_since_last_return[i] = 0
             else:
-                batch_return.append(None)
+                batch_return.append(None) # necessary to keep ordering
+            # resetting
+            if self.missed_consecutive_timesteps[i] >= self.max_consecutive_empty:
+                self.buffers[i] = deque(maxlen=self.buffer_size)
+                self.timesteps_since_last_return[i] = 0
+                self.missed_consecutive_timesteps[i] = 0
+        # update missed_consecutive_timesteps for buffers in the end oif the list
+        if i == len(self.buffers):
+            for j in range(i, len(self.buffers) -1):
+                self.missed_consecutive_timesteps[j] += 1
 
         return batch_return
