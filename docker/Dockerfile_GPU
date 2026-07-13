@@ -15,12 +15,21 @@
 #
 
 
-# TODO: create non-root User
+
 
 FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
 LABEL org.opencontainers.image.title="UniTalk VVAD Pipeline" \
       org.opencontainers.image.description="Download + evaluate DetectVVAD on UniTalk val split"
+
+# create non-root User
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+# Create the user
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME 
 
 # ── System packages ────────────────────────────────────────────────────────────
 # ffmpeg         : H264 video encoding used by FFmpegWriter
@@ -97,3 +106,4 @@ VOLUME ["/app/data"]
 # to run_full_pipeline.py (e.g. --skip_download, --resume, --video ID).
 ENTRYPOINT ["python", "src/experiments/run_full_pipeline.py"]
 CMD ["--data_dir", "/app/data"]
+USER $USERNAME

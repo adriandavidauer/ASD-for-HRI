@@ -3,8 +3,7 @@
              "context": ".." },
     // Enable GPU support for the container
     "runArgs": [
-        "--gpus=all",
-        "--user", "${localEnv:SUDO_UID:-${localEnv:UID}}:${localEnv:SUDO_GID:-${localEnv:GID}}"
+        "--gpus=all"
     ], 
     // Mount your host home directory to the container user's home directory
     "mounts": [
