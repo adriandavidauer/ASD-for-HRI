@@ -53,80 +53,8 @@ Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'C
 
 
 
-class DownloadProgressBar(tqdm):
-    def update_to(self, b=1, bsize=1, tsize=None):
-        if tsize is not None:
-            self.total = tsize
-        self.update(b * bsize - self.n)
 
-
-def download_url(url, output_path):
-    with DownloadProgressBar(unit='B', unit_scale=True,
-                             miniters=1, desc=url.split('/')[-1]) as t:
-        urllib.request.urlretrieve(
-            url, filename=output_path, reporthook=t.update_to)
-
-def SHAPE_PREDICTOR_68_FACE_LANDMARKS():
-    predictor_path = Path(__file__).absolute().parent.parent / "models" / \
-        'shape_predictor_68_face_landmarks.dat'
-    compressed_file = Path(predictor_path.parent /
-                           (predictor_path.name + '.bz2'))
-    if not predictor_path.exists():
-        download_url('https://github.com/davisking/dlib-models/raw/master/shape_predictor_68_face_landmarks.dat.bz2',
-                     compressed_file)
-
-        with open(predictor_path, 'wb') as new_file, bz2.BZ2File(compressed_file, 'rb') as file:
-            for data in iter(lambda: file.read(100 * 1024), b''):
-                new_file.write(data)
-
-        # remove compressed file
-        compressed_file.unlink()
-
-        if predictor_path.exists():
-            return predictor_path
-        else:  # This case should never happen! is only possible if file is deleted externally
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), predictor_path)
-    else:
-        return predictor_path
     
-
-def buildFeatureLSTM(input_shape, num_lstm_layers=1, lstm_dims=32, num_dense_layers=1, dense_dims=512, **kwargs):
-        """adjusted from https://github.com/adriandavidauer/VVAD/tree/main to rebuild model with weights in Keras 3 format."""
-        model = Sequential()
-        # handels input shape for Keras 3
-        model.add(Input(shape=input_shape))        
-        model.add(TimeDistributed(
-            Flatten(input_shape=(input_shape[-2], input_shape[-1]))))
-        if num_lstm_layers > 1:
-            for i in range(num_lstm_layers - 1):
-                # if not i:
-                #     model.add(LSTM(lstm_dims, input_shape=input_shape, return_sequences=True))
-                #     model.add(BatchNormalization())
-                # else:
-                model.add(LSTM(lstm_dims, return_sequences=True))
-                model.add(BatchNormalization())
-
-        # if model.layers:
-        model.add(LSTM(lstm_dims))
-        model.add(BatchNormalization())
-        # else:
-        #     model.add(LSTM(lstm_dims,input_shape=input_shape))
-        #     model.add(BatchNormalization())
-
-        # Add some more dense here
-        for i in range(num_dense_layers):
-            model.add(Dense(dense_dims, activation='relu'))
-
-        model.add(Dense(1, activation="sigmoid"))
-        model.compile(loss="binary_crossentropy",
-                      optimizer='sgd',
-                      metrics=["accuracy"])
-
-        modelName = 'FeatureLSTM{}_'.format(input_shape) + str(num_lstm_layers) + '_' + str(
-            lstm_dims) + '_' + str(num_dense_layers) + '_' + str(dense_dims)
-        # model.build(input_shape)
-        return model, modelName    
 
 def load_vvad_classifier(architecture):
     """Load the Keras classifier model for the given architecture."""
@@ -158,7 +86,7 @@ class ClassifyVVAD(SequentialProcessor):
             disable averaging
     """
     def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, average_type='mean'):
+                 stride=38, averaging_window_size=2, average_type='mean', max_consecutive_empty=5, buffer_dtype=np.float64):
         super(ClassifyVVAD, self).__init__()
         assert average_type in Average_Options, f"'{average_type}' is not in {Average_Options}"
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
@@ -179,8 +107,9 @@ class ClassifyVVAD(SequentialProcessor):
 
         else:
             preprocess = PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0))
-        self.buffer_images = BufferImages(input_size, stride=stride)
-        preprocess.add(self.buffer_images)
+
+        self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty, dtype=buffer_dtype)
+        preprocess.add(self.buffer_features)
 
         if 'Shape' in architecture:
             preprocess.add(NormalizeShapeSample())
@@ -190,6 +119,7 @@ class ClassifyVVAD(SequentialProcessor):
 
         weighted_mean = (average_type == 'weighted')
         self.avg = pr.AveragePredictions(averaging_window_size, weighted_mean)
+        # TODO: is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
         self.add(pr.ControlMap(self.avg, [0], [0]))
 
         self.add(pr.ControlMap(pr.NoneConverter(), [0], [0]))
@@ -200,79 +130,15 @@ class ClassifyVVAD(SequentialProcessor):
     
     def reset(self):
         """Clear temporal state: clip buffer (BufferImages) and score window (AveragePredictions)."""
-        # BufferImages
-        self.buffer_images.frames_since_last_update = 0
-        self.buffer_images.buffer_index = 0
-        self.buffer_images.is_full = False
-        if isinstance(self.buffer_images.buffer, np.ndarray):
-            self.buffer_images.buffer[...] = 0
+        # Clear Buffer
+        self.buffer_features.reset(index)
+    
 
         # AveragePredictions
         self.avg.predictions.clear()
 
 
-class NormalizeShapeSample(Processor):
-    """Processor to normalize a faceShape or LipShape sample"""
-    def __init__(self):
-        super(NormalizeShapeSample, self).__init__()
 
-    def _getDist(self, sample):
-        """
-        calcing the distance vectors for a sample
-
-        :param sample: the sample we want the distances to be calculated
-        :type sample: numpy array
-        """
-        # print(f'{type(sample)=}')
-        outSample = np.empty(sample.shape, dtype=np.float64)  # this sets the dtype to np.float64
-        base = sample[0][0]
-        # print('SAMPLESHAPE: {}  -  should be (38, 68, 2)'.format(sample.shape))
-        # print("BASE for sample: {}".format(base))
-        # TODO: is there a faster way than a loop? Matrix substraction?
-        for frame_num, frame in enumerate(sample):
-            newFrame = np.empty(frame.shape, dtype=np.float64)
-            for pos_num, pos in enumerate(frame):
-                # calc distance to base
-                xdist = float(pos[0]) - float(base[0])
-                ydist = float(pos[1]) - float(base[1])
-                newFrame[pos_num] = [xdist, ydist]
-            outSample[frame_num] = newFrame
-        return outSample
-
-    def _normalize(self, arr):
-        """
-        Normalizes the features of the the array to [-1, 1]. 
-        """
-        arrMax = np.max(arr)
-        arrMin = np.min(arr)
-        absMax = np.max([np.abs(arrMax), np.abs(arrMin)])
-        return arr/absMax
-    
-    def call(self, sample):
-        if sample is None:
-            return None
-        outputArray = self._getDist(sample[0]) # a batch of samples with size 1 is used for the model predicition
-        outputArray =  np.array([self._normalize(outputArray)]) # a batch of samples with size 1 is used for the model predicition
-        # print(f'{outputArray=}')
-        return outputArray
-
-class GetShapeFeatures(Processor):
-    """Processor to extract shape features from cropped RGB face using dlib's shape predictor."""
-    def __init__(self, architecture='FaceShape', shape_predictor_path=None):
-        super(GetShapeFeatures, self).__init__()
-        if shape_predictor_path is None:
-            shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
-        self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
-        self.architecture = architecture
-
-    def call(self, image):
-        shape = self.shape_predictor(image, dlib.rectangle(
-                0, 0, image.shape[1], image.shape[0]))
-        if self.architecture == 'LipShape':
-            # return only lip landmarks (48-67)
-            return np.array([(p.x, p.y) for p in shape.parts()[48:68]]) 
-        else:
-            return np.array([(p.x, p.y) for p in shape.parts()])
 
 class ASD(Processor):
     """Active Speaker Detection pipeline.
@@ -307,7 +173,7 @@ class ASD(Processor):
 
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
                  average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
-        super(DetectVVAD, self).__init__()
+        super(ASD, self).__init__()
         self.offsets = offsets
         self.colors = colors
         self.min_frames = int(min_frames)
@@ -331,7 +197,7 @@ class ASD(Processor):
             architecture=architecture
         )
         self.classifier = pr.AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args))
-        # TODO: Dummy predict to fully initialize
+        # TODO: Dummy predict to fully initialize in classify VVAD
         
 
         self.class_names = list(get_class_names('VVAD_LRS3'))
