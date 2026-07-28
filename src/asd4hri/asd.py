@@ -73,6 +73,8 @@ def load_vvad_classifier(architecture):
 class ClassifyVVAD(SequentialProcessor):
     """Visual Voice Activity Detection pipeline for classifying speaking and not speaking from cropped RGB face
     video clips.
+    Expects a batch of face images - each image representig a different entity. 
+    Images will be buffered until the inputsize of the model.
 
     # Arguments
         input_size: Tuple of integers. Input shape to the model in following format: (frames, height, width, channels)
@@ -100,19 +102,21 @@ class ClassifyVVAD(SequentialProcessor):
 
         self.class_names = get_class_names('VVAD_LRS3')
 
-        if 'Shape' in architecture:
-            # empty preprocess for shape features
-            preprocess = SequentialProcessor()
-            preprocess.add(GetShapeFeatures(architecture=architecture))
+        preprocess = SequentialProcessor()
 
-        else:
-            preprocess = PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0))
-
+        if 'Shape' in architecture:            
+            preprocess.add(GetShapeFeatures(architecture=architecture)) # works on batch of face images not on batch of samples - needs to be done before buffering into a sample
+            
         self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty, dtype=buffer_dtype)
+        # We buffer the incoming face images or features
         preprocess.add(self.buffer_features)
 
-        if 'Shape' in architecture:
-            preprocess.add(NormalizeShapeSample())
+
+        if 'Shape' in architecture:            
+            preprocess.add(NormalizeShapeSample()) # works on batch of samples
+
+        else:
+            preprocess.add(PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0)))
 
 
         self.add(pr.PredictWithNones(classifier, preprocess))
@@ -131,8 +135,7 @@ class ClassifyVVAD(SequentialProcessor):
     def reset(self):
         """Clear temporal state: clip buffer (BufferImages) and score window (AveragePredictions)."""
         # Clear Buffer
-        self.buffer_features.reset(index)
-    
+        self.buffer_features.reset()
 
         # AveragePredictions
         self.avg.predictions.clear()

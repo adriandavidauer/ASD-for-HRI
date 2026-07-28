@@ -149,10 +149,16 @@ class BufferFeatures(Processor):
             # resetting
             if self.missed_consecutive_timesteps[i] >= self.max_consecutive_empty:
                 self.reset(index=i)
-        # update missed_consecutive_timesteps for buffers in the end oif the list
-        if i == len(self.buffers):
-            for j in range(i, len(self.buffers) -1):
+        # update missed_consecutive_timesteps for buffers in the end of the list if input list is shorter than self.buffers
+        if i < len(self.buffers)-1:
+            # need to go backwards to pop
+            for j in range(len(self.buffers) -1, i, -1):
                 self.missed_consecutive_timesteps[j] += 1
+                # remove dangeling
+                if self.missed_consecutive_timesteps[j] >= self.max_consecutive_empty:
+                    self.buffers.pop()
+                    self.timesteps_since_last_return.pop()
+                    self.missed_consecutive_timesteps.pop()
         return batch_return
 
     def reset(self, index=None):
@@ -183,26 +189,12 @@ class NormalizeShapeSample(Processor):
         :type sample: numpy array
         """
         # print(f'{type(sample)=}')
-        outSample = np.empty(sample.shape, dtype=np.float64)  # this sets the dtype to np.float64
         base = sample[0][0]
-        # print('SAMPLESHAPE: {}  -  should be (38, 68, 2)'.format(sample.shape))
-        # print("BASE for sample: {}".format(base))
-        # TODO: is there a faster way than a loop? Matrix substraction?
-        for frame_num, frame in enumerate(sample):
-            newFrame = np.empty(frame.shape, dtype=np.float64)
-            for pos_num, pos in enumerate(frame):
-                # calc distance to base
-                xdist = float(pos[0]) - float(base[0])
-                ydist = float(pos[1]) - float(base[1])
-                newFrame[pos_num] = [xdist, ydist]
-            outSample[frame_num] = newFrame
 
-        fast_out_sample = np.array(sample)
-        fast_out_sample -= [base[0], base[1]]
-
-        assert np.array_equal(fast_out_sample,outSample)
-        
-        return outSample
+        output_sample = np.array(sample)
+        output_sample -= [base[0], base[1]]
+   
+        return output_sample
 
     def _normalize(self, arr):
         """

@@ -1,5 +1,5 @@
 '''
-All paz processors needed for the full pipeline
+Tests for the paz processors needed for the full pipeline
 '''
 
 # System imports
@@ -11,13 +11,11 @@ import pytest
 
 # local imports
 from asd4hri.processors import *
+from tests.constants import *
 
 # end file header
 __author__      = 'Adrian Auer'
-IMAGE_INPUT_SHAPE=(38, 96, 96, 3) # Example shape of an RGB image
-test_image = np.empty(IMAGE_INPUT_SHAPE[1:], dtype=np.uint8) # example RGB image 
-LIP_FEATURE_INPUT_SHAPE = (38, 20, 2)
-test_lip_features = np.empty(LIP_FEATURE_INPUT_SHAPE)
+
 
 def test_return_simple_BufferFeatures():
     """One Buffer that is filled. It should return only after the given timesteps."""
@@ -84,8 +82,19 @@ def test_reset_all_BufferFeatures():
         if i % (IMAGE_INPUT_SHAPE[0] - 2):
             buffer.reset()
         assert ret_val == [None, None, None], f"before {(IMAGE_INPUT_SHAPE[0]-1)*3} timesteps [None, None, None] should be returned, returned [{type(ret_val[0])},{type(ret_val[1])},{type(ret_val[2])}]  in timestep {i} instead."
-# TODO: sorted list in sorted list out might run into problems when using tracking
-# TODO: dangling buffers need to be removed completely otherwise list grows and grows
+def test_remove_dangeling_BufferFeatures():
+    """
+    Test if dangeling buffers are removed.
+    """
+    buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1, max_consecutive_empty=5)
+    max_buffers = 42
+    buffer([None]*max_buffers)
+    assert len(buffer.buffers) == max_buffers, f"Should have {max_buffers} internal Buffers, but has {len(buffer.buffers)} instead."
+    for i in range(6):
+            ret_val = buffer([test_image])
+    min_buffes = 1
+    assert len(buffer.buffers) == min_buffes, f"Should have {min_buffes} internal Buffers, but has {len(buffer.buffers)} instead."
+
 
 
 def test_GetShapeFeatures():
@@ -99,18 +108,27 @@ def test_GetShapeFeatures():
         assert len(output_batch) == len(input_batch), f"Output batch should have the same length as the input batch but they are: \ninput: {len(input_batch)}\noutput: {len(output_batch)}"
 
 def test_no_batch_GetShapeFeatures():
+    """
+    Test if processor raises an error when not feeded a batch
+    """
     shape_features = GetShapeFeatures()
     with pytest.raises(AssertionError, match="Probably not receiving a batch"):
         output_no_batch = shape_features(test_image) # this should crash
 
 
 def test_no_batch_NormalizeShapeSample():
+    """
+    Test if processor raises an error when not feeded a batch
+    """
     normalizer = NormalizeShapeSample()
-    with pytest.raises(AssertionError, match="invalid index to scalar variable"):
+    with pytest.raises(IndexError, match="invalid index to scalar variable"):
         output = normalizer(test_lip_features)
 
 def test_NormalizeShapeSample():
+    """
+    test if the processor returns the correct shapes
+    """
     normalizer = NormalizeShapeSample()
     batch_input = [test_lip_features]*5
     batch_output = normalizer(batch_input)
-    assert batch_output.shape == np.array(batch_input).shape
+    assert np.array(batch_output).shape == np.array(batch_input).shape
