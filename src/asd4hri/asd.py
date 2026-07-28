@@ -88,7 +88,7 @@ class ClassifyVVAD(SequentialProcessor):
             disable averaging
     """
     def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, average_type='mean', max_consecutive_empty=5, buffer_dtype=np.float64):
+                 stride=38, averaging_window_size=2, average_type='mean', max_consecutive_empty=5):
         super(ClassifyVVAD, self).__init__()
         assert average_type in Average_Options, f"'{average_type}' is not in {Average_Options}"
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
@@ -107,7 +107,7 @@ class ClassifyVVAD(SequentialProcessor):
         if 'Shape' in architecture:            
             preprocess.add(GetShapeFeatures(architecture=architecture)) # works on batch of face images not on batch of samples - needs to be done before buffering into a sample
             
-        self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty, dtype=buffer_dtype)
+        self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty)
         # We buffer the incoming face images or features
         preprocess.add(self.buffer_features)
 
@@ -119,7 +119,7 @@ class ClassifyVVAD(SequentialProcessor):
             preprocess.add(PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0)))
 
 
-        self.add(pr.PredictWithNones(classifier, preprocess))
+        self.add(PredictWithNones(classifier, preprocess))
 
         weighted_mean = (average_type == 'weighted')
         self.avg = pr.AveragePredictions(averaging_window_size, weighted_mean)

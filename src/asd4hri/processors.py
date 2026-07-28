@@ -14,6 +14,8 @@ from collections import deque
 
 # 3rd party imports
 import dlib
+import tensorflow as tf
+
 
 from paz.models.classification import VVAD_LRS3_LSTM, CNN2Plus1D
 from paz.datasets import get_class_names
@@ -23,22 +25,11 @@ from paz.abstract import Processor, SequentialProcessor
 from paz.backend.camera import VideoPlayer, Camera
 import paz.pipelines.detection as dt
 
-
-
-
-
 from keras.models import load_model, Sequential
 from keras.layers import Dense, Input, LSTM, TimeDistributed, BatchNormalization, Flatten
 
-
-
-
 import numpy as np
 from tqdm import tqdm
-
-
-
-
 
 # local imports
 
@@ -250,3 +241,55 @@ class GetShapeFeatures(Processor):
         return ret_batch
 
 
+def predict_with_nones(x, model, preprocess=None, postprocess=None):
+    """Preprocess, predict and postprocess batched input.
+    Batch can contain None as samples or be None itself. 
+    If batch is None - output is None
+    If batch contains Nones - output batch will contain Nones in sam position
+    # Arguments
+        x: Noneable input to model
+        model: Callable i.e. Keras model.
+        preprocess: Callable, used for preprocessing input x.
+        postprocess: Callable, used for postprocessing output of model.
+
+    # Note
+        If model outputs a tf.Tensor is converted automatically to numpy array.
+    """
+    if preprocess is not None:
+        x = preprocess(x)
+    if x is None:
+        return None
+    elif None in x:
+        # create mapping and remove Nones from the batch
+        indices, non_nones = zip(*[(i, val) for i, val in enumerate(x) if val is not None])
+        # apply model
+        inference = model(non_nones)
+        # apply mapping to recreate batch with Nones
+        y = [None] * len(x)
+        for idx, val in zip(indices, inference):
+            y[idx] = val
+    else:
+        y = model(x)
+    if isinstance(y, tf.Tensor):
+        y = y.numpy()
+    if postprocess is not None:
+        y = postprocess(y)
+    return y
+
+class PredictWithNones(Processor):
+    """Perform input preprocessing, model prediction and output postprocessing based on batches.
+
+    # Arguments
+        model: Class with a ''predict'' method e.g. a Keras model.
+        preprocess: Function applied to given inputs.
+        postprocess: Function applied to outputted predictions from model.
+    """
+
+    def __init__(self, model, preprocess=None, postprocess=None):
+        super(PredictWithNones, self).__init__()
+        self.model = model
+        self.preprocess = preprocess
+        self.postprocess = postprocess
+
+    def call(self, x):
+        return predict_with_nones(x, self.model, self.preprocess, self.postprocess)
