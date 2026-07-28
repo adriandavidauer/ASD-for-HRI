@@ -52,3 +52,5 @@ def test_reset_BufferFeatures():
         ret_val = buffer(input_list)
         assert ret_val[1] is None, f"Second buffer should always be None, because max_consecutive_empty is smaller than each step in which the buffer is filled"
 
+# TODO: sorted list in sorted list out might run into problems when using tracking
+# TODO: dangling buffers need to be removed completely otherwise list grows and grows
