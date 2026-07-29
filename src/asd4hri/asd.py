@@ -47,7 +47,6 @@ from .processors import *
 __author__      = 'Adrian Auer'
 
 
-Average_Options = ['mean', 'weighted']
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
@@ -84,7 +83,7 @@ class ClassifyVVAD(SequentialProcessor):
         stride: Integer. How many frames are between the predictions (computational expansive (low update rate) vs
             high latency (high update rate))
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
-        average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set average to 1 to
+        average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set averaging_window_size to 1 to
             disable averaging
     """
     def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
@@ -121,8 +120,11 @@ class ClassifyVVAD(SequentialProcessor):
 
         self.add(PredictWithNones(classifier, preprocess))
 
-        weighted_mean = (average_type == 'weighted')
-        self.avg = pr.AveragePredictions(averaging_window_size, weighted_mean)
+        #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in
+        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=True)
+        self.add(self.buffer_predictions)
+
+        self.avg = AveragePredictions(averaging_window_size, weighted=True)
         # TODO: is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
         self.add(pr.ControlMap(self.avg, [0], [0]))
 

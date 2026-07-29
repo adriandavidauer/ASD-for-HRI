@@ -36,6 +36,7 @@ from tqdm import tqdm
 # end file header
 __author__      = 'Adrian Auer'
 
+Average_Options = ['mean', 'weighted']
 
 
 class DownloadProgressBar(tqdm):
@@ -92,17 +93,20 @@ class BufferFeatures(Processor):
         max_consecutive_empty: Integer. Buffer will be cleared after this amount of consecutive empty(None) or no inputs. 
             None as input is needed if within the sorted list there is no input for an element between two others. 
             If no input is in the end, the list will just be shorter.
+        return_incomplete_samples: Boolean.Flag if the samples should be returned even if not all timesteps are collected 
+            - practical for dynamic length with upper bound
 
     # Methods
         call()
     """
-    def __init__(self, input_size, stride=25, max_consecutive_empty=5):
+    def __init__(self, input_size, stride=25, max_consecutive_empty=5, return_incomplete_samples=False):
         self.buffer_size = input_size[0]
         if self.buffer_size < stride:
             raise ValueError('Buffer size must be equal or larger than stride')
         super(BufferFeatures, self).__init__()
         self.stride = stride 
         self.max_consecutive_empty = max_consecutive_empty
+        self.return_incomplete_samples = return_incomplete_samples
         
 
         # Buffers: 
@@ -132,7 +136,7 @@ class BufferFeatures(Processor):
                 self.buffers[i].append(features)
                 self.missed_consecutive_timesteps[i] = 0
             self.timesteps_since_last_return[i] += 1 
-            if len(self.buffers[i]) == self.buffer_size and self.timesteps_since_last_return[i] >= self.stride:
+            if (self.return_incomplete_samples) or (len(self.buffers[i]) == self.buffer_size and self.timesteps_since_last_return[i] >= self.stride):
                 batch_return.append(self.buffers[i])
                 self.timesteps_since_last_return[i] = 0
             else:
@@ -244,8 +248,8 @@ class GetShapeFeatures(Processor):
 def predict_with_nones(x, model, preprocess=None, postprocess=None):
     """Preprocess, predict and postprocess batched input.
     Batch can contain None as samples or be None itself. 
-    If batch is None - output is None
-    If batch contains Nones - output batch will contain Nones in sam position
+    If batch is None - output is None (no postprocessing is applied)
+    If batch contains Nones - output batch will contain Nones in sam position (No postprocessing if batch only contains Nones)
     # Arguments
         x: Noneable input to model
         model: Callable i.e. Keras model.
@@ -258,16 +262,20 @@ def predict_with_nones(x, model, preprocess=None, postprocess=None):
     if preprocess is not None:
         x = preprocess(x)
     if x is None:
-        return None
+        return None # this skips post processing
     elif None in x:
         # create mapping and remove Nones from the batch
-        indices, non_nones = zip(*[(i, val) for i, val in enumerate(x) if val is not None])
-        # apply model
-        inference = model(non_nones)
-        # apply mapping to recreate batch with Nones
-        y = [None] * len(x)
-        for idx, val in zip(indices, inference):
-            y[idx] = val
+        non_none_pairs = [(i, val) for i, val in enumerate(x) if val is not None]   
+        if non_none_pairs:
+            indices, non_nones = zip(*non_none_pairs)     
+            # apply model
+            inference = model(non_nones)
+            # apply mapping to recreate batch with Nones
+            y = [None] * len(x)
+            for idx, val in zip(indices, inference):
+                y[idx] = val
+        else: # if the input only contains Nones
+            return x # this skips post processing
     else:
         y = model(x)
     if isinstance(y, tf.Tensor):
@@ -293,3 +301,67 @@ class PredictWithNones(Processor):
 
     def call(self, x):
         return predict_with_nones(x, self.model, self.preprocess, self.postprocess)
+
+# def weighted_average(batch_of_list_of_values):
+#     """Returns the weighted (weigth for each values is its index in the list) average of all list of values in a batch.
+#     # Arguments
+#         list_of_values: List of values to be averaged.
+#     # Returns
+#         Bool, Int or Float value. Averaged value.
+#     """
+#     if len(list_of_values) < 1:
+#         raise ValueError('List must contain at least one element')
+#     else:
+#         # TODO: matrix multiplication to make it efficient?
+#         ret_batch = []
+#         for list_of_values in batch_of_list_of_values:
+#             total_weights = 0
+#             mean = 0
+#             for list_index in range(0, len(list_of_values)):
+#                 weight = (list_index + 1) / len(list_of_values)
+#                 mean = mean + list_of_values[list_index] * weight
+#                 total_weights = total_weights + weight
+#             ret_batch.append( mean / total_weights)
+#     return ret_batch
+
+class AveragePredictions(Processor):
+    """Averages the given predictions
+    # Arguments
+        mean: String. 'mean' or 'weighted'. How the predictions are averaged.
+        If 'weighted', the average is weighted by the index of the value.
+    """
+
+    def __init__(self, mean="mean"):
+        super(AveragePredictions, self).__init__()
+        self.mean = mean
+
+    def call(self, batch_of_list_of_values):
+        """
+        # Arguments:
+            list_of_values: List of values to be averaged.
+        # Returns
+            Bool, Int or Float value. Averaged value.
+        """
+        if batch_of_list_of_values is None:
+            return None
+        elif None in batch_of_list_of_values:
+            # create mapping and remove Nones from the batch
+            non_none_pairs = [(i, val) for i, val in enumerate(batch_of_list_of_values) if val is not None]   
+            if non_none_pairs:
+                indices, non_nones = zip(*non_none_pairs)     
+
+                # apply mean calculation
+                if self.mean == 'weighted':
+                    # 1. Create index weights: [0, 1, 2, 3]
+                    indices = np.arange(batch_of_list_of_values.shape[1])
+                    batch_of_list_of_values = batch_of_list_of_values * indices
+                    # mean = weighted_average(non_nones)
+                mean = np.mean(non_nones, axis=1)
+
+                # apply mapping to recreate batch with Nones
+                ret_batch = [None] * len(batch_of_list_of_values)
+                for idx, val in zip(indices, mean):
+                    ret_batch[idx] = val
+                return ret_batch
+            else: # if the input only contains Nones
+                return batch_of_list_of_values 

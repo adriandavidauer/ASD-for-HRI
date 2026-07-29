@@ -69,7 +69,6 @@ def test_reset_single_BufferFeatures():
             buffer.reset(0)
         assert ret_val[0] is None, f"before {IMAGE_INPUT_SHAPE[0]} timesteps None should be returned, returned {type(ret_val[0])} in timestep {i} instead."
 
-
 def test_reset_all_BufferFeatures():
     """
     Testing if resting the buffer works - filling a buffer and reset it every x steps where x is smaller timesteps - buffer should always return None.
@@ -82,6 +81,7 @@ def test_reset_all_BufferFeatures():
         if i % (IMAGE_INPUT_SHAPE[0] - 2):
             buffer.reset()
         assert ret_val == [None, None, None], f"before {(IMAGE_INPUT_SHAPE[0]-1)*3} timesteps [None, None, None] should be returned, returned [{type(ret_val[0])},{type(ret_val[1])},{type(ret_val[2])}]  in timestep {i} instead."
+
 def test_remove_dangeling_BufferFeatures():
     """
     Test if dangeling buffers are removed.
@@ -95,7 +95,17 @@ def test_remove_dangeling_BufferFeatures():
     min_buffes = 1
     assert len(buffer.buffers) == min_buffes, f"Should have {min_buffes} internal Buffers, but has {len(buffer.buffers)} instead."
 
-
+def test_return_incomplete_samples_BufferFeatures():
+    """One Buffer that is filled. It should return every time it is filled but only grow until the size of given timesteps."""
+    buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1, return_incomplete_samples=True)
+    for i in range(1000):
+        ret_val = buffer([test_image])
+        if i < IMAGE_INPUT_SHAPE[0]-1:
+            assert len(ret_val[0]) == i+1, f"before {IMAGE_INPUT_SHAPE[0]} timesteps a buffer of length {i+1} should be returned, returned buffer with length {len(ret_val[0])} in timestep {i} instead."
+        else:
+            ret_val = np.array(ret_val)
+            assert ret_val[0].shape == IMAGE_INPUT_SHAPE, f"A full sample with shape {IMAGE_INPUT_SHAPE} should be returned, returned sample with shape {ret_val[0].shape} instead."
+    
 
 def test_GetShapeFeatures():
     """
@@ -132,3 +142,16 @@ def test_NormalizeShapeSample():
     batch_input = [test_lip_features]*5
     batch_output = normalizer(batch_input)
     assert np.array(batch_output).shape == np.array(batch_input).shape
+
+
+def test_AveragePredictions():
+    """
+    test if it calculates the average
+    """
+    average = AveragePredictions(mean="mean")
+    element_1 = [1,2,3]
+    single_value = [4]
+    input_batch = [element_1, single_value]
+    excepted_output = [np.mean(element_1), np.mean(single_value)]
+    output_batch = average(input_batch)
+    assert np.equal(excepted_output, output_batch), f"mean should be {excepted_output} but is {output_batch}"
