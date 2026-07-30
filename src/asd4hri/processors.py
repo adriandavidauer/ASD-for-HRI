@@ -302,38 +302,18 @@ class PredictWithNones(Processor):
     def call(self, x):
         return predict_with_nones(x, self.model, self.preprocess, self.postprocess)
 
-# def weighted_average(batch_of_list_of_values):
-#     """Returns the weighted (weigth for each values is its index in the list) average of all list of values in a batch.
-#     # Arguments
-#         list_of_values: List of values to be averaged.
-#     # Returns
-#         Bool, Int or Float value. Averaged value.
-#     """
-#     if len(list_of_values) < 1:
-#         raise ValueError('List must contain at least one element')
-#     else:
-#         # TODO: matrix multiplication to make it efficient?
-#         ret_batch = []
-#         for list_of_values in batch_of_list_of_values:
-#             total_weights = 0
-#             mean = 0
-#             for list_index in range(0, len(list_of_values)):
-#                 weight = (list_index + 1) / len(list_of_values)
-#                 mean = mean + list_of_values[list_index] * weight
-#                 total_weights = total_weights + weight
-#             ret_batch.append( mean / total_weights)
-#     return ret_batch
 
 class AveragePredictions(Processor):
     """Averages the given predictions
     # Arguments
-        mean: String. 'mean' or 'weighted'. How the predictions are averaged.
-        If 'weighted', the average is weighted by the index of the value.
+        weigthed: Boolean. 
+            If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
+            If False just the average over all entries
     """
 
-    def __init__(self, mean="mean"):
+    def __init__(self, weighted=False):
         super(AveragePredictions, self).__init__()
-        self.mean = mean
+        self.weighted = weighted
 
     def call(self, batch_of_list_of_values):
         """
@@ -344,24 +324,28 @@ class AveragePredictions(Processor):
         """
         if batch_of_list_of_values is None:
             return None
-        elif None in batch_of_list_of_values:
+        else:
             # create mapping and remove Nones from the batch
             non_none_pairs = [(i, val) for i, val in enumerate(batch_of_list_of_values) if val is not None]   
-            if non_none_pairs:
-                indices, non_nones = zip(*non_none_pairs)     
+            indices, non_nones = zip(*non_none_pairs)    
+            
+            # Get sample lengths and dimensions
+            lengths = np.array([len(x) for x in non_nones])
+            max_len = lengths.max()
+            # Build a padded 2D matrix filled with zeros
+            padded = np.zeros((len(non_nones), max_len))
+            for i, arr in enumerate(non_nones):
+                padded[i, :len(arr)] = arr
+            if self.weighted:
+                # Create index weights: [0, 1, 2, 3] and multiply
+                weights = np.arange(1, max_len+1)
+                padded = padded * weights
+            # Sum across rows and divide by the REAL original length of each sample
+            mean = np.array(padded).sum(axis=1) / lengths
 
-                # apply mean calculation
-                if self.mean == 'weighted':
-                    # 1. Create index weights: [0, 1, 2, 3]
-                    indices = np.arange(batch_of_list_of_values.shape[1])
-                    batch_of_list_of_values = batch_of_list_of_values * indices
-                    # mean = weighted_average(non_nones)
-                mean = np.mean(non_nones, axis=1)
-
-                # apply mapping to recreate batch with Nones
-                ret_batch = [None] * len(batch_of_list_of_values)
-                for idx, val in zip(indices, mean):
-                    ret_batch[idx] = val
-                return ret_batch
-            else: # if the input only contains Nones
-                return batch_of_list_of_values 
+            # apply mapping to recreate batch with Nones
+            ret_batch = [None] * len(batch_of_list_of_values)
+            for idx, val in zip(indices, mean):
+                ret_batch[idx] = val
+            return ret_batch
+            

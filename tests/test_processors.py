@@ -146,12 +146,98 @@ def test_NormalizeShapeSample():
 
 def test_AveragePredictions():
     """
-    test if it calculates the average
+    test if it calculates the average correctly
     """
-    average = AveragePredictions(mean="mean")
+    average = AveragePredictions(weighted=False)
     element_1 = [1,2,3]
     single_value = [4]
     input_batch = [element_1, single_value]
     excepted_output = [np.mean(element_1), np.mean(single_value)]
     output_batch = average(input_batch)
-    assert np.equal(excepted_output, output_batch), f"mean should be {excepted_output} but is {output_batch}"
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
+
+def test_with_Nones_AveragePredictions():
+    """
+    test if it calculates the average with Nones correctly
+    """
+    average = AveragePredictions(weighted=False)
+    element_1 = [1,2,3]
+    single_value = [4]
+    input_batch = [None, element_1, None, single_value, None]
+    excepted_output = [None, np.mean(element_1), None, np.mean(single_value), None]
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
+
+
+def test_weighted_AveragePredictions():
+    """
+    test if it calculates the weigthed average correctly
+    """
+    average = AveragePredictions(weighted=True)
+    element_1 = [1,2,3]
+    element_2 = [3,2,1]
+    single_value = [4]
+    input_batch = [element_1, single_value, element_2]
+    excepted_output = [np.mean(element_1 * np.arange(1, len(element_1) + 1)), np.mean(single_value), np.mean(element_2 * np.arange(1, len(element_2) + 1))]
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+
+
+def test_with_Nones_weighted_AveragePredictions():
+    """
+    test if it calculates the weighted average with Nones correctly
+    """
+    average = AveragePredictions(weighted=True)
+    element_1 = [1,2,3]
+    element_2 = [3,2,1]
+    single_value = [4]
+    input_batch = [None, element_1, None, single_value, None, element_2, None]
+    excepted_output = [None, np.mean(element_1 * np.arange(1, len(element_1) + 1)), None, np.mean(single_value), None, np.mean(element_2 * np.arange(1, len(element_2) + 1)), None]
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+
+def model(input):
+        print(f"Model: {input}")
+        return input
+def preprocess(input):
+    print(f"Preprocess: {input}")
+    return input  
+def postprocess(input):
+    print(f"Postprocess: {input}")
+    return input
+
+def test_without_Nones_PredictWithNones():
+    """
+    Test if prediction works and Nones are forwarded
+    """
+    predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
+    input_batch = [1, 2, 3]
+    for i in range(100):
+        input_batch[i % 3] = i
+        output_batch = predictor(input_batch)
+        assert input_batch == output_batch
+
+def test_without_Nones_np_array_PredictWithNones():
+    """
+    Test if prediction works and Nones are forwarded
+    """
+    predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
+    input_batch = np.array([[1, 2], [2, 3], [3, 4]])
+    for i in range(100):
+        input_batch[i % 3] = i
+        output_batch = predictor(input_batch)
+        assert input_batch == output_batch
+        
+# TODO: missing the test that fails because of elif None in x:
+#       E   ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+
+def test_with_Nones_PredictWithNones():
+    """
+    Test if prediction works and Nones are forwarded
+    """
+    predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
+    for i in range(100):
+        input_batch = [None, None, None]
+        input_batch[i % 3] = i
+        output_batch = predictor(input_batch)
+        assert input_batch == output_batch

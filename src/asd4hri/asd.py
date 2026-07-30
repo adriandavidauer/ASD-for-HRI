@@ -124,15 +124,17 @@ class ClassifyVVAD(SequentialProcessor):
         self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=True)
         self.add(self.buffer_predictions)
 
-        self.avg = AveragePredictions(averaging_window_size, weighted=True)
-        # TODO: is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
-        self.add(pr.ControlMap(self.avg, [0], [0]))
-
-        self.add(pr.ControlMap(pr.NoneConverter(), [0], [0]))
-        self.add(pr.CopyDomain([0], [1]))
-        self.add(pr.ControlMap(pr.FloatToBoolean(), [0], [0]))
-        self.add(pr.ControlMap(pr.BooleanToTextMessage(true_message=self.class_names[0], false_message=self.class_names[1]), [0], [0]))
-        self.add(pr.WrapOutput(['class_name', 'scores']))
+        self.avg = AveragePredictions(weighted=True)
+        self.add(self.avg)
+        # is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
+        # self.add(pr.ControlMap(self.avg, [0], [0]))
+        # why convert nones to 0, makes no sese because the output of the model could be zero as well
+        # self.add(pr.ControlMap(pr.NoneConverter(), [0], [0]))
+        # dont get it
+        # self.add(pr.CopyDomain([0], [1]))
+        # self.add(pr.ControlMap(pr.FloatToBoolean(), [0], [0]))
+        # self.add(pr.ControlMap(pr.BooleanToTextMessage(true_message=self.class_names[0], false_message=self.class_names[1]), [0], [0]))
+        # self.add(pr.WrapOutput(['class_name', 'scores']))
     
     def reset(self):
         """Clear temporal state: clip buffer (BufferImages) and score window (AveragePredictions)."""
