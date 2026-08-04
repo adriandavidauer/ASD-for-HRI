@@ -83,13 +83,13 @@ class ClassifyVVAD(SequentialProcessor):
         stride: Integer. How many frames are between the predictions (computational expansive (low update rate) vs
             high latency (high update rate))
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
-        average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set averaging_window_size to 1 to
-            disable averaging
+        weigthed: Boolean. 
+                If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
+                If False just the average over all entries
     """
     def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, average_type='mean', max_consecutive_empty=5):
+                 stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5):
         super(ClassifyVVAD, self).__init__()
-        assert average_type in Average_Options, f"'{average_type}' is not in {Average_Options}"
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
         classifier = load_vvad_classifier(architecture)
@@ -121,10 +121,10 @@ class ClassifyVVAD(SequentialProcessor):
         self.add(PredictWithNones(classifier, preprocess))
 
         #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in
-        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=True)
+        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=False)
         self.add(self.buffer_predictions)
 
-        self.avg = AveragePredictions(weighted=True)
+        self.avg = AveragePredictions(weighted=weighted)
         self.add(self.avg)
         # is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
         # self.add(pr.ControlMap(self.avg, [0], [0]))

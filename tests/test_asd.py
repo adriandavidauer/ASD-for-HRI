@@ -25,4 +25,4 @@ def test_input_output_ClassifyVVAD():
     """
     vvad = ClassifyVVAD(input_size=IMAGE_INPUT_SHAPE, architecture='LipShape')
     for i in range(1000):
-        vvad([test_image])
+        vvad([test_image]) # input a batch of images - expecting batch of predictions

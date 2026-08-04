@@ -43,7 +43,7 @@ def test_return_batched_BufferFeatures():
             if i%3 == 1:
                 assert ret_val[1] is not None, f"In timestep {i} the second buffer should be full an returned. Returned {ret_val} in timestep {i} instead."       
             if i%3 == 2:
-                assert ret_val[1] is not None, f"In timestep {i} the third buffer should be full an returned. Returned {ret_val} in timestep {i} instead."        
+                assert ret_val[2] is not None, f"In timestep {i} the third buffer should be full an returned. Returned {ret_val} in timestep {i} instead."        
 
 def test_auto_reset_BufferFeatures():
     """
@@ -168,7 +168,6 @@ def test_with_Nones_AveragePredictions():
     output_batch = average(input_batch)
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
-
 def test_weighted_AveragePredictions():
     """
     test if it calculates the weigthed average correctly
@@ -182,7 +181,6 @@ def test_weighted_AveragePredictions():
     output_batch = average(input_batch)
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
 
-
 def test_with_Nones_weighted_AveragePredictions():
     """
     test if it calculates the weighted average with Nones correctly
@@ -195,6 +193,18 @@ def test_with_Nones_weighted_AveragePredictions():
     excepted_output = [None, np.mean(element_1 * np.arange(1, len(element_1) + 1)), None, np.mean(single_value), None, np.mean(element_2 * np.arange(1, len(element_2) + 1)), None]
     output_batch = average(input_batch)
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+
+def test_empty_weighted_AveragePredictions():
+    """
+    test if it calculates the weighted average with Nones correctly
+    """
+    average = AveragePredictions(weighted=True)
+    input_batch = []
+    excepted_output = []
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+
+# TODO: test AveragePredictions with empty batch and with empty buffers in batch
 
 def model(input):
         print(f"Model: {input}")
@@ -217,19 +227,26 @@ def test_without_Nones_PredictWithNones():
         output_batch = predictor(input_batch)
         assert input_batch == output_batch
 
-def test_without_Nones_np_array_PredictWithNones():
+def test_without_Nones_pure_np_array_PredictWithNones():
     """
     Test if prediction works and Nones are forwarded
     """
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     input_batch = np.array([[1, 2], [2, 3], [3, 4]])
-    for i in range(100):
-        input_batch[i % 3] = i
-        output_batch = predictor(input_batch)
-        assert input_batch == output_batch
+    output_batch = predictor(input_batch)
+    assert np.all(np.equal(input_batch,output_batch))
         
 # TODO: missing the test that fails because of elif None in x:
 #       E   ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+def test_without_Nones_batchList_of_np_arrays_PredictWithNones():
+    """
+    Test if prediction works and Nones are forwarded
+    """
+    predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
+    input_batch = [np.array([test_lip_features]*38)]
+    output_batch = predictor(input_batch)
+    assert np.all(np.equal(input_batch,output_batch))
+
 
 def test_with_Nones_PredictWithNones():
     """

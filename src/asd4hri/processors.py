@@ -36,8 +36,6 @@ from tqdm import tqdm
 # end file header
 __author__      = 'Adrian Auer'
 
-Average_Options = ['mean', 'weighted']
-
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -263,13 +261,13 @@ def predict_with_nones(x, model, preprocess=None, postprocess=None):
         x = preprocess(x)
     if x is None:
         return None # this skips post processing
-    elif None in x:
+    elif any(sample is None for sample in x):
         # create mapping and remove Nones from the batch
         non_none_pairs = [(i, val) for i, val in enumerate(x) if val is not None]   
         if non_none_pairs:
             indices, non_nones = zip(*non_none_pairs)     
             # apply model
-            inference = model(non_nones)
+            inference = model(np.array(non_nones))
             # apply mapping to recreate batch with Nones
             y = [None] * len(x)
             for idx, val in zip(indices, inference):
@@ -277,7 +275,7 @@ def predict_with_nones(x, model, preprocess=None, postprocess=None):
         else: # if the input only contains Nones
             return x # this skips post processing
     else:
-        y = model(x)
+        y = model(np.array(x))
     if isinstance(y, tf.Tensor):
         y = y.numpy()
     if postprocess is not None:
