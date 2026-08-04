@@ -322,9 +322,13 @@ class AveragePredictions(Processor):
         """
         if batch_of_list_of_values is None:
             return None
+        if len(batch_of_list_of_values) == 0:
+            return []
         else:
-            # create mapping and remove Nones from the batch
-            non_none_pairs = [(i, val) for i, val in enumerate(batch_of_list_of_values) if val is not None]   
+            # create mapping and remove Nones and empty lists from the batch
+            non_none_pairs = [(i, val) for i, val in enumerate(batch_of_list_of_values) if val]  
+            if not non_none_pairs:
+                return [None] * len(batch_of_list_of_values)
             indices, non_nones = zip(*non_none_pairs)    
             
             # Get sample lengths and dimensions

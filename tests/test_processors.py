@@ -194,17 +194,54 @@ def test_with_Nones_weighted_AveragePredictions():
     output_batch = average(input_batch)
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
 
-def test_empty_weighted_AveragePredictions():
+def test_empty_batch_AveragePredictions():
     """
-    test if it calculates the weighted average with Nones correctly
+    test if it calculates the (weighted) average with an empty batch correctly
     """
+    # weighted
     average = AveragePredictions(weighted=True)
     input_batch = []
     excepted_output = []
     output_batch = average(input_batch)
-    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
+    # unweighted
+    average = AveragePredictions(weighted=False)
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
-# TODO: test AveragePredictions with empty batch and with empty buffers in batch
+def test_empty_buffer_in_batch_AveragePredictions():
+    """
+    test if it calculates the (weighted) average with an empty buffer in batch correctly
+    """
+    # weighted
+    average = AveragePredictions(weighted=True)
+    element_1 = [1,2,3]
+    element_2 = [3,2,1]
+    empty_value = []
+    input_batch = [None, element_1, None, empty_value, None, element_2, None]
+    excepted_output = [None, np.mean(element_1 * np.arange(1, len(element_1) + 1)), None, None, None, np.mean(element_2 * np.arange(1, len(element_2) + 1)), None]
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+    # unweighted
+    average = AveragePredictions(weighted=False)
+    output_batch = average(input_batch)
+    excepted_output = [None, np.mean(element_1), None, None, None, np.mean(element_2), None]
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
+
+def test_only_empty_buffer_in_batch_AveragePredictions():
+    """
+    test if it calculates the (weighted) average with only an empty buffer in batch correctly
+    """
+    # weighted
+    average = AveragePredictions(weighted=True)
+    input_batch = [[]]
+    excepted_output = [None]
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
+    # unweighted
+    average = AveragePredictions(weighted=False)
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
 def model(input):
         print(f"Model: {input}")
@@ -225,8 +262,8 @@ def test_without_Nones_PredictWithNones():
     for i in range(100):
         input_batch[i % 3] = i
         output_batch = predictor(input_batch)
-        assert input_batch == output_batch
-
+        assert np.all(np.equal(input_batch, output_batch)), f"predictions should be {input_batch} but is {output_batch}"
+        
 def test_without_Nones_pure_np_array_PredictWithNones():
     """
     Test if prediction works and Nones are forwarded
@@ -236,8 +273,6 @@ def test_without_Nones_pure_np_array_PredictWithNones():
     output_batch = predictor(input_batch)
     assert np.all(np.equal(input_batch,output_batch))
         
-# TODO: missing the test that fails because of elif None in x:
-#       E   ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
 def test_without_Nones_batchList_of_np_arrays_PredictWithNones():
     """
     Test if prediction works and Nones are forwarded
@@ -245,7 +280,7 @@ def test_without_Nones_batchList_of_np_arrays_PredictWithNones():
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     input_batch = [np.array([test_lip_features]*38)]
     output_batch = predictor(input_batch)
-    assert np.all(np.equal(input_batch,output_batch))
+    assert np.all(np.equal(np.array(input_batch),np.array(output_batch))), f"predictions should be {input_batch} but is {output_batch}"
 
 
 def test_with_Nones_PredictWithNones():

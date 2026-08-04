@@ -121,7 +121,7 @@ class ClassifyVVAD(SequentialProcessor):
         self.add(PredictWithNones(classifier, preprocess))
 
         #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in
-        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=False)
+        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=True)
         self.add(self.buffer_predictions)
 
         self.avg = AveragePredictions(weighted=weighted)
