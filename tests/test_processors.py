@@ -173,8 +173,8 @@ def test_weighted_AveragePredictions():
     test if it calculates the weigthed average correctly
     """
     average = AveragePredictions(weighted=True)
-    element_1 = [1,2,3]
-    element_2 = [3,2,1]
+    element_1 = [0,1,2,3]
+    element_2 = [3,2,1,0]
     single_value = [4]
     input_batch = [element_1, single_value, element_2]
     excepted_output = [np.mean(element_1 * np.arange(1, len(element_1) + 1)), np.mean(single_value), np.mean(element_2 * np.arange(1, len(element_2) + 1))]
@@ -243,6 +243,10 @@ def test_only_empty_buffer_in_batch_AveragePredictions():
     output_batch = average(input_batch)
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
+# TODO: missing the test that crashes here: padded[i, :len(arr)] = arr
+# E   ValueError: setting an array element with a sequence. The requested array would exceed the maximum number of dimension of 1.
+
+
 def model(input):
         print(f"Model: {input}")
         return input
@@ -293,3 +297,12 @@ def test_with_Nones_PredictWithNones():
         input_batch[i % 3] = i
         output_batch = predictor(input_batch)
         assert input_batch == output_batch
+
+def test_flatten_predictions():
+    """
+    Test if flattening predictions works
+    """
+    input_batch = np.array([[1]]) # [np.array([[1], [2], [3]]), np.array([[4], [5], [6]])]
+    output_batch = flatten_predictions(input_batch)
+    expected_output = np.array([1]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
+    assert np.all(np.equal(output_batch, expected_output)), f"flattened predictions should be {expected_output} but is {output_batch}"

@@ -56,17 +56,24 @@ Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'C
     
 
 def load_vvad_classifier(architecture):
-    """Load the Keras classifier model for the given architecture."""
+    """Load the Keras classifier model for the given architecture.
+    
+    # Arguments
+        architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
+    
+    # Returns
+        tuple: (Keras model for the given architecture, input shape of the model)
+    """
     assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
     if architecture == 'VVAD-LRS3-LSTM':
-        return VVAD_LRS3_LSTM(weights='VVAD_LRS3')
+        return (VVAD_LRS3_LSTM(weights='VVAD_LRS3'), (38, 96, 96, 3))
     elif architecture.startswith('CNN2Plus1D'):
-        return CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture))
+        return (CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture)), (38, 96, 96, 3))
     elif architecture == 'LipShape':
-        return load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras'))
+        return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras')), (38, 20, 2))
     elif architecture == 'FaceShape':
-        return load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras'))
+        return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras')), (38, 68, 2))
 
 
 class ClassifyVVAD(SequentialProcessor):
@@ -87,17 +94,14 @@ class ClassifyVVAD(SequentialProcessor):
                 If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
                 If False just the average over all entries
     """
-    def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
+    def __init__(self, architecture='CNN2Plus1D_Light',
                  stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5):
         super(ClassifyVVAD, self).__init__()
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
-        classifier = load_vvad_classifier(architecture)
-
-        if architecture == 'LipShape':
-            input_size = (38, 20, 2)
-        elif architecture == 'FaceShape':
-            input_size = (38, 68, 2)
+        classifier, input_size = load_vvad_classifier(architecture)
+        # Dummy predict to fully initialize 
+        classifier(np.array([np.empty(input_size)]))
 
         self.class_names = get_class_names('VVAD_LRS3')
 
@@ -118,10 +122,10 @@ class ClassifyVVAD(SequentialProcessor):
             preprocess.add(PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0)))
 
 
-        self.add(PredictWithNones(classifier, preprocess))
+        self.add(PredictWithNones(model=classifier, preprocess=preprocess, postprocess=flatten_predictions))
 
-        #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in
-        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=max_consecutive_empty, return_incomplete_samples=True)
+        #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in and max_consecutive_empty is set to stride so that if the model gives no predictions for a stride steps this will not cause the buffer to be reset
+        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=stride, return_incomplete_samples=True) 
         self.add(self.buffer_predictions)
 
         self.avg = AveragePredictions(weighted=weighted)
@@ -142,7 +146,7 @@ class ClassifyVVAD(SequentialProcessor):
         self.buffer_features.reset()
 
         # AveragePredictions
-        self.avg.predictions.clear()
+        self.buffer_predictions.reset()
 
 
 
@@ -179,12 +183,10 @@ class ASD(Processor):
     """
 
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
-                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
+                 weighted= True, max_consecutive_empty=2, offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]]):
         super(ASD, self).__init__()
         self.offsets = offsets
         self.colors = colors
-        self.min_frames = int(min_frames)
-        self.patience = int(patience)
         self.absent_counts = []
         
         #detection
@@ -200,20 +202,19 @@ class ASD(Processor):
         self.vvad_args = dict(
             stride=stride,
             averaging_window_size=averaging_window_size,
-            average_type=str(average_type),
-            architecture=architecture
+            weighted=weighted,
+            architecture=architecture, max_consecutive_empty=max_consecutive_empty
         )
         self.classifier = pr.AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args))
-        # TODO: Dummy predict to fully initialize in classify VVAD
         
 
         self.class_names = list(get_class_names('VVAD_LRS3'))
 
-        # TODO: only draw if enabled
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
     def call(self, image):
+        # get the face boxes and crop the faces from the image
         image_copy = self.copy(image)
         boxes2D = self.detect(image_copy)['boxes2D']
         boxes2D = self.square(boxes2D)
@@ -221,6 +222,8 @@ class ASD(Processor):
         cropped_images = self.crop(image, boxes2D)
 
         N = len(cropped_images)
+        # call classifyVVAD for the whole batch of faces
+        boxes2D = self.classifier(cropped_images, boxes2D)
 
         # TODO: add each face in the corresponding buffer
         # TODO: if we do not have enough buffers create new ones
@@ -229,44 +232,45 @@ class ASD(Processor):
         # one classifier for all buffers
         # is pr.AddClassAndScoreToBoxes batch safe?
 
-        while len(self.adders) < N:
-            self.adders.append(pr.AddClassAndScoreToBoxes(clf))
-            self.frame_counts.append(0)
-            self.miss_counts.append(0)
-            self.absent_counts.append(0)
-            # TODO: what is the difference between absence counts and miss counts?
+        # while len(self.adders) < N:
+        #     self.adders.append(pr.AddClassAndScoreToBoxes(clf))
+        #     self.frame_counts.append(0)
+        #     self.miss_counts.append(0)
+        #     self.absent_counts.append(0)
+        #     # TODO: what is the difference between absence counts and miss counts?
 
-        # Increment counters for the first N slots (faces we actually saw this frame)
-        for i in range(N):
-            self.frame_counts[i] += 1
-            self.miss_counts[i] = 0
-            self.absent_counts[i] = 0
+        # # Increment counters for the first N slots (faces we actually saw this frame)
+        # for i in range(N):
+        #     self.frame_counts[i] += 1
+        #     self.miss_counts[i] = 0
+        #     self.absent_counts[i] = 0
 
-        # Reset counters
-        for i in range(N, len(self.adders)):
-            self.miss_counts[i] += 1
-            self.absent_counts[i] += 1
-            if self.miss_counts[i] > self.patience:
-                # clear counter and clear the VVAD temporal buffer
-                self.frame_counts[i] = 0
-                self.classifiers[i].reset() 
-                self.miss_counts[i] = 0
-        # Drop dangling tail slots that have been absent long enough
-        while len(self.adders) > N and self.absent_counts[-1] >= self.min_frames:
-            self.adders.pop()
-            self.classifiers.pop()
-            self.frame_counts.pop()
-            self.miss_counts.pop()
-            self.absent_counts.pop()
+        # # Reset counters
+        # for i in range(N, len(self.adders)):
+        #     self.miss_counts[i] += 1
+        #     self.absent_counts[i] += 1
+        #     if self.miss_counts[i] > self.patience:
+        #         # clear counter and clear the VVAD temporal buffer
+        #         self.frame_counts[i] = 0
+        #         self.classifiers[i].reset() 
+        #         self.miss_counts[i] = 0
+        # # Drop dangling tail slots that have been absent long enough
+        # while len(self.adders) > N and self.absent_counts[-1] >= self.min_frames:
+        #     self.adders.pop()
+        #     self.classifiers.pop()
+        #     self.frame_counts.pop()
+        #     self.miss_counts.pop()
+        #     self.absent_counts.pop()
 
-        # Classify and update only the slots that have matured enough frames
-        updated_boxes = []
-        for i, (adder, crop, box) in enumerate(zip(self.adders, cropped_images, boxes2D)):
-            updated = adder([crop], [box])[0] 
-            if self.frame_counts[i] >= self.min_frames:
-                updated_boxes.append(updated)
+        # # Classify and update only the slots that have matured enough frames
+        # updated_boxes = []
+        # for i, (adder, crop, box) in enumerate(zip(self.adders, cropped_images, boxes2D)):
+        #     updated = adder([crop], [box])[0] 
+        #     if self.frame_counts[i] >= self.min_frames:
+        #         updated_boxes.append(updated)
 
-        boxes2D = updated_boxes
+        # boxes2D = updated_boxes
+        # TODO: only if flag is set
         image = self.draw(image, boxes2D)
         return self.wrap(image, boxes2D)
 
@@ -278,7 +282,7 @@ class DetectVVAD(ASD):
         super(DetectVVAD, self).__init__(architecture=architecture, stride=stride,
                                          averaging_window_size=averaging_window_size,
                                          average_type=average_type, offsets=offsets,
-                                         colors=colors, min_frames=min_frames, patience=patience)
+                                         colors=colors, max_consecutive_empty=patience)
         raise DeprecationWarning("DetectVVAD is deprecated. Use ASD instead.")
 if __name__ == '__main__':
     # load Processor for testing

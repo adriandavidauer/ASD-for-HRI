@@ -263,7 +263,7 @@ def predict_with_nones(x, model, preprocess=None, postprocess=None):
         return None # this skips post processing
     elif any(sample is None for sample in x):
         # create mapping and remove Nones from the batch
-        non_none_pairs = [(i, val) for i, val in enumerate(x) if val is not None]   
+        non_none_pairs = [(i, val) for i, val in enumerate(x) if val is not None and val is not [] is not None]   
         if non_none_pairs:
             indices, non_nones = zip(*non_none_pairs)     
             # apply model
@@ -300,6 +300,15 @@ class PredictWithNones(Processor):
     def call(self, x):
         return predict_with_nones(x, self.model, self.preprocess, self.postprocess)
 
+def flatten_predictions(batch_of_predictions):
+    """Flattens the given predictions because the model returns an array with shape (N, 1) instead of (N,) and the postprocessing expects a list of predictions.
+    # Arguments:
+        batch_of_predictions: List of predictions to be flattened.
+    # Returns
+        List of predictions. Flattened predictions.
+    """
+    return batch_of_predictions.reshape(-1)
+        
 
 class AveragePredictions(Processor):
     """Averages the given predictions
@@ -326,7 +335,7 @@ class AveragePredictions(Processor):
             return []
         else:
             # create mapping and remove Nones and empty lists from the batch
-            non_none_pairs = [(i, val) for i, val in enumerate(batch_of_list_of_values) if val]  
+            non_none_pairs = [(i, val) for i, val in enumerate(batch_of_list_of_values) if val is not None and len(val) != 0]  
             if not non_none_pairs:
                 return [None] * len(batch_of_list_of_values)
             indices, non_nones = zip(*non_none_pairs)    
@@ -336,8 +345,8 @@ class AveragePredictions(Processor):
             max_len = lengths.max()
             # Build a padded 2D matrix filled with zeros
             padded = np.zeros((len(non_nones), max_len))
-            for i, arr in enumerate(non_nones):
-                padded[i, :len(arr)] = arr
+            for i, buffer in enumerate(non_nones):
+                padded[i, :len(buffer)] = buffer
             if self.weighted:
                 # Create index weights: [0, 1, 2, 3] and multiply
                 weights = np.arange(1, max_len+1)
