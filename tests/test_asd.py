@@ -3,7 +3,8 @@ Tests for the main asd processors
 '''
 
 # System imports
-
+from pathlib import Path
+import random
 
 # 3rd party imports
 import cv2
@@ -39,6 +40,49 @@ def test_input_output_ClassifyVVAD():
             assert ret_val[0] is not None, f"ret_val should not be None but is {ret_val[0]} in step {i}"
             assert ret_val[0] >= 0 and ret_val[0] <= 1, f"ret_val should be between 0 and 1 but is {ret_val[0]} in step {i}"
 
+def test_input_output_batch_ClassifyVVAD():
+    """
+    Test for the correct input and output shapes for ClassifyVVAD pipeline
+    """
+    averaging_window_size = 2
+    weighted = True
+    max_consecutive_empty = 5
+    stride = 1
+    batch_lower_bound = 1
+    batch_upper_bound = 10
+    vvad = ClassifyVVAD(architecture='LipShape', averaging_window_size=averaging_window_size, weighted=weighted, max_consecutive_empty=max_consecutive_empty, stride=stride)
+    for i in range(200):
+        ret_val = vvad([test_image]*random.randint(batch_lower_bound, batch_upper_bound)) # input a batch of images - expecting batch of predictions
+        if i < IMAGE_INPUT_SHAPE[0]-1:
+            assert len(ret_val) <= batch_upper_bound  , f"ret_val should have less than {batch_upper_bound} entries but has {len(ret_val)} entries in step {i}"
+            assert ret_val[0] is None, f"first entry of the batch should be [None] but is {ret_val[0]} in step {i}"
+        else:
+            assert len(ret_val) <= batch_upper_bound  , f"ret_val should have less than {batch_upper_bound} entries but has {len(ret_val)} entries in step {i}"
+            assert ret_val[0] is not None, f"ret_val should not be None but is {ret_val[0]} in step {i}"
+            assert ret_val[0] >= 0 and ret_val[0] <= 1, f"ret_val should be between 0 and 1 but is {ret_val[0]} in step {i}"
+
+
+def test_input_output_empty_batch_ClassifyVVAD():
+    """
+    Test for the correct input and output shapes for ClassifyVVAD pipeline
+    """
+    averaging_window_size = 2
+    weighted = True
+    max_consecutive_empty = 5
+    stride = 1
+    vvad = ClassifyVVAD(architecture='LipShape', averaging_window_size=averaging_window_size, weighted=weighted, max_consecutive_empty=max_consecutive_empty, stride=stride)
+    for i in range(200):
+        ret_val = vvad([]) # input a batch of images - expecting batch of predictions
+        if i < IMAGE_INPUT_SHAPE[0]-1:
+            assert len(ret_val) == 0  , f"ret_val should have no entries but has {len(ret_val)} entries in step {i}"
+            # assert ret_val[0] is None, f"first entry of the batch should be [None] but is {ret_val[0]} in step {i}"
+        else:
+            assert len(ret_val) == 0  , f"ret_val should have no entries but has {len(ret_val)} entries in step {i}"
+            # assert ret_val[0] is not None, f"ret_val should not be None but is {ret_val[0]} in step {i}"
+            # assert ret_val[0] >= 0 and ret_val[0] <= 1, f"ret_val should be between 0 and 1 but is {ret_val[0]} in step {i}"
+
+
+
 def test_full_asd_pipeline():
     """
     Test for the correct input and output shapes for the full ASD pipeline
@@ -49,7 +93,9 @@ def test_full_asd_pipeline():
     stride = 1
     asd_pipeline = ASD(architecture='LipShape', averaging_window_size=averaging_window_size, weighted=weighted, max_consecutive_empty=max_consecutive_empty, stride=stride)
     # open video file and read frames as numpy arrays
-    video = cv2.VideoCapture('001.avi') #TODO: reading video does not work :DDDDD
+    video_path = Path(__file__).parent / '001.avi'
+    video = cv2.VideoCapture(str(video_path)) #TODO: reading video does not work :DDDDD
+    assert video.isOpened(), "Video file could not be opened"
     i = 0 
     while True:
         ret, frame = video.read()

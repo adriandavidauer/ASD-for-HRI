@@ -123,6 +123,7 @@ class BufferFeatures(Processor):
             The buffer will return a sorted list of all buffers. When the stride is not reached or the buffer is not full the element will be None.
         """
         batch_return = []
+        i = 0
         for i, features in enumerate(batch_of_features):
             if i == len(self.buffers):
                 self.buffers.append(deque(maxlen=self.buffer_size))
@@ -261,6 +262,8 @@ def predict_with_nones(x, model, preprocess=None, postprocess=None):
         x = preprocess(x)
     if x is None:
         return None # this skips post processing
+    if len(x) == 0:
+        return [] # this skips post processing
     elif any(sample is None for sample in x):
         # create mapping and remove Nones from the batch
         non_none_pairs = [(i, val) for i, val in enumerate(x) if val is not None and val is not [] is not None]   
@@ -307,7 +310,10 @@ def flatten_predictions(batch_of_predictions):
     # Returns
         List of predictions. Flattened predictions.
     """
-    return batch_of_predictions.reshape(-1)
+    # TOOD: if list inlcuding nones, reshape differently
+    if None in batch_of_predictions:
+        return [None if pred is None else np.array(pred).reshape(-1)[0] for pred in batch_of_predictions]
+    return np.array(batch_of_predictions).reshape(-1)
         
 
 class AveragePredictions(Processor):

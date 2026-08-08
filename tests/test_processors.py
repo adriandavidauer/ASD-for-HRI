@@ -16,7 +16,13 @@ from tests.constants import *
 # end file header
 __author__      = 'Adrian Auer'
 
-
+def test_empty_batch_BufferFeatures():
+    """One Buffer that is getting empty batches. It should return only after the given timesteps."""
+    buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1)
+    for i in range(1000):
+        ret_val = buffer([])    
+        assert len(ret_val) == 0, f"empty input should return empty output, returned {len(ret_val)} in timestep {i} instead."
+        
 def test_return_simple_BufferFeatures():
     """One Buffer that is filled. It should return only after the given timesteps."""
     buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1)
@@ -257,6 +263,17 @@ def postprocess(input):
     print(f"Postprocess: {input}")
     return input
 
+def test_empty_batch_PredictWithNones():
+    """
+    Test if prediction works with an empty batch
+    """
+    predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
+    input_batch = []
+    for i in range(100):
+        output_batch = predictor(input_batch)
+        assert np.all(np.equal(input_batch, output_batch)), f"predictions should be {input_batch} but is {output_batch}"
+ 
+
 def test_without_Nones_PredictWithNones():
     """
     Test if prediction works and Nones are forwarded
@@ -305,4 +322,13 @@ def test_flatten_predictions():
     input_batch = np.array([[1]]) # [np.array([[1], [2], [3]]), np.array([[4], [5], [6]])]
     output_batch = flatten_predictions(input_batch)
     expected_output = np.array([1]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
+    assert np.all(np.equal(output_batch, expected_output)), f"flattened predictions should be {expected_output} but is {output_batch}"
+
+def test_flatten_predictions_with_Nones():
+    """
+    Test if flattening predictions works with Nones
+    """
+    input_batch = [np.array([[1]]), None, np.array([[3]])]
+    output_batch = flatten_predictions(input_batch)
+    expected_output = np.array([1, None, 3]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
     assert np.all(np.equal(output_batch, expected_output)), f"flattened predictions should be {expected_output} but is {output_batch}"
