@@ -249,9 +249,21 @@ def test_only_empty_buffer_in_batch_AveragePredictions():
     output_batch = average(input_batch)
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
-# TODO: missing the test that crashes here: padded[i, :len(arr)] = arr
-# E   ValueError: setting an array element with a sequence. The requested array would exceed the maximum number of dimension of 1.
-
+def test_normalize_AveragePredictions():
+    """
+    test if it calculates the (weighted) average with normalization correctly
+    """
+    # weighted
+    average = AveragePredictions(weighted=True, normalize=True)
+    element_1 = [1,1,1]
+    element_2 = [0.0,0.0,0.0]
+    single_value = [0.1]
+    element_3 = [0.1,0.2,0.3]
+    max_for_element_3 = np.sum(np.arange(1, len(element_3) + 1))
+    input_batch = [element_1, single_value, element_2, element_3]
+    excepted_output = [1.0, 0.1, 0.0, np.mean(element_3 * np.arange(1, len(element_3) + 1))/(max_for_element_3/len(element_3))]
+    output_batch = average(input_batch)
+    assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
 
 def model(input):
         print(f"Model: {input}")

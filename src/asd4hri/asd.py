@@ -81,6 +81,7 @@ class ClassifyVVAD(SequentialProcessor):
     video clips.
     Expects a batch of face images - each image representig a different entity. 
     Images will be buffered until the inputsize of the model.
+    Returns a batch of (averaged) predictions - each prediction corresponding to the entity in the input image at the same index.
 
     # Arguments
         input_size: Tuple of integers. Input shape to the model in following format: (frames, height, width, channels)
@@ -128,7 +129,7 @@ class ClassifyVVAD(SequentialProcessor):
         self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=stride, return_incomplete_samples=True) 
         self.add(self.buffer_predictions)
 
-        self.avg = AveragePredictions(weighted=weighted)
+        self.avg = AveragePredictions(weighted=weighted, normalize=True) # normalize to [0, 1] so that the output is always in [0, 1] independent of the averaging_window_size
         self.add(self.avg)
         # is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
         # self.add(pr.ControlMap(self.avg, [0], [0]))
@@ -182,8 +183,8 @@ class ASD(Processor):
             disable averaging
     """
 
-    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
-                 weighted= True, max_consecutive_empty=2, offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]]):
+    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
+                 weighted= True, max_consecutive_empty=2, offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0], [0, 0, 0]]):
         super(ASD, self).__init__()
         self.offsets = offsets
         self.colors = colors
@@ -205,10 +206,13 @@ class ASD(Processor):
             weighted=weighted,
             architecture=architecture, max_consecutive_empty=max_consecutive_empty
         )
-        self.classifier = pr.AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args))
+        class_names = get_class_names('VVAD_LRS3')
+        corrected_class_names = [class_names[1], class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
+        self.classifier = AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args), class_names=corrected_class_names, decision_threshold=decision_threshold)
         
 
         self.class_names = list(get_class_names('VVAD_LRS3'))
+        self.class_names.append('No Prediction yet')
 
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
@@ -221,55 +225,9 @@ class ASD(Processor):
         boxes2D = self.clip(image, boxes2D)
         cropped_images = self.crop(image, boxes2D)
 
-        N = len(cropped_images)
         # call classifyVVAD for the whole batch of faces
         boxes2D = self.classifier(cropped_images, boxes2D)
 
-        # TODO: add each face in the corresponding buffer
-        # TODO: if we do not have enough buffers create new ones
-        # TODO: get all full buffers and batch predict with self.classifier([crop], [box])
-
-        # one classifier for all buffers
-        # is pr.AddClassAndScoreToBoxes batch safe?
-
-        # while len(self.adders) < N:
-        #     self.adders.append(pr.AddClassAndScoreToBoxes(clf))
-        #     self.frame_counts.append(0)
-        #     self.miss_counts.append(0)
-        #     self.absent_counts.append(0)
-        #     # TODO: what is the difference between absence counts and miss counts?
-
-        # # Increment counters for the first N slots (faces we actually saw this frame)
-        # for i in range(N):
-        #     self.frame_counts[i] += 1
-        #     self.miss_counts[i] = 0
-        #     self.absent_counts[i] = 0
-
-        # # Reset counters
-        # for i in range(N, len(self.adders)):
-        #     self.miss_counts[i] += 1
-        #     self.absent_counts[i] += 1
-        #     if self.miss_counts[i] > self.patience:
-        #         # clear counter and clear the VVAD temporal buffer
-        #         self.frame_counts[i] = 0
-        #         self.classifiers[i].reset() 
-        #         self.miss_counts[i] = 0
-        # # Drop dangling tail slots that have been absent long enough
-        # while len(self.adders) > N and self.absent_counts[-1] >= self.min_frames:
-        #     self.adders.pop()
-        #     self.classifiers.pop()
-        #     self.frame_counts.pop()
-        #     self.miss_counts.pop()
-        #     self.absent_counts.pop()
-
-        # # Classify and update only the slots that have matured enough frames
-        # updated_boxes = []
-        # for i, (adder, crop, box) in enumerate(zip(self.adders, cropped_images, boxes2D)):
-        #     updated = adder([crop], [box])[0] 
-        #     if self.frame_counts[i] >= self.min_frames:
-        #         updated_boxes.append(updated)
-
-        # boxes2D = updated_boxes
         # TODO: only if flag is set
         image = self.draw(image, boxes2D)
         return self.wrap(image, boxes2D)

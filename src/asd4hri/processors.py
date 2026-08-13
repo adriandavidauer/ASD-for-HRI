@@ -24,6 +24,7 @@ from paz import processors as pr
 from paz.abstract import Processor, SequentialProcessor
 from paz.backend.camera import VideoPlayer, Camera
 import paz.pipelines.detection as dt
+from paz.backend.boxes import add_class_and_score
 
 from keras.models import load_model, Sequential
 from keras.layers import Dense, Input, LSTM, TimeDistributed, BatchNormalization, Flatten
@@ -322,18 +323,21 @@ class AveragePredictions(Processor):
         weigthed: Boolean. 
             If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
             If False just the average over all entries
+        normalize: Boolean.
+            If True the outputvalue will be normalized to [0, 1]. This expects the input values to be in [0, 1] as well.
     """
 
-    def __init__(self, weighted=False):
+    def __init__(self, weighted=False, normalize=False):
         super(AveragePredictions, self).__init__()
         self.weighted = weighted
+        self.normalize = normalize
 
     def call(self, batch_of_list_of_values):
         """
         # Arguments:
-            list_of_values: List of values to be averaged.
+            batch_of_list_of_values: Batch of List of values to be averaged.
         # Returns
-            Bool, Int or Float value. Averaged value.
+           list of  Bool, Int or Float value. batch of Averaged value.
         """
         if batch_of_list_of_values is None:
             return None
@@ -354,15 +358,64 @@ class AveragePredictions(Processor):
             for i, buffer in enumerate(non_nones):
                 padded[i, :len(buffer)] = buffer
             if self.weighted:
-                # Create index weights: [0, 1, 2, 3] and multiply
+                # Create index weights: [1, 2, 3] and multiply
                 weights = np.arange(1, max_len+1)
                 padded = padded * weights
             # Sum across rows and divide by the REAL original length of each sample
             mean = np.array(padded).sum(axis=1) / lengths
 
+            # normalize eachto [0, 1] if desired
+            if self.normalize:
+                max_vals = np.array([np.sum(np.arange(1, x+1))/x for x in lengths])
+                mean = mean / max_vals
             # apply mapping to recreate batch with Nones
             ret_batch = [None] * len(batch_of_list_of_values)
             for idx, val in zip(indices, mean):
                 ret_batch[idx] = val
             return ret_batch
             
+
+class AddClassAndScoreToBoxes(Processor):
+    """Adds class name and score to boxes. Expects a batch of cropped images and a batch of boxes. 
+
+    # Arguments
+        classifier: Keras model.
+    """
+    def __init__(self, classifier, class_names, decision_threshold=0.5):
+        super(AddClassAndScoreToBoxes, self).__init__()
+        self.classify = classifier
+        self.class_name = class_names
+        self.decision_threshold = decision_threshold
+        assert len(self.class_name) == 2, f"AddClassAndScoreToBoxes only supports binary classes. Number of classes names must be 2 for binary classification but is {len(self.class_name)}"
+
+    def __call__(self, cropped_images, boxes):
+        scores = self.classify(cropped_images)
+        return_boxes = []
+        for score, box2D in zip(scores, boxes):
+            if score is None:
+                class_name = 'No Prediction yet'
+                score = -1.0
+            else:
+                class_name = self.class_name[1] if score > self.decision_threshold else self.class_name[0]
+            box2D.score = score
+            box2D.class_name = class_name
+            # return_boxes.append(add_class_and_score({'class_name': class_name, 'scores': [score]}, box2D))
+        return boxes            
+
+
+# def add_class_and_score(prediction, box):
+#     """Adds class and score to box.
+
+#     # Arguments
+#         prediction: Dictionary with keys `class_name` and `scores`.
+#         box: Array of shape `(num_nms_boxes, 4 + num_classes)`.
+#     """
+#     if box is None:
+#         return None
+#     if prediction is None:
+#         box.class_name = 'No Prediction yet' 
+#         box.score = -1.0 
+#         return box
+#     box.class_name = prediction['class_name']
+#     box.score = np.amax(prediction['scores'])
+#     return box

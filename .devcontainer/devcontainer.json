@@ -3,7 +3,10 @@
              "context": ".." },
     // Enable GPU support for the container
     "runArgs": [
-        "--gpus=all"
+        "--gpus=all",
+        "--device=/dev/video0:/dev/video0",
+        "--device=/dev/video1:/dev/video1",
+        "--group-add=video"
     ], 
     // Mount your host home directory to the container user's home directory
     "mounts": [
