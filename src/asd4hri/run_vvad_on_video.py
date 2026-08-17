@@ -1,4 +1,6 @@
 """Run DetectVVAD on a single video and persist its per-frame predictions.
+
+Dataset-agnostic: it only needs a video file path.
 """
 
 import argparse
@@ -14,7 +16,7 @@ import paz.pipelines.detection as dt
 
 from helpers import setup_logging
 
-LOGGER = logging.getLogger('uniTalk_VVAD')
+LOGGER = logging.getLogger('VVAD')
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -32,24 +34,20 @@ def parse_args():
                         '(defaults to the input video basename)')
     p.add_argument('--log_file',       default=None,
                    help='Override the auto-generated log file path')
+    p.add_argument('--cascade',        default='frontalface_alt2',
+                   help='OpenCV Haar cascade name (default: frontalface_alt2)')
+    p.add_argument('--cascade_scale',  type=float, default=1.05,
+                   help='Haar scaleFactor; lower finds more faces but is slower (default: 1.05)')
+    p.add_argument('--cascade_neighbors', type=int, default=3,
+                   help='Haar minNeighbors; lower is more permissive (default: 3)')
     p.add_argument('--verbose', '-v',  action='store_true',
                    help='Also emit INFO-level messages on the console')
     return p.parse_args()
 
 # ── CSV writers ───────────────────────────────────────────────────────────────
 
-_PREDICTION_FIELDS = ['frame_idx', 'timestamp', 'label', 'x1', 'y1', 'x2', 'y2']
+_PREDICTION_FIELDS = ['frame_idx', 'timestamp', 'label', 'x1', 'y1', 'x2', 'y2', 'score']
 _AGGREGATE_TIME_FIELDS = ['video_id', 'elapsed_seconds', 'frames_processed', 'fps_processed']
-
-def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes, width, height):
-    """Write one row per predicted box with bbox coords normalised to [0, 1].
-    """
-    for pred in pred_boxes:
-        label = getattr(pred, 'class_name', '') or ''
-        x1, y1, x2, y2 = pred.coordinates
-        writer.writerow([frame_idx, f'{timestamp:.6f}', label,
-                         f'{x1 / width:.6f}', f'{y1 / height:.6f}',
-                         f'{x2 / width:.6f}', f'{y2 / height:.6f}'])
 
 
 def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processed,fps):
@@ -68,7 +66,8 @@ def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processe
 def run_vvad_on_video(video_path,
                       predictions_csv=None,
                       aggregate_time_csv='results/aggregate_time.csv',
-                      video_id=None, architecture='CNN2Plus1D_Light', stride=1):
+                      video_id=None, architecture='CNN2Plus1D_Light', stride=1,
+                      cascade='frontalface_alt2', cascade_scale=1.05, cascade_neighbors=3):
     """Run DetectVVAD on one video and write predictions + timing rows.
 
     Args:
@@ -97,21 +96,17 @@ def run_vvad_on_video(video_path,
         raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
 
-    pipeline = DetectVVAD(stride=stride, averaging_window_size=1, min_frames=25, patience=10,architecture=architecture)
+    pipeline = DetectVVAD(stride=stride, averaging_window_size=1, min_frames=25, patience=10,
+                          architecture=architecture, cascade=cascade,
+                          cascade_scale=cascade_scale, cascade_neighbors=cascade_neighbors)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     t0 = time.time()
     frame_idx = 0
+    width = height = 0
 
     try:
-        #TODO: writing results to file should not be timed - we can store everything in a list and write in the end.
-        with open(predictions_csv, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(_PREDICTION_FIELDS)
-
-        frame_idx_list = []
-        timestamp_list = []
-        pred_boxes_list = []
+        rows = []
         while True:
             is_frame_received, frame = cap.read()
             if not is_frame_received:
@@ -128,13 +123,8 @@ def run_vvad_on_video(video_path,
                                 video_id, frame_idx, exc)
                 pred_boxes = []
 
-            timestamp = frame_idx / native_fps
-            if pred_boxes != []:
-                frame_idx_list.append(frame_idx)
-                timestamp_list.append(timestamp)
-                pred_boxes_list.append(pred_boxes)
-                
-                
+            if pred_boxes:
+                rows.append((frame_idx, frame_idx / native_fps, pred_boxes))
 
             frame_idx += 1
     finally:
@@ -142,14 +132,21 @@ def run_vvad_on_video(video_path,
 
     elapsed = time.time() - t0
 
-    with open(predictions_csv, 'a', newline='') as f:
+    with open(predictions_csv, 'w', newline='') as f:
         writer = csv.writer(f)
-        for frame_idx, timestamp, pred_boxes in zip(frame_idx_list, timestamp_list, pred_boxes_list):
-            _write_prediction_rows(writer, frame_idx, timestamp,
-                                            pred_boxes, width, height)
+        writer.writerow(_PREDICTION_FIELDS)
+        for idx, timestamp, pred_boxes in rows:
+            for pred in pred_boxes:
+                x1, y1, x2, y2 = pred.coordinates
+                writer.writerow([idx, f'{timestamp:.6f}',
+                                 getattr(pred, 'class_name', '') or '',
+                                 f'{x1 / width:.6f}', f'{y1 / height:.6f}',
+                                 f'{x2 / width:.6f}', f'{y2 / height:.6f}',
+                                 f'{float(getattr(pred, "score", 0.0)):.6f}'])
 
     if aggregate_time_csv is not None:
-        append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,native_fps)
+        append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,
+                              frame_idx / elapsed if elapsed > 0 else 0.0)
 
     return frame_idx, elapsed
 
@@ -157,12 +154,14 @@ def run_vvad_on_video(video_path,
 
 def main():
     args = parse_args()
-    log_path = setup_logging('uniTalk_VVAD', args.verbose)
+    log_path = setup_logging('VVAD', args.verbose)
 
     try:
         run_vvad_on_video(args.video, args.predictions,
                           aggregate_time_csv=args.aggregate_time,
-                          video_id=args.video_id)
+                          video_id=args.video_id, cascade=args.cascade,
+                          cascade_scale=args.cascade_scale,
+                          cascade_neighbors=args.cascade_neighbors)
     except Exception:
         LOGGER.exception('Failed processing video=%s', args.video)
         raise SystemExit(1)

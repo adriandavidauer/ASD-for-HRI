@@ -14,6 +14,7 @@ import urllib.request
 import dlib
 
 from paz.models.classification import VVAD_LRS3_LSTM, CNN2Plus1D
+from paz.models.detection.haar_cascade import HaarCascadeDetector
 from paz.datasets import get_class_names
 from paz.pipelines import PreprocessImage
 from paz import processors as pr
@@ -301,17 +302,24 @@ class DetectVVAD(Processor):
     """
 
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
-                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
+                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5,
+                 cascade='frontalface_alt2', cascade_scale=1.05, cascade_neighbors=3):
         super(DetectVVAD, self).__init__()
         self.offsets = offsets
         self.colors = colors
         self.min_frames = int(min_frames)
         self.patience = int(patience)
         self.absent_counts = []
-        
+
         #detection
         self.copy = pr.Copy()
-        self.detect = dt.HaarCascadeFrontalFace()
+        # Tuned for GT-box recall: 'frontalface_default' at scale=1.3/neighbors=5 finds no
+        # face at all in 78-89% of frames on profile-heavy videos. Spurious boxes are free
+        # here because only GT rows are scored, so these favour recall over precision.
+        self.detect = dt.DetectHaarCascade(
+            HaarCascadeDetector(cascade, class_arg=0,
+                                scale=float(cascade_scale), neighbors=int(cascade_neighbors)),
+            ['Face'], [[0, 255, 0]], draw=False)
         self.square = SequentialProcessor()
         self.square.add(pr.SquareBoxes2D())
         self.square.add(pr.OffsetBoxes2D(offsets))
