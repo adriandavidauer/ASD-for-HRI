@@ -390,7 +390,6 @@ class AddClassAndScoreToBoxes(Processor):
 
     def __call__(self, cropped_images, boxes):
         scores = self.classify(cropped_images)
-        return_boxes = []
         for score, box2D in zip(scores, boxes):
             if score is None:
                 class_name = 'No Prediction yet'

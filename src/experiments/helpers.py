@@ -23,9 +23,11 @@ _LABEL_MAP = {
 _PredBox = namedtuple('_PredBox', ['coordinates', 'class_name'])
 
 
-def setup_logging(log_name="unitalk", verbose=False):
-    os.makedirs('/app/data/logs', exist_ok=True)
-    path = f'/app/data/logs/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
+def setup_logging(log_name="unitalk", verbose=False, path=None):
+    if path is None:
+        path = '/app/data/logs'
+    os.makedirs(path, exist_ok=True)
+    path = f'{path}/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
 
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)

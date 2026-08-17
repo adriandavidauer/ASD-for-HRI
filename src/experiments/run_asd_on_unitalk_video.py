@@ -1,4 +1,4 @@
-"""Run DetectVVAD on a single video and persist its per-frame predictions.
+"""Run ASD on a single video and persist its per-frame predictions.
 """
 
 import argparse
@@ -7,18 +7,18 @@ import logging
 import os
 import time
 
-from .asd import DetectVVAD
+from asd4hri.asd import ASD
 
 import cv2
 import paz.pipelines.detection as dt
 
-from helpers import setup_logging
+from .helpers import setup_logging
 
 LOGGER = logging.getLogger('uniTalk_VVAD')
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description='Run DetectVVAD on a single video and write a predictions CSV')
+        description='Run ASD on a single video and write a predictions CSV')
     p.add_argument('--video',          required=True,
                    help='Path to the input video file')
     p.add_argument('--predictions',    default=None,
@@ -32,8 +32,11 @@ def parse_args():
                         '(defaults to the input video basename)')
     p.add_argument('--log_file',       default=None,
                    help='Override the auto-generated log file path')
+    p.add_argument('--architecture',   default='CNN2Plus1D_Light',
+                   help='Architecture used for the model')
     p.add_argument('--verbose', '-v',  action='store_true',
                    help='Also emit INFO-level messages on the console')
+
     return p.parse_args()
 
 # ── CSV writers ───────────────────────────────────────────────────────────────
@@ -65,11 +68,15 @@ def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processe
 
 # ── pipeline runner ───────────────────────────────────────────────────────────
 
-def run_vvad_on_video(video_path,
-                      predictions_csv=None,
-                      aggregate_time_csv='results/aggregate_time.csv',
-                      video_id=None, architecture='CNN2Plus1D_Light', stride=1):
-    """Run DetectVVAD on one video and write predictions + timing rows.
+def run_asd_on_video(video_path,
+                    predictions_csv=None,
+                    aggregate_time_csv='results/aggregate_time.csv',
+                    video_id=None, architecture='CNN2Plus1D_Light', 
+                    stride=1, averaging_window_size: int = 1,
+                    decision_threshold: float = 0.5,
+                    weighted: bool = True,
+                    max_consecutive_empty: int = 2):
+    """Run ASD on one video and write predictions + timing rows.
 
     Args:
         video_path:         path to input .mp4
@@ -97,14 +104,13 @@ def run_vvad_on_video(video_path,
         raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
 
-    pipeline = DetectVVAD(stride=stride, averaging_window_size=1, min_frames=25, patience=10,architecture=architecture)
+    pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     t0 = time.time()
     frame_idx = 0
 
     try:
-        #TODO: writing results to file should not be timed - we can store everything in a list and write in the end.
         with open(predictions_csv, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(_PREDICTION_FIELDS)
@@ -157,12 +163,12 @@ def run_vvad_on_video(video_path,
 
 def main():
     args = parse_args()
-    log_path = setup_logging('uniTalk_VVAD', args.verbose)
+    log_path = setup_logging('uniTalk_VVAD', args.verbose, args.log_file)
 
     try:
-        run_vvad_on_video(args.video, args.predictions,
+        run_asd_on_video(args.video, args.predictions,
                           aggregate_time_csv=args.aggregate_time,
-                          video_id=args.video_id)
+                          video_id=args.video_id, architecture=args.architecture)
     except Exception:
         LOGGER.exception('Failed processing video=%s', args.video)
         raise SystemExit(1)
