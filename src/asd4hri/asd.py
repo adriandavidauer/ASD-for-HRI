@@ -110,7 +110,8 @@ class ClassifyVVAD(SequentialProcessor):
 
         if 'Shape' in architecture:            
             preprocess.add(GetShapeFeatures(architecture=architecture)) # works on batch of face images not on batch of samples - needs to be done before buffering into a sample
-            
+        else:
+            preprocess.add(PreprocessImages(input_size[1:3])) # works on batch of images not on batch of samples - needs to be done before buffering into a sample 
         self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty)
         # We buffer the incoming face images or features
         preprocess.add(self.buffer_features)
@@ -119,8 +120,7 @@ class ClassifyVVAD(SequentialProcessor):
         if 'Shape' in architecture:            
             preprocess.add(NormalizeShapeSample()) # works on batch of samples
 
-        else:
-            preprocess.add(PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0)))
+        
 
 
         self.add(PredictWithNones(model=classifier, preprocess=preprocess, postprocess=flatten_predictions))

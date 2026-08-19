@@ -25,6 +25,8 @@
         {"vscode": 
             {"extensions": 
             ["ms-python.python"]
-        }
-    }
+            }
+        },
+    "postCreateCommand": "pip install -e '.[dev]'"
+
 }

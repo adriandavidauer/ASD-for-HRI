@@ -401,6 +401,32 @@ class AddClassAndScoreToBoxes(Processor):
             # return_boxes.append(add_class_and_score({'class_name': class_name, 'scores': [score]}, box2D))
         return boxes            
 
+class PreprocessImages(SequentialProcessor):
+    """Preprocess RGB images by resizing it to the given ``shape``. And cast it to the given ``dtype``. 
+    Can contain Nones in the batch and will return a batch with Nones in the same position.
+
+    # Arguments
+        shape: List of two Ints.
+        dtype: np.dtype. Data type to cast the image to.
+    """
+    def __init__(self, shape, dtype=float):
+        super(PreprocessImages, self).__init__()
+        self.resize = pr.ResizeImage(shape)
+        self.cast = pr.CastImage(dtype)
+
+    def __call__(self, images):
+        ret_batch = []
+        if images is None:
+            return None
+        else:
+            for image in images:
+                if image is None:
+                    ret_batch.append(None)
+                else:
+                    image = self.resize(image)
+                    image = self.cast(image)
+                    ret_batch.append(image)
+        return ret_batch
 
 # def add_class_and_score(prediction, box):
 #     """Adds class and score to box.

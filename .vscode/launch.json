@@ -17,7 +17,7 @@
                 "--log_file",
                 "monday.log", 
                 "--architecture", 
-                "LipShape"
+                "CNN2Plus1D_Light"
 
             ],
             "console": "integratedTerminal",
