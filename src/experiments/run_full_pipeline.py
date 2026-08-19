@@ -16,9 +16,9 @@ sys.path.insert(0, str(_SRC))
 
 import cv2
 
-from asd4hri.run_vvad_on_unitalk_video import run_vvad_on_video
-from download_uni_talk import download_video
-from helpers import (
+from .run_asd_on_unitalk_video import run_asd_on_video
+from .download_uni_talk import download_video
+from .helpers import (
     setup_logging,
     load_annotations,
     load_predictions_csv,
@@ -187,7 +187,7 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
 
 
         try:
-            run_vvad_on_video(
+            run_asd_on_video(
                 str(video_path), str(predictions_csv),
                 aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride
             )

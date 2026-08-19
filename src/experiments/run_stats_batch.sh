@@ -7,6 +7,7 @@ INPUT_FOLDERS=(
     "predictions_cnn2plus1dlight"
     "predictions_faceshape"
     "predictions_lipshape"
+    "predictions_vvadlstmlatest"
 )
 
 INPUT_BASE="/Data/data"                       # parent dir holding the input folders

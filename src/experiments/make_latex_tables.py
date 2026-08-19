@@ -28,6 +28,7 @@ MODELS = [
     "CNN2Plus1D_Light",
     "LipShape",
     "FaceShape",
+    "VVAD_LSTM_Latest",
 ]
 
 # Column order requested for the table (label -> value formatter).

@@ -7,4 +7,4 @@ tensorboard
 pandas
 wget
 yt-dlp
-keras>=3.0
+keras==3.6.0
