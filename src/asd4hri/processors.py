@@ -16,6 +16,8 @@ from collections import deque
 import dlib
 import tensorflow as tf
 
+import cv2
+
 
 from paz.models.classification import VVAD_LRS3_LSTM, CNN2Plus1D
 from paz.datasets import get_class_names
@@ -25,6 +27,7 @@ from paz.abstract import Processor, SequentialProcessor
 from paz.backend.camera import VideoPlayer, Camera
 import paz.pipelines.detection as dt
 from paz.backend.boxes import add_class_and_score
+from paz.abstract.messages import Box2D
 
 from keras.models import load_model, Sequential
 from keras.layers import Dense, Input, LSTM, TimeDistributed, BatchNormalization, Flatten
@@ -444,3 +447,39 @@ class PreprocessImages(SequentialProcessor):
 #     box.class_name = prediction['class_name']
 #     box.score = np.amax(prediction['scores'])
 #     return box
+
+
+# TODO: write a test
+class FaceDetectorYN(Processor):
+    """FaceDetectorYN pipeline for detecting faces
+
+    # Arguments
+        class_name: String indicating the class name.
+        color: List indicating the RGB color e.g. ``[0, 255, 0]``.
+        draw: Boolean. If ``False`` the bounding boxes are not drawn.
+
+    # Returns
+        A function that takes an RGB image and outputs the predictions
+        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
+        The corresponding values of these keys contain the image with the drawn
+        inferences and a list of ``paz.abstract.messages.Boxes2D``.
+
+    """
+    def __init__(self, class_name='Face', color=[0, 255, 0], draw=False):
+        super(FaceDetectorYN, self).__init__()
+        self.detector = cv2.FaceDetectorYN()
+        self.draw = draw
+        self.color = color
+        self.class_name = class_name
+        self.drawer = pr.DrawBoxes2D(self.class_name, self.color, True)
+
+    def __call__(self, image):
+        retval, faces = self.detector.detect(image)
+        # create boxes2D with the corresponding points and the score and the label
+        # TODO: what is retval?
+        boxes2D = []
+        for face in faces:
+            boxes2D.append(Box2D((face[0], face[1], face[0]+face[2], face[1]+face[3]), face[14], 'Face'))
+        if self.draw:
+            image = self.drawer(image, boxes2D)
+        return {'image': image, 'boxes2D': boxes2D}

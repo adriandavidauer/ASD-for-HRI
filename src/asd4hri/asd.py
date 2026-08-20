@@ -50,7 +50,7 @@ __author__      = 'Adrian Auer'
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
-
+FaceDetector_Options = ['HaarCascade', 'YuNet', 'RetinaFace', 'InsightFace', 'YOLOv10-Face']
 
 
     
@@ -184,7 +184,7 @@ class ASD(Processor):
     """
 
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, annotate_output=False):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='HaarCascade'):
         super(ASD, self).__init__()
         self.annotate_output = annotate_output
         self.offsets = [0,0]
@@ -193,7 +193,18 @@ class ASD(Processor):
         
         #detection
         self.copy = pr.Copy()
-        self.detect = dt.HaarCascadeFrontalFace()
+        if detector == 'HaarCascade':
+            self.detect = dt.HaarCascadeFrontalFace()
+        elif detector == 'YuNet':
+            raise NotImplementedError
+        elif detector == 'RetinaFace':
+            raise NotImplementedError
+        elif detector ==  'InsightFace':
+            raise NotImplementedError
+        elif detector == 'YOLOv10-Face':
+            raise NotImplementedError
+        else:
+            raise ValueError(f"Unknown detector {detector}. Must be one of {FaceDetector_Options}")
         self.square = SequentialProcessor()
         self.square.add(pr.SquareBoxes2D())
         self.square.add(pr.OffsetBoxes2D(self.offsets))
