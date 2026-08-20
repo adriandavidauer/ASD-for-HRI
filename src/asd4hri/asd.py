@@ -248,7 +248,7 @@ if __name__ == '__main__':
     # load Processor for testing
     #test_classiffier = ClassifyVVAD(architecture='LipShape')
     # run processor for testing
-    pipeline = ASD(architecture='LipShape')
+    pipeline = ASD(architecture='LipShape', annotate_output=True)
     camera = Camera(0)
     player = VideoPlayer((640, 480), pipeline, camera)
     player.run()
