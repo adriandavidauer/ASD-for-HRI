@@ -184,10 +184,11 @@ class ASD(Processor):
     """
 
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0], [0, 0, 0]]):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False):
         super(ASD, self).__init__()
-        self.offsets = offsets
-        self.colors = colors
+        self.annotate_output = annotate_output
+        self.offsets = [0,0]
+        self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
         self.absent_counts = []
         
         #detection
@@ -195,7 +196,7 @@ class ASD(Processor):
         self.detect = dt.HaarCascadeFrontalFace()
         self.square = SequentialProcessor()
         self.square.add(pr.SquareBoxes2D())
-        self.square.add(pr.OffsetBoxes2D(offsets))
+        self.square.add(pr.OffsetBoxes2D(self.offsets))
         self.clip = pr.ClipBoxes2D()
         self.crop = pr.CropBoxes2D()
 
@@ -228,8 +229,9 @@ class ASD(Processor):
         # call classifyVVAD for the whole batch of faces
         boxes2D = self.classifier(cropped_images, boxes2D)
 
-        # TODO: only if flag is set
-        image = self.draw(image, boxes2D)
+        # only if flag is set
+        if self.annotate_output:
+            image = self.draw(image, boxes2D)
         return self.wrap(image, boxes2D)
 
 class DetectVVAD(ASD):
