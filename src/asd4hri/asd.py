@@ -64,8 +64,6 @@ def load_vvad_classifier(architecture):
     # Returns
         tuple: (Keras model for the given architecture, input shape of the model)
     """
-    assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
-
     if architecture == 'VVAD-LRS3-LSTM':
         return (VVAD_LRS3_LSTM(weights='VVAD_LRS3'), (38, 96, 96, 3))
     elif architecture.startswith('CNN2Plus1D'):
@@ -74,6 +72,8 @@ def load_vvad_classifier(architecture):
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras')), (38, 20, 2))
     elif architecture == 'FaceShape':
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras')), (38, 68, 2))
+    else:
+        raise ValueError(f"Unsupported architecture: {architecture}. Supported architectures are: {Architecture_Options}")
 
 
 class ClassifyVVAD(SequentialProcessor):
