@@ -50,7 +50,7 @@ __author__      = 'Adrian Auer'
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
-
+FaceDetector_Options = ['HaarCascade', 'YuNet', 'RetinaFace', 'InsightFace', 'YOLOv10-Face']
 
 
     
@@ -182,9 +182,9 @@ class ASD(Processor):
         average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set averaging_window_size to 1 to
             disable averaging
     """
-
+# TODO: add all parameters in docstring (not setting input_size can slow down because it will be set in the first call for old Haarcascade not needed)
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, annotate_output=False):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None):
         super(ASD, self).__init__()
         self.annotate_output = annotate_output
         self.offsets = [0,0]
@@ -193,7 +193,18 @@ class ASD(Processor):
         
         #detection
         self.copy = pr.Copy()
-        self.detect = dt.HaarCascadeFrontalFace()
+        if detector == 'HaarCascade':
+            self.detect = dt.HaarCascadeFrontalFace()
+        elif detector == 'YuNet':
+            self.detect = FaceDetectorYN(input_size=input_size) # TODO: parameter forwarding with kwargs?
+        elif detector == 'RetinaFace':
+            raise NotImplementedError
+        elif detector ==  'InsightFace':
+            raise NotImplementedError
+        elif detector == 'YOLOv10-Face':
+            raise NotImplementedError
+        else:
+            raise ValueError(f"Unknown detector {detector}. Must be one of {FaceDetector_Options}")
         self.square = SequentialProcessor()
         self.square.add(pr.SquareBoxes2D())
         self.square.add(pr.OffsetBoxes2D(self.offsets))

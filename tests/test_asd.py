@@ -115,22 +115,5 @@ def test_full_asd_pipeline():
             if box.class_name != 'No Prediction yet':
                     predictions += 1
                     assert box.score >= 0.0 and box.score <= 1.0, f"box should have a valid score but is {box.score} in step {i}"
-    
-        # else:
-        #     # TODO: what is returned? the pipeline should return the image and the boundingboxes with the predictions/scores
-        #     assert len(ret_val) == 2  , f"ret_val should have two entries but has {len(ret_val)} entries in step {i}"
-        #     for box in ret_val['boxes2D']:
-        #         assert box.class_name != 'No Prediction yet', f"box should have a prediction yet but has {box.class_name} in step {i}"
-        #         assert box.score >= 0.0 and box.score <= 1.0, f"box should have a valid score but is {box.score} in step {i}"
     assert predictions > 0, f"there should be at least one prediction in the video but there are {predictions} predictions"
     video.release()
-
-    # for i in range(200):
-    #     ret_val = asd_pipeline([test_image]) # input a batch of images - expecting batch of predictions
-    #     if i < IMAGE_INPUT_SHAPE[0]-1:
-    #         assert len(ret_val) == 1  , f"ret_val should have one entry but has {len(ret_val)} entries in step {i}"
-    #         assert ret_val[0] is None, f"ret_val should be [None] but is {ret_val[0]} in step {i}"
-    #     else:
-    #         assert len(ret_val) == 1  , f"ret_val should have one entry but has {len(ret_val)} entries in step {i}"
-    #         assert ret_val[0] is not None, f"ret_val should not be None but is {ret_val[0]} in step {i}"
-    #         assert ret_val[0] >= 0 and ret_val[0] <= 1, f"ret_val should be between 0 and 1 but is {ret_val[0]} in step {i}"

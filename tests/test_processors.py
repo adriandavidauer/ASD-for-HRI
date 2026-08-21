@@ -8,6 +8,8 @@ Tests for the paz processors needed for the full pipeline
 # 3rd party imports
 import numpy as np
 import pytest
+from paz.backend.image import show_image
+
 
 # local imports
 from asd4hri.processors import *
@@ -344,3 +346,38 @@ def test_flatten_predictions_with_Nones():
     output_batch = flatten_predictions(input_batch)
     expected_output = np.array([1, None, 3]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
     assert np.all(np.equal(output_batch, expected_output)), f"flattened predictions should be {expected_output} but is {output_batch}"
+
+
+def test_FaceDetectorYN_output():
+    """
+    Test if the output with a test image is correct
+    """
+    image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    h, w, _ = image.shape
+    detector = FaceDetectorYN(input_size=(w, h), draw=True)
+    output = detector(image)
+    assert np.all(np.equal(output['image'], image)), 'image forwarding does not work correctly'
+    assert type(output['boxes2D']) == list
+    expected_boxes2D = [Box2D((376, 49, 424, 112), 0.9374542236328125, 'Face'), Box2D((189, 38, 231, 95), 0.9337112307548523, 'Face'), Box2D((87, 70, 126, 130), 0.9286843538284302, 'Face'), Box2D((461, 67, 509, 126), 0.9188944101333618, 'Face'), Box2D((289, 33, 338, 93), 0.9140876531600952, 'Face')]
+    for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
+        assert exp_box.coordinates == box.coordinates
+        assert exp_box.score == box.score
+        assert exp_box.class_name == box.class_name
+
+
+
+def test_FaceDetectorYN_output_no_inpt_size():
+    """
+    Test if the output with a test image is correct
+    """
+    image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    h, w, _ = image.shape
+    detector = FaceDetectorYN()
+    output = detector(image)
+    assert np.all(np.equal(output['image'], image)), 'image forwarding does not work correctly'
+    assert type(output['boxes2D']) == list
+    expected_boxes2D = [Box2D((376, 49, 424, 112), 0.9374542236328125, 'Face'), Box2D((189, 38, 231, 95), 0.9337112307548523, 'Face'), Box2D((87, 70, 126, 130), 0.9286843538284302, 'Face'), Box2D((461, 67, 509, 126), 0.9188944101333618, 'Face'), Box2D((289, 33, 338, 93), 0.9140876531600952, 'Face')]
+    for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
+        assert exp_box.coordinates == box.coordinates
+        assert exp_box.score == box.score
+        assert exp_box.class_name == box.class_name
