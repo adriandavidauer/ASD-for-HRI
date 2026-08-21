@@ -21,7 +21,21 @@
 
             ],
             "console": "integratedTerminal",
-            // "justMyCode": true
+            "justMyCode": true
+        }, 
+        {
+            "name": "Python Debugger: debug run annotate",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.experiments.annotate_video",
+            "args": [
+                "--video",
+                "src/TalkNet-ASD/demo/001.avi",
+                "--output_video",
+                "result.avi"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
-            ]
+    ]
 }
