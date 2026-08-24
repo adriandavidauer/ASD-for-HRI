@@ -6,6 +6,8 @@ Tests for the paz processors needed for the full pipeline
 
 
 # 3rd party imports
+import random
+
 import numpy as np
 import pytest
 from paz.backend.image import show_image
@@ -364,11 +366,9 @@ def test_FaceDetectorYN_output():
         assert exp_box.score == box.score
         assert exp_box.class_name == box.class_name
 
-
-
 def test_FaceDetectorYN_output_no_inpt_size():
     """
-    Test if the output with a test image is correct
+    Test if the output with a test image is correct even if no input_size is given (automatic setting during runtime)
     """
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
     h, w, _ = image.shape
@@ -381,3 +381,49 @@ def test_FaceDetectorYN_output_no_inpt_size():
         assert exp_box.coordinates == box.coordinates
         assert exp_box.score == box.score
         assert exp_box.class_name == box.class_name
+
+def test_PreprocessImages():
+    """
+    Test if the processor returns the correct output shape and range for values
+    """
+    n = random.randint(1,10) # number of images
+    w = random.randint(0, 1024)
+    h = random.randint(0, 1024)
+    preprocess_image = PreprocessImages((w, h), normalize=True)
+    output_images = preprocess_image([test_image] * n)
+    for output_image in output_images:
+        assert output_image.shape == (h,w,3), "should be resized to given shape"
+        assert output_image.dtype == float, "should be casted to float"
+        assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))
+
+def test_PreprocessImages_no_normalization():
+    """
+    Test if the processor returns the correct output shape and range for values
+    """
+    n = random.randint(1,10) # number of images
+    w = random.randint(0, 1024)
+    h = random.randint(0, 1024)
+    preprocess_image = PreprocessImages((w, h), normalize=False)
+    output_images = preprocess_image([test_image] * n)
+    for output_image in output_images:
+        assert output_image.shape == (h,w,3), "should be resized to given shape"
+        assert output_image.dtype == np.uint8, "should be uint8"
+        assert np.all((output_image.min() >= 0) and (output_image.max() <= 255))
+
+def test_PreprocessImages_with_Nones():
+    """
+    Test if the processor returns the correct output shape and range for values
+    """
+    n = random.randint(1,10) # number of images
+    w = random.randint(0, 1024)
+    h = random.randint(0, 1024)
+    preprocess_image = PreprocessImages((w, h), normalize=True)
+    input_images = [None, test_image, None] * n
+    output_images = preprocess_image(input_images)
+    for input_image, output_image in zip(input_images, output_images):
+        if input_image is None:
+            assert output_image is None, "None should be forwarded but is not"
+        else:
+            assert output_image.shape == (h,w,3), "should be resized to given shape"
+            assert output_image.dtype == float, "should be casted to float"
+            assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))

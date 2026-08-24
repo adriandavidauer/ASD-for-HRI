@@ -403,19 +403,20 @@ class AddClassAndScoreToBoxes(Processor):
             box2D.class_name = class_name
             # return_boxes.append(add_class_and_score({'class_name': class_name, 'scores': [score]}, box2D))
         return boxes            
-# TODO: write tests!
 class PreprocessImages(Processor):
     """Preprocess RGB images by resizing it to the given ``shape``. And cast it to the given ``dtype``. 
     Can contain Nones in the batch and will return a batch with Nones in the same position.
 
     # Arguments
-        shape: List of two Ints.
+        shape: List of two Ints. (w,h)
         dtype: np.dtype. Data type to cast the image to.
     """
-    def __init__(self, shape, dtype=float):
+    def __init__(self, shape, normalize=True):
         super(PreprocessImages, self).__init__()
         self.resize = pr.ResizeImage(shape)
-        self.cast = pr.CastImage(dtype)
+        self.cast = pr.CastImage(float)
+        self.normalizer = pr.NormalizeImage()
+        self.normalize = normalize
 
     def call(self, images):
         ret_batch = []
@@ -427,7 +428,9 @@ class PreprocessImages(Processor):
                     ret_batch.append(None)
                 else:
                     image = self.resize(image)
-                    image = self.cast(image)
+                    if self.normalize:
+                        image = self.cast(image)
+                        image = self.normalizer(image)
                     ret_batch.append(image)
         return ret_batch
 
@@ -449,14 +452,21 @@ class PreprocessImages(Processor):
 #     return box
 
 
-# TODO: write a test
 class FaceDetectorYN(Processor):
     """FaceDetectorYN pipeline for detecting faces
 
     # Arguments
+        input_size: Tuple of Integers: (Width, Height) of the input images. 
+                    Not setting will trigger automatic setting during runtime which can slow down the pipeline a bit.
         class_name: String indicating the class name.
         color: List indicating the RGB color e.g. ``[0, 255, 0]``.
         draw: Boolean. If ``False`` the bounding boxes are not drawn.
+        model_path: path to the Model defaults to the 2026may model
+        conf_threshold: Float. the threshold to filter out bounding boxes of score smaller than the given value
+        nms_threshold: Float. the threshold to suppress bounding boxes of IoU bigger than the given value
+        topK: Integer. 	keep top K bboxes before NMS
+        backendId: Integer. the id of backend
+        targetId: Integer.	the id of target device
 
     # Returns
         A function that takes an RGB image and outputs the predictions
@@ -465,7 +475,6 @@ class FaceDetectorYN(Processor):
         inferences and a list of ``paz.abstract.messages.Boxes2D``.
 
     """
-    # TODO: add all aparams (input_size is (W, H))
     def __init__(self, input_size=[320, 320], class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'), conf_threshold=0.6, nms_threshold=0.3, topK=5000, backendId=0, targetId=0):
         super(FaceDetectorYN, self).__init__()
         self.detector = cv2.FaceDetectorYN.create(model=model_path,
