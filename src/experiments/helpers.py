@@ -4,11 +4,21 @@ from datetime import datetime
 
 LOGGER = logging.getLogger(__name__)
 
+CONTAINMENT_THRESHOLD = 0.5  # accept a match when the smaller box is ≥50% covered
 
-def setup_logging(log_name='unitalk', verbose=False, log_dir='/app/data/logs'):
-    """Attach a debug file handler and a console handler to the root logger."""
-    os.makedirs(log_dir, exist_ok=True)
-    path = f'{log_dir}/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
+_LABEL_MAP = {
+    'SPEAKING_AUDIBLE': 'speaking',
+    'NOT_SPEAKING':     'not-speaking',
+}
+
+_PredBox = namedtuple('_PredBox', ['coordinates', 'class_name'])
+
+
+def setup_logging(log_name="unitalk", verbose=False, path=None):
+    if path is None:
+        path = '/app/data/logs'
+    os.makedirs(path, exist_ok=True)
+    path = f'{path}/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
 
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)

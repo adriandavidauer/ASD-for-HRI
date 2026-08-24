@@ -11,7 +11,7 @@ import time
 
 import pandas as pd
 
-from helpers import setup_logging
+from .helpers import setup_logging
 
 logger = logging.getLogger("download_unitalk")
 

@@ -9,12 +9,13 @@ import bz2
 import errno
 import os
 import urllib.request
+from collections import deque
+
 
 # 3rd party imports
 import dlib
 
 from paz.models.classification import VVAD_LRS3_LSTM, CNN2Plus1D
-from paz.models.detection.haar_cascade import HaarCascadeDetector
 from paz.datasets import get_class_names
 from paz.pipelines import PreprocessImage
 from paz import processors as pr
@@ -40,96 +41,47 @@ from tqdm import tqdm
 
 
 # local imports
+from .processors import *
 
 # end file header
 __author__      = 'Adrian Auer'
 
 
-Average_Options = ['mean', 'weighted']
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
 
 
 
-class DownloadProgressBar(tqdm):
-    def update_to(self, b=1, bsize=1, tsize=None):
-        if tsize is not None:
-            self.total = tsize
-        self.update(b * bsize - self.n)
-
-
-def download_url(url, output_path):
-    with DownloadProgressBar(unit='B', unit_scale=True,
-                             miniters=1, desc=url.split('/')[-1]) as t:
-        urllib.request.urlretrieve(
-            url, filename=output_path, reporthook=t.update_to)
-
-def SHAPE_PREDICTOR_68_FACE_LANDMARKS():
-    predictor_path = Path(__file__).absolute().parent.parent / "models" / \
-        'shape_predictor_68_face_landmarks.dat'
-    compressed_file = Path(predictor_path.parent /
-                           (predictor_path.name + '.bz2'))
-    if not predictor_path.exists():
-        download_url('https://github.com/davisking/dlib-models/raw/master/shape_predictor_68_face_landmarks.dat.bz2',
-                     compressed_file)
-
-        with open(predictor_path, 'wb') as new_file, bz2.BZ2File(compressed_file, 'rb') as file:
-            for data in iter(lambda: file.read(100 * 1024), b''):
-                new_file.write(data)
-
-        # remove compressed file
-        compressed_file.unlink()
-
-        if predictor_path.exists():
-            return predictor_path
-        else:  # This case should never happen! is only possible if file is deleted externally
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), predictor_path)
-    else:
-        return predictor_path
     
 
-def buildFeatureLSTM(input_shape, num_lstm_layers=1, lstm_dims=32, num_dense_layers=1, dense_dims=512, **kwargs):
-        """adjusted from https://github.com/adriandavidauer/VVAD/tree/main to rebuild model with weights in Keras 3 format."""
-        model = Sequential()
-        # handels input shape for Keras 3
-        model.add(Input(shape=input_shape))        
-        model.add(TimeDistributed(
-            Flatten(input_shape=(input_shape[-2], input_shape[-1]))))
-        if num_lstm_layers > 1:
-            for i in range(num_lstm_layers - 1):
-                # if not i:
-                #     model.add(LSTM(lstm_dims, input_shape=input_shape, return_sequences=True))
-                #     model.add(BatchNormalization())
-                # else:
-                model.add(LSTM(lstm_dims, return_sequences=True))
-                model.add(BatchNormalization())
+def load_vvad_classifier(architecture):
+    """Load the Keras classifier model for the given architecture.
+    
+    # Arguments
+        architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
+    
+    # Returns
+        tuple: (Keras model for the given architecture, input shape of the model)
+    """
+    if architecture == 'VVAD-LRS3-LSTM':
+        return (VVAD_LRS3_LSTM(weights='VVAD_LRS3'), (38, 96, 96, 3))
+    elif architecture.startswith('CNN2Plus1D'):
+        return (CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture)), (38, 96, 96, 3))
+    elif architecture == 'LipShape':
+        return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras')), (38, 20, 2))
+    elif architecture == 'FaceShape':
+        return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras')), (38, 68, 2))
+    else:
+        raise ValueError(f"Unsupported architecture: {architecture}. Supported architectures are: {Architecture_Options}")
 
-        # if model.layers:
-        model.add(LSTM(lstm_dims))
-        model.add(BatchNormalization())
-        # else:
-        #     model.add(LSTM(lstm_dims,input_shape=input_shape))
-        #     model.add(BatchNormalization())
-
-        # Add some more dense here
-        for i in range(num_dense_layers):
-            model.add(Dense(dense_dims, activation='relu'))
-
-        model.add(Dense(1, activation="sigmoid"))
-        model.compile(loss="binary_crossentropy",
-                      optimizer='sgd',
-                      metrics=["accuracy"])
-
-        modelName = 'FeatureLSTM{}_'.format(input_shape) + str(num_lstm_layers) + '_' + str(
-            lstm_dims) + '_' + str(num_dense_layers) + '_' + str(dense_dims)
-        # model.build(input_shape)
-        return model, modelName    
 
 class ClassifyVVAD(SequentialProcessor):
     """Visual Voice Activity Detection pipeline for classifying speaking and not speaking from cropped RGB face
     video clips.
+    Expects a batch of face images - each image representig a different entity. 
+    Images will be buffered until the inputsize of the model.
+    Returns a batch of (averaged) predictions - each prediction corresponding to the entity in the input image at the same index.
 
     # Arguments
         input_size: Tuple of integers. Input shape to the model in following format: (frames, height, width, channels)
@@ -139,146 +91,76 @@ class ClassifyVVAD(SequentialProcessor):
         stride: Integer. How many frames are between the predictions (computational expansive (low update rate) vs
             high latency (high update rate))
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
-        average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set average to 1 to
-            disable averaging
+        weigthed: Boolean. 
+                If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
+                If False just the average over all entries
     """
-    def __init__(self, input_size=(38, 96, 96, 3), architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, average_type='mean'):
+    def __init__(self, architecture='CNN2Plus1D_Light',
+                 stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5):
         super(ClassifyVVAD, self).__init__()
-        assert average_type in Average_Options, f"'{average_type}' is not in {Average_Options}"
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
-        if architecture == 'VVAD-LRS3-LSTM':
-            self.classifier = VVAD_LRS3_LSTM(weights='VVAD_LRS3')
-        elif architecture.startswith('CNN2Plus1D'):
-            self.classifier = CNN2Plus1D(weights='VVAD_LRS3',
-                                         architecture=str(architecture))
-        elif architecture == 'LipShape':
-            self.classifier = load_model(str(Path(__file__).absolute().parent.parent  / "models" / 'paz_LipShape_0.8958.keras'))
-            input_size = (38, 20, 2)
-        elif architecture == 'FaceShape':
-            self.classifier = load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras'))
-            input_size = (38, 68, 2)
+        classifier, input_size = load_vvad_classifier(architecture)
+        # Dummy predict to fully initialize 
+        classifier(np.array([np.empty(input_size)]))
 
         self.class_names = get_class_names('VVAD_LRS3')
 
-        if 'Shape' in architecture:
-            # empty preprocess for shape features
-            preprocess = SequentialProcessor()
-            preprocess.add(GetShapeFeatures(architecture=architecture))
+        preprocess = SequentialProcessor()
 
+        if 'Shape' in architecture:            
+            preprocess.add(GetShapeFeatures(architecture=architecture)) # works on batch of face images not on batch of samples - needs to be done before buffering into a sample
         else:
-            preprocess = PreprocessImage(input_size[1:3], (0.0, 0.0, 0.0))
-        self.buffer_images = pr.BufferImages(input_size, stride=stride)
-        preprocess.add(self.buffer_images)
-
-        if 'Shape' in architecture:
-            preprocess.add(NormalizeShapeSample())
+            preprocess.add(PreprocessImages(input_size[1:3])) # works on batch of images not on batch of samples - needs to be done before buffering into a sample 
+        self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty)
+        # We buffer the incoming face images or features
+        preprocess.add(self.buffer_features)
 
 
-        self.add(pr.PredictWithNones(self.classifier, preprocess))
+        if 'Shape' in architecture:            
+            preprocess.add(NormalizeShapeSample()) # works on batch of samples
 
-        weighted_mean = (average_type == 'weighted')
-        self.avg = pr.AveragePredictions(averaging_window_size, weighted_mean)
-        self.add(pr.ControlMap(self.avg, [0], [0]))
+        
 
-        self.add(pr.ControlMap(pr.NoneConverter(), [0], [0]))
-        self.add(pr.CopyDomain([0], [1]))
-        self.add(pr.ControlMap(pr.FloatToBoolean(), [0], [0]))
-        self.add(pr.ControlMap(pr.BooleanToTextMessage(true_message=self.class_names[0], false_message=self.class_names[1]), [0], [0]))
-        self.add(pr.WrapOutput(['class_name', 'scores']))
+
+        self.add(PredictWithNones(model=classifier, preprocess=preprocess, postprocess=flatten_predictions))
+
+        #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in and max_consecutive_empty is set to stride so that if the model gives no predictions for a stride steps this will not cause the buffer to be reset
+        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=stride, return_incomplete_samples=True) 
+        self.add(self.buffer_predictions)
+
+        self.avg = AveragePredictions(weighted=weighted, normalize=True) # normalize to [0, 1] so that the output is always in [0, 1] independent of the averaging_window_size
+        self.add(self.avg)
+        # is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
+        # self.add(pr.ControlMap(self.avg, [0], [0]))
+        # why convert nones to 0, makes no sese because the output of the model could be zero as well
+        # self.add(pr.ControlMap(pr.NoneConverter(), [0], [0]))
+        # dont get it
+        # self.add(pr.CopyDomain([0], [1]))
+        # self.add(pr.ControlMap(pr.FloatToBoolean(), [0], [0]))
+        # self.add(pr.ControlMap(pr.BooleanToTextMessage(true_message=self.class_names[0], false_message=self.class_names[1]), [0], [0]))
+        # self.add(pr.WrapOutput(['class_name', 'scores']))
     
     def reset(self):
         """Clear temporal state: clip buffer (BufferImages) and score window (AveragePredictions)."""
-        # BufferImages
-        self.buffer_images.frames_since_last_update = 0
-        self.buffer_images.buffer_index = 0
-        self.buffer_images.is_full = False
-        if isinstance(self.buffer_images.buffer, np.ndarray):
-            self.buffer_images.buffer[...] = 0
+        # Clear Buffer
+        self.buffer_features.reset()
 
         # AveragePredictions
-        self.avg.predictions.clear()
+        self.buffer_predictions.reset()
 
 
-class NormalizeShapeSample(Processor):
-    """Processor to normalize a faceShape or LipShape sample"""
-    def __init__(self):
-        super(NormalizeShapeSample, self).__init__()
 
-    def _getDist(self, sample):
-        """
-        calcing the distance vectors for a sample
 
-        :param sample: the sample we want the distances to be calculated
-        :type sample: numpy array
-        """
-        # print(f'{type(sample)=}')
-        outSample = np.empty(sample.shape, dtype=np.float64)  # this sets the dtype to np.float64
-        base = sample[0][0]
-        # print('SAMPLESHAPE: {}  -  should be (38, 68, 2)'.format(sample.shape))
-        # print("BASE for sample: {}".format(base))
-        # TODO: is there a faster way than a loop? Matrix substraction?
-        for frame_num, frame in enumerate(sample):
-            newFrame = np.empty(frame.shape, dtype=np.float64)
-            for pos_num, pos in enumerate(frame):
-                # calc distance to base
-                xdist = float(pos[0]) - float(base[0])
-                ydist = float(pos[1]) - float(base[1])
-                newFrame[pos_num] = [xdist, ydist]
-            outSample[frame_num] = newFrame
-        return outSample
-
-    def _normalize(self, arr):
-        """
-        Normalizes the features of the the array to [-1, 1]. 
-        """
-        arrMax = np.max(arr)
-        arrMin = np.min(arr)
-        absMax = np.max([np.abs(arrMax), np.abs(arrMin)])
-        return arr/absMax
-    
-    def call(self, sample):
-        if sample is None:
-            return None
-        outputArray = self._getDist(sample[0]) # a batch of samples with size 1 is used for the model predicition
-        outputArray =  np.array([self._normalize(outputArray)]) # a batch of samples with size 1 is used for the model predicition
-        # print(f'{outputArray=}')
-        return outputArray
-
-class GetShapeFeatures(Processor):
-    """Processor to extract shape features from cropped RGB face using dlib's shape predictor."""
-    def __init__(self, architecture='FaceShape', shape_predictor_path=None):
-        super(GetShapeFeatures, self).__init__()
-        if shape_predictor_path is None:
-            shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
-        self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
-        self.architecture = architecture
-
-    def call(self, image):
-        shape = self.shape_predictor(image, dlib.rectangle(
-                0, 0, image.shape[1], image.shape[0]))
-        if self.architecture == 'LipShape':
-            # return only lip landmarks (48-67)
-            return np.array([(p.x, p.y) for p in shape.parts()[48:68]]) 
-        else:
-            return np.array([(p.x, p.y) for p in shape.parts()])
-
-class DetectVVAD(Processor):
-    """Visual Voice Activity Detection classification and detection pipeline.
+class ASD(Processor):
+    """Active Speaker Detection pipeline.
 
     # Example
         ``` python
-        from paz.backend.camera import VideoPlayer, Camera
-        import paz.pipelines.detection as dt
-
-        detect = DetectVVAD()
-
-        pipeline = dt.DetectVVAD()
-        # To input multiple images, use a camera or a prerecorded video
-        camera = Camera(args.camera_id)
-        player = VideoPlayer((640, 480), pipeline, camera)
-        player.run()
+            pipeline = ASD(architecture='LipShape')
+            camera = Camera(0)
+            player = VideoPlayer((640, 480), pipeline, camera)
+            player.run()
         ```
 
     # Returns
@@ -301,28 +183,20 @@ class DetectVVAD(Processor):
             disable averaging
     """
 
-    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
-                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5,
-                 cascade='frontalface_alt2', cascade_scale=1.05, cascade_neighbors=3):
-        super(DetectVVAD, self).__init__()
-        self.offsets = offsets
-        self.colors = colors
-        self.min_frames = int(min_frames)
-        self.patience = int(patience)
+    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
+                 weighted= True, max_consecutive_empty=2, annotate_output=False):
+        super(ASD, self).__init__()
+        self.annotate_output = annotate_output
+        self.offsets = [0,0]
+        self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
         self.absent_counts = []
 
         #detection
         self.copy = pr.Copy()
-        # Tuned for GT-box recall: 'frontalface_default' at scale=1.3/neighbors=5 finds no
-        # face at all in 78-89% of frames on profile-heavy videos. Spurious boxes are free
-        # here because only GT rows are scored, so these favour recall over precision.
-        self.detect = dt.DetectHaarCascade(
-            HaarCascadeDetector(cascade, class_arg=0,
-                                scale=float(cascade_scale), neighbors=int(cascade_neighbors)),
-            ['Face'], [[0, 255, 0]], draw=False)
+        self.detect = dt.HaarCascadeFrontalFace()
         self.square = SequentialProcessor()
         self.square.add(pr.SquareBoxes2D())
-        self.square.add(pr.OffsetBoxes2D(offsets))
+        self.square.add(pr.OffsetBoxes2D(self.offsets))
         self.clip = pr.ClipBoxes2D()
         self.crop = pr.CropBoxes2D()
 
@@ -330,78 +204,51 @@ class DetectVVAD(Processor):
         self.vvad_args = dict(
             stride=stride,
             averaging_window_size=averaging_window_size,
-            average_type=str(average_type),
-            architecture=architecture
+            weighted=weighted,
+            architecture=architecture, max_consecutive_empty=max_consecutive_empty
         )
-        self.classifiers = []  
-        self.adders = [] 
-        self.frame_counts = [] 
-        self.miss_counts  = []     
+        class_names = get_class_names('VVAD_LRS3')
+        corrected_class_names = [class_names[1], class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
+        self.classifier = AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args), class_names=corrected_class_names, decision_threshold=decision_threshold)
+        
 
-        _tmp = ClassifyVVAD(**self.vvad_args)
-        self.class_names = list(_tmp.class_names)  
-        del _tmp
-      
+        self.class_names = list(get_class_names('VVAD_LRS3'))
+        self.class_names.append('No Prediction yet')
+
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
     def call(self, image):
+        # get the face boxes and crop the faces from the image
         image_copy = self.copy(image)
         boxes2D = self.detect(image_copy)['boxes2D']
         boxes2D = self.square(boxes2D)
         boxes2D = self.clip(image, boxes2D)
         cropped_images = self.crop(image, boxes2D)
 
-        N = len(cropped_images)
+        # call classifyVVAD for the whole batch of faces
+        boxes2D = self.classifier(cropped_images, boxes2D)
 
-        # one (classifier, adder) pair per face slot
-        while len(self.adders) < N:
-            clf = ClassifyVVAD(**self.vvad_args)
-            self.classifiers.append(clf)
-            self.adders.append(pr.AddClassAndScoreToBoxes(clf))
-            self.frame_counts.append(0)
-            self.miss_counts.append(0)
-            self.absent_counts.append(0)
-
-        # Increment counters for the first N slots (faces we actually saw this frame)
-        for i in range(N):
-            self.frame_counts[i] += 1
-            self.miss_counts[i] = 0
-            self.absent_counts[i] = 0
-
-        # Reset counters
-        for i in range(N, len(self.adders)):
-            self.miss_counts[i] += 1
-            self.absent_counts[i] += 1
-            if self.miss_counts[i] > self.patience:
-                # clear counter and clear the VVAD temporal buffer
-                self.frame_counts[i] = 0
-                self.classifiers[i].reset() 
-                self.miss_counts[i] = 0
-        # Drop dangling tail slots that have been absent long enough
-        while len(self.adders) > N and self.absent_counts[-1] >= self.min_frames:
-            self.adders.pop()
-            self.classifiers.pop()
-            self.frame_counts.pop()
-            self.miss_counts.pop()
-            self.absent_counts.pop()
-
-        # Classify and update only the slots that have matured enough frames
-        updated_boxes = []
-        for i, (adder, crop, box) in enumerate(zip(self.adders, cropped_images, boxes2D)):
-            updated = adder([crop], [box])[0] 
-            if self.frame_counts[i] >= self.min_frames:
-                updated_boxes.append(updated)
-
-        boxes2D = updated_boxes
-        image = self.draw(image, boxes2D)
+        # only if flag is set
+        if self.annotate_output:
+            image = self.draw(image, boxes2D)
         return self.wrap(image, boxes2D)
 
+class DetectVVAD(ASD):
+    """Deprecated Version of ASD.
+    """
+    def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
+                 average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
+        super(DetectVVAD, self).__init__(architecture=architecture, stride=stride,
+                                         averaging_window_size=averaging_window_size,
+                                         average_type=average_type, offsets=offsets,
+                                         colors=colors, max_consecutive_empty=patience)
+        raise DeprecationWarning("DetectVVAD is deprecated. Use ASD instead.")
 if __name__ == '__main__':
     # load Processor for testing
     #test_classiffier = ClassifyVVAD(architecture='LipShape')
-    # TODO: run processor for testing
-    pipeline = DetectVVAD(architecture='FaceShape')
+    # run processor for testing
+    pipeline = ASD(architecture='LipShape', annotate_output=True)
     camera = Camera(0)
     player = VideoPlayer((640, 480), pipeline, camera)
     player.run()

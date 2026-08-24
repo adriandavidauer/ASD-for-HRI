@@ -3,12 +3,30 @@
              "context": ".." },
     // Enable GPU support for the container
     "runArgs": [
-        "--gpus=all"
+        "--gpus=all",
+        "--device=/dev/video0:/dev/video0",
+        "--device=/dev/video1:/dev/video1",
+        "--group-add=video"
     ], 
     // Mount your host home directory to the container user's home directory
     "mounts": [
         "source=${localEnv:HOME},target=/home/vscode/host-home,type=bind,consistency=cached"
     ],
+
     // Ensures permissions align if your local user ID doesn't match the container
-    "updateRemoteUserUID": true
+    "updateRemoteUserUID": true,
+
+
+    // Silences the root pip warning permanently inside the container
+    "containerEnv": {
+        "PIP_ROOT_USER_ACTION": "ignore"
+    },
+    "customizations": 
+        {"vscode": 
+            {"extensions": 
+            ["ms-python.python"]
+            }
+        },
+    "postCreateCommand": "pip install -e '.[dev]'"
+
 }

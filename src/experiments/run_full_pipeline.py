@@ -17,9 +17,18 @@ _ROOT = Path(__file__).resolve().parent
 _SRC = _ROOT / 'src'
 sys.path.insert(0, str(_SRC))
 
-from asd4hri.run_vvad_on_video import run_vvad_on_video
-from download_uni_talk import download_video
-from helpers import setup_logging
+import cv2
+
+from .run_asd_on_unitalk_video import run_asd_on_video
+from .download_uni_talk import download_video
+from .helpers import (
+    setup_logging,
+    load_annotations,
+    load_predictions_csv,
+    build_frame_map,
+    create_writer,
+    annotate_debug_frame,
+)
 
 LOGGER = logging.getLogger('pipeline')
 
@@ -50,12 +59,6 @@ def parse_args():
                    help='Override the auto-generated log file path')
     p.add_argument('--stride', default=1,
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
-    p.add_argument('--cascade', default='frontalface_alt2',
-                   help='OpenCV Haar cascade name (default: frontalface_alt2)')
-    p.add_argument('--cascade_scale', type=float, default=1.05,
-                   help='Haar scaleFactor; lower finds more faces but is slower (default: 1.05)')
-    p.add_argument('--cascade_neighbors', type=int, default=3,
-                   help='Haar minNeighbors; lower is more permissive (default: 3)')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Also emit INFO-level messages on the console')
     return p.parse_args()
@@ -137,11 +140,9 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
 
 
         try:
-            run_vvad_on_video(
+            run_asd_on_video(
                 str(video_path), str(predictions_csv),
-                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride,
-                cascade=args.cascade, cascade_scale=args.cascade_scale,
-                cascade_neighbors=args.cascade_neighbors
+                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)
