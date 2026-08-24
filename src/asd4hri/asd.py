@@ -50,7 +50,7 @@ __author__      = 'Adrian Auer'
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
-
+FaceDetector_Options = ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YOLOv10-Face']
 
 
     
@@ -179,12 +179,17 @@ class ASD(Processor):
         stride: Integer. How many frames are between the predictions (computational expansive (low stride) vs
             high latency (high stride))
         averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
-        average_type: String. 'mean' or 'weighted'. How the predictions are averaged. Set averaging_window_size to 1 to
-            disable averaging
+        weighted: Bool. Flag if the window averaging should be performed weighted by the index of the frame in the averaging window.
+        decision_threshold: Float. Threashold for deciding positive or negative sample with the score of the model.
+        max_consecutive_empty: Integer. Number of face images that can be missed before the buffer will be cleared. 
+            Low number might cause small samples or missing predictions for fixed sample length. High number might cause glitches in samples. 
+        annotate_output: Bool. Flag if the bounding box, score  and predicted label should be written to the image.
+        detector: String. Possible choices for the face detector: ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YOLOv10-Face'].
+        input_size: Tuple of Integers: (Width, Height) of the input images. This is needed by some of the face detectors. 
+            Not setting will trigger automatic setting during runtime which can slow down the pipeline a bit.
     """
-
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, annotate_output=False):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None):
         super(ASD, self).__init__()
         self.annotate_output = annotate_output
         self.offsets = [0,0]
@@ -193,7 +198,18 @@ class ASD(Processor):
         
         #detection
         self.copy = pr.Copy()
-        self.detect = dt.HaarCascadeFrontalFace()
+        if detector == 'HaarCascade':
+            self.detect = dt.HaarCascadeFrontalFace()
+        elif detector == 'YuNet':
+            self.detect = FaceDetectorYN(input_size=input_size) # TODO: parameter forwarding with kwargs?
+        elif detector == 'RetinaFace':
+            raise NotImplementedError
+        elif detector ==  'InsightFace':
+            raise NotImplementedError
+        elif detector == 'YOLOv10-Face':
+            raise NotImplementedError
+        else:
+            raise ValueError(f"Unknown detector {detector}. Must be one of {FaceDetector_Options}")
         self.square = SequentialProcessor()
         self.square.add(pr.SquareBoxes2D())
         self.square.add(pr.OffsetBoxes2D(self.offsets))

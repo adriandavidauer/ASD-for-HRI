@@ -6,8 +6,12 @@ Tests for the paz processors needed for the full pipeline
 
 
 # 3rd party imports
+import random
+
 import numpy as np
 import pytest
+from paz.backend.image import show_image
+
 
 # local imports
 from asd4hri.processors import *
@@ -344,3 +348,82 @@ def test_flatten_predictions_with_Nones():
     output_batch = flatten_predictions(input_batch)
     expected_output = np.array([1, None, 3]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
     assert np.all(np.equal(output_batch, expected_output)), f"flattened predictions should be {expected_output} but is {output_batch}"
+
+
+def test_FaceDetectorYN_output():
+    """
+    Test if the output with a test image is correct
+    """
+    image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    h, w, _ = image.shape
+    detector = FaceDetectorYN(input_size=(w, h), draw=True)
+    output = detector(image)
+    assert np.all(np.equal(output['image'], image)), 'image forwarding does not work correctly'
+    assert type(output['boxes2D']) == list
+    expected_boxes2D = [Box2D((376, 49, 424, 112), 0.9374542236328125, 'Face'), Box2D((189, 38, 231, 95), 0.9337112307548523, 'Face'), Box2D((87, 70, 126, 130), 0.9286843538284302, 'Face'), Box2D((461, 67, 509, 126), 0.9188944101333618, 'Face'), Box2D((289, 33, 338, 93), 0.9140876531600952, 'Face')]
+    for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
+        assert exp_box.coordinates == box.coordinates
+        assert exp_box.score == box.score
+        assert exp_box.class_name == box.class_name
+
+def test_FaceDetectorYN_output_no_inpt_size():
+    """
+    Test if the output with a test image is correct even if no input_size is given (automatic setting during runtime)
+    """
+    image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    h, w, _ = image.shape
+    detector = FaceDetectorYN()
+    output = detector(image)
+    assert np.all(np.equal(output['image'], image)), 'image forwarding does not work correctly'
+    assert type(output['boxes2D']) == list
+    expected_boxes2D = [Box2D((376, 49, 424, 112), 0.9374542236328125, 'Face'), Box2D((189, 38, 231, 95), 0.9337112307548523, 'Face'), Box2D((87, 70, 126, 130), 0.9286843538284302, 'Face'), Box2D((461, 67, 509, 126), 0.9188944101333618, 'Face'), Box2D((289, 33, 338, 93), 0.9140876531600952, 'Face')]
+    for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
+        assert exp_box.coordinates == box.coordinates
+        assert exp_box.score == box.score
+        assert exp_box.class_name == box.class_name
+
+def test_PreprocessImages():
+    """
+    Test if the processor returns the correct output shape and range for values
+    """
+    n = random.randint(1,10) # number of images
+    w = random.randint(0, 1024)
+    h = random.randint(0, 1024)
+    preprocess_image = PreprocessImages((w, h), normalize=True)
+    output_images = preprocess_image([test_image] * n)
+    for output_image in output_images:
+        assert output_image.shape == (h,w,3), "should be resized to given shape"
+        assert output_image.dtype == float, "should be casted to float"
+        assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))
+
+def test_PreprocessImages_no_normalization():
+    """
+    Test if the processor returns the correct output shape and range for values
+    """
+    n = random.randint(1,10) # number of images
+    w = random.randint(0, 1024)
+    h = random.randint(0, 1024)
+    preprocess_image = PreprocessImages((w, h), normalize=False)
+    output_images = preprocess_image([test_image] * n)
+    for output_image in output_images:
+        assert output_image.shape == (h,w,3), "should be resized to given shape"
+        assert output_image.dtype == np.uint8, "should be uint8"
+        assert np.all((output_image.min() >= 0) and (output_image.max() <= 255))
+
+def test_PreprocessImages_with_Nones():
+    """
+    Test if the processor returns the correct output shape and range for values
+    """
+    n = random.randint(1,10) # number of images
+    w = random.randint(0, 1024)
+    h = random.randint(0, 1024)
+    preprocess_image = PreprocessImages((w, h), normalize=True)
+    input_images = [None, test_image, None] * n
+    output_images = preprocess_image(input_images)
+    for input_image, output_image in zip(input_images, output_images):
+        if input_image is None:
+            assert output_image is None, "None should be forwarded but is not"
+        else:
+            assert output_image.shape == (h,w,3), "should be resized to given shape"
+            assert output_image.dtype == float, "should be casted to float"
+            assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))

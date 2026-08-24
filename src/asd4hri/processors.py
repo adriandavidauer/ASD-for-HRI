@@ -16,6 +16,8 @@ from collections import deque
 import dlib
 import tensorflow as tf
 
+import cv2
+
 
 from paz.models.classification import VVAD_LRS3_LSTM, CNN2Plus1D
 from paz.datasets import get_class_names
@@ -25,6 +27,7 @@ from paz.abstract import Processor, SequentialProcessor
 from paz.backend.camera import VideoPlayer, Camera
 import paz.pipelines.detection as dt
 from paz.backend.boxes import add_class_and_score
+from paz.abstract.messages import Box2D
 
 from keras.models import load_model, Sequential
 from keras.layers import Dense, Input, LSTM, TimeDistributed, BatchNormalization, Flatten
@@ -388,7 +391,7 @@ class AddClassAndScoreToBoxes(Processor):
         self.decision_threshold = decision_threshold
         assert len(self.class_name) == 2, f"AddClassAndScoreToBoxes only supports binary classes. Number of classes names must be 2 for binary classification but is {len(self.class_name)}"
 
-    def __call__(self, cropped_images, boxes):
+    def call(self, cropped_images, boxes):
         scores = self.classify(cropped_images)
         for score, box2D in zip(scores, boxes):
             if score is None:
@@ -400,21 +403,22 @@ class AddClassAndScoreToBoxes(Processor):
             box2D.class_name = class_name
             # return_boxes.append(add_class_and_score({'class_name': class_name, 'scores': [score]}, box2D))
         return boxes            
-
-class PreprocessImages(SequentialProcessor):
+class PreprocessImages(Processor):
     """Preprocess RGB images by resizing it to the given ``shape``. And cast it to the given ``dtype``. 
     Can contain Nones in the batch and will return a batch with Nones in the same position.
 
     # Arguments
-        shape: List of two Ints.
+        shape: List of two Ints. (w,h)
         dtype: np.dtype. Data type to cast the image to.
     """
-    def __init__(self, shape, dtype=float):
+    def __init__(self, shape, normalize=True):
         super(PreprocessImages, self).__init__()
         self.resize = pr.ResizeImage(shape)
-        self.cast = pr.CastImage(dtype)
+        self.cast = pr.CastImage(float)
+        self.normalizer = pr.NormalizeImage()
+        self.normalize = normalize
 
-    def __call__(self, images):
+    def call(self, images):
         ret_batch = []
         if images is None:
             return None
@@ -424,7 +428,9 @@ class PreprocessImages(SequentialProcessor):
                     ret_batch.append(None)
                 else:
                     image = self.resize(image)
-                    image = self.cast(image)
+                    if self.normalize:
+                        image = self.cast(image)
+                        image = self.normalizer(image)
                     ret_batch.append(image)
         return ret_batch
 
@@ -444,3 +450,58 @@ class PreprocessImages(SequentialProcessor):
 #     box.class_name = prediction['class_name']
 #     box.score = np.amax(prediction['scores'])
 #     return box
+
+
+class FaceDetectorYN(Processor):
+    """FaceDetectorYN pipeline for detecting faces
+
+    # Arguments
+        input_size: Tuple of Integers: (Width, Height) of the input images. 
+                    Not setting will trigger automatic setting during runtime which can slow down the pipeline a bit.
+        class_name: String indicating the class name.
+        color: List indicating the RGB color e.g. ``[0, 255, 0]``.
+        draw: Boolean. If ``False`` the bounding boxes are not drawn.
+        model_path: path to the Model defaults to the 2026may model
+        conf_threshold: Float. the threshold to filter out bounding boxes of score smaller than the given value
+        nms_threshold: Float. the threshold to suppress bounding boxes of IoU bigger than the given value
+        topK: Integer. 	keep top K bboxes before NMS
+        backendId: Integer. the id of backend
+        targetId: Integer.	the id of target device
+
+    # Returns
+        A function that takes an RGB image and outputs the predictions
+        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
+        The corresponding values of these keys contain the image with the drawn
+        inferences and a list of ``paz.abstract.messages.Boxes2D``.
+
+    """
+    def __init__(self, input_size=[320, 320], class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'), conf_threshold=0.6, nms_threshold=0.3, topK=5000, backendId=0, targetId=0):
+        super(FaceDetectorYN, self).__init__()
+        self.detector = cv2.FaceDetectorYN.create(model=model_path,
+            config="",
+            input_size=input_size,
+            score_threshold=conf_threshold,
+            nms_threshold=nms_threshold,
+            top_k=topK,
+            backend_id=backendId,
+            target_id=targetId)
+        self.input_size = input_size
+        self.draw = draw
+        self.color = color
+        self.class_name = class_name
+        self.drawer = pr.DrawBoxes2D([self.class_name], [self.color], True)
+
+    def call(self, image):
+        # set input size if necessary
+        if (image.shape[1], image.shape[0]) != self.input_size:
+            self.detector.setInputSize((image.shape[1], image.shape[0]))
+        retval, faces = self.detector.detect(image)
+        # create boxes2D with the corresponding points and the score and the label
+        boxes2D = []
+        if faces is not None: 
+            for face in faces:
+                # fractional pixel coordinates -> round? int()? I will loose precision if I do it but drawing does not work and cropping might not work as well
+                boxes2D.append(Box2D((int(face[0]), int(face[1]), int(face[0]+face[2]), int(face[1]+face[3])), face[14], 'Face'))
+        if self.draw:
+            image = self.drawer(image, boxes2D)
+        return {'image': image, 'boxes2D': boxes2D}

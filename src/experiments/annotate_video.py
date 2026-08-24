@@ -4,11 +4,11 @@ script to annotate video with bounding boxes, scores and label
 
 # System imports
 import argparse
-
+import time
 import cv2
 
 # 3rd party imports
-from asd4hri.asd import ASD
+from asd4hri.asd import ASD, FaceDetector_Options
 # from asd4hri.asd import load_vvad_classifier
 # from paz.backend.camera import VideoPlayer
 from paz.backend.image import resize_image, convert_color_space, show_image, BGR2RGB
@@ -76,11 +76,11 @@ if __name__ == '__main__':
     parser.add_argument('--decision_threshold', type=float, default=0.5, help='Decision threshold for predictions')
     parser.add_argument('--weighted', type=bool, default=True, help='Whether to use weighted predictions')
     parser.add_argument('--max_consecutive_empty', type=int, default=2, help='Maximum number of consecutive empty frames before stopping annotation')
-    
+    parser.add_argument('--face_detector', type=str, default='YuNet', choices=FaceDetector_Options, help='the face detector for the ASD pipeline')
     args = parser.parse_args()
 
 
-    pipeline = ASD(architecture=args.architecture, stride=args.stride, averaging_window_size=args.averaging_window_size, decision_threshold=args.decision_threshold, weighted=args.weighted, max_consecutive_empty=args.max_consecutive_empty, annotate_output=True) 
+    pipeline = ASD(architecture=args.architecture, stride=args.stride, averaging_window_size=args.averaging_window_size, decision_threshold=args.decision_threshold, weighted=args.weighted, max_consecutive_empty=args.max_consecutive_empty, annotate_output=True, detector=args.face_detector) 
 
     # open video file
     cap = cv2.VideoCapture(args.video)
@@ -92,10 +92,10 @@ if __name__ == '__main__':
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
-
+    t_0 = time.time()
     # player = VideoPlayer((width, height), pipeline, None)
     record_from_file(pipeline=pipeline, video_file_path=args.video, name=args.output_video, fps=fps, fourCC=fourcc_to_str(fourcc), image_size=(width, height), show=args.show)
-    print(f'saved results to {args.output_video}')
+    print(f'saved results to {args.output_video} in {time.time() - t_0} seconds')
 
 
 
