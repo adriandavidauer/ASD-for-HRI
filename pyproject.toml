@@ -18,9 +18,12 @@ classifiers = [
 ]
 dependencies = [
     "pypaz @ git+https://github.com/adriandavidauer/paz.git", #TODO: change after PR is merged and package released
-    "dlib", 
+    "dlib", # TODO: fix version or upper bound at least
     "keras==3.6.0", 
-    "tqdm"
+    "tqdm", # TODO: fix version or upper bound at least
+    "onnxruntime<2.0", 
+    "onnxruntime-gpu<2.0"
+
 ]
 
 [project.optional-dependencies]
