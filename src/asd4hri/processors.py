@@ -17,6 +17,8 @@ import dlib
 import tensorflow as tf
 
 import cv2
+import numpy as np
+import onnxruntime as ort
 
 
 from paz.models.classification import VVAD_LRS3_LSTM, CNN2Plus1D
@@ -31,15 +33,20 @@ from paz.abstract.messages import Box2D
 
 from keras.models import load_model, Sequential
 from keras.layers import Dense, Input, LSTM, TimeDistributed, BatchNormalization, Flatten
+from tensorflow.keras.utils import get_file
+
 
 import numpy as np
 from tqdm import tqdm
 
 # local imports
+from .retinaface_onnx import cfg_re50 as cfg
+from .retinaface_onnx import PriorBox, decode, py_cpu_nms
 
 # end file header
 __author__      = 'Adrian Auer'
 
+URL = 'https://github.com/adriandavidauer/ASD-for-HRI/releases/download/models/'
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -434,23 +441,6 @@ class PreprocessImages(Processor):
                     ret_batch.append(image)
         return ret_batch
 
-# def add_class_and_score(prediction, box):
-#     """Adds class and score to box.
-
-#     # Arguments
-#         prediction: Dictionary with keys `class_name` and `scores`.
-#         box: Array of shape `(num_nms_boxes, 4 + num_classes)`.
-#     """
-#     if box is None:
-#         return None
-#     if prediction is None:
-#         box.class_name = 'No Prediction yet' 
-#         box.score = -1.0 
-#         return box
-#     box.class_name = prediction['class_name']
-#     box.score = np.amax(prediction['scores'])
-#     return box
-
 
 class FaceDetectorYN(Processor):
     """FaceDetectorYN pipeline for detecting faces
@@ -475,8 +465,11 @@ class FaceDetectorYN(Processor):
         inferences and a list of ``paz.abstract.messages.Boxes2D``.
 
     """
-    def __init__(self, input_size=[320, 320], class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'), conf_threshold=0.6, nms_threshold=0.3, topK=5000, backendId=0, targetId=0):
-        super(FaceDetectorYN, self).__init__()
+    def __init__(self, input_size=[320, 320], class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'), conf_threshold=0.6, nms_threshold=0.3, topK=500, backendId=0, targetId=0, name='FaceDetectorYN'):
+        super(FaceDetectorYN, self).__init__(name=name)
+        if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'):
+            filename = 'face_detection_yunet_2026may.onnx'
+            get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
         self.detector = cv2.FaceDetectorYN.create(model=model_path,
             config="",
             input_size=input_size,
@@ -505,3 +498,118 @@ class FaceDetectorYN(Processor):
         if self.draw:
             image = self.drawer(image, boxes2D)
         return {'image': image, 'boxes2D': boxes2D}
+
+
+
+
+class FaceDetectorRetinaFace(Processor):
+    """FaceDetectorRetinaFace pipeline for detecting faces
+
+    # Arguments
+        class_name: String indicating the class name.
+        color: List indicating the RGB color e.g. ``[0, 255, 0]``.
+        draw: Boolean. If ``False`` the bounding boxes are not drawn.
+        model_path: path to the Model defaults to the 2026may model
+        conf_threshold: Float. the threshold to filter out bounding boxes of score smaller than the given value
+        nms_threshold: Float. the threshold to suppress bounding boxes of IoU bigger than the given value
+        pre_nms_top_k: top K before NMS
+        topK: Integer. 	keep top K bboxes before NMS
+
+    # Returns
+        A function that takes an RGB image and outputs the predictions
+        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
+        The corresponding values of these keys contain the image with the drawn
+        inferences and a list of ``paz.abstract.messages.Boxes2D``.
+
+    """
+    def __init__(self, class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'retinaface_resnet50.onnx'), conf_threshold=0.6, nms_threshold=0.3, pre_nms_top_k=1000, topK=500, backendId=0, targetId=0, name='FaceDetectorRetinaFace'):
+        super(FaceDetectorRetinaFace, self).__init__(name=name)
+        if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'retinaface_resnet50.onnx'):
+            filename = 'retinaface_resnet50.onnx'
+            get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        self.draw = draw
+        self.color = color
+        self.class_name = class_name
+        self.drawer = pr.DrawBoxes2D([self.class_name], [self.color], True)
+        # 1. Load the model session (CPU or GPU)
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        self.retinaface = ort.InferenceSession(model_path, providers=providers)
+        # self.decoder = RetinaFaceDecoder640(conf_threshold=conf_threshold, nms_threshold=nms_threshold, pre_nms_top_k=pre_nms_top_k, topK=topK)
+        self.topK = topK
+        self.nms_threshold = nms_threshold
+        self.pre_nms_top_k = pre_nms_top_k
+        self.conf_threshold = conf_threshold
+        # 2. Get input and output tensor metadata
+        self.input_name = self.retinaface.get_inputs()[0].name
+
+    def call(self, image):
+
+        orig_height, orig_width, _ = image.shape
+
+        img = cv2.resize(image, (640, 640)).astype(np.float32)
+        im_height, im_width, _ = img.shape
+        # scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
+        img -= (104, 117, 123)
+        img = img.transpose(2, 0, 1)
+        img = np.expand_dims(img, axis=0)
+
+        # tic = time.time()
+        inputs = {"input": img}
+        loc, conf, _ = self.retinaface.run(None, inputs)
+        # print('net forward time: {:.4f}s'.format(time.time() - tic))
+
+        # tic = time.time()
+        priorbox = PriorBox(cfg, image_size=(im_height, im_width), format="numpy")
+        priors = priorbox.forward()
+
+        prior_data = priors
+
+        boxes = decode(np.squeeze(loc, axis=0), prior_data, cfg['variance'])
+        # rescale the boxes to original image size
+        boxes = boxes * np.array([orig_width, orig_height, orig_width, orig_height])
+        scores = np.squeeze(conf, axis=0)[:, 1]
+
+        # landms = decode_landm(np.squeeze(landms.data, axis=0), prior_data, cfg['variance'])
+
+        # scale1 = np.array([img.shape[3], img.shape[2], img.shape[3], img.shape[2],
+        #                        img.shape[3], img.shape[2], img.shape[3], img.shape[2],
+        #                        img.shape[3], img.shape[2]])
+        # landms = landms * scale1 / resize
+
+        # ignore low scores
+        inds = np.where(scores > self.conf_threshold)[0]
+        boxes = boxes[inds]
+        # landms = landms[inds]
+        scores = scores[inds]
+
+        # keep top-K before NMS
+        order = scores.argsort()[::-1][:self.pre_nms_top_k]
+        boxes = boxes[order]
+        # landms = landms[order]
+        scores = scores[order]
+
+        # do NMS
+        dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
+        keep = py_cpu_nms(dets, self.nms_threshold)
+        # keep = nms(dets, args.nms_threshold,force_cpu=args.cpu)
+        dets = dets[keep, :]
+        # landms = landms[keep]
+
+        # keep top-K faster NMS
+        dets = dets[:self.topK, :]
+        # landms = landms[:args.keep_top_k, :]
+
+        # dets = np.concatenate((dets, landms), axis=1)
+        # print('post processing time: {:.4f}s'.format(time.time() - tic))
+
+        boxes2D = []
+        if len(dets): 
+            for face in dets:
+                # fractional pixel coordinates -> round? int()? I will loose precision if I do it but drawing does not work and cropping might not work as well
+                boxes2D.append(Box2D((int(face[0]), int(face[1]), int(face[2]), int(face[3])), face[4], 'Face'))
+        if self.draw:
+            image = self.drawer(image, boxes2D)
+        return {'image': image, 'boxes2D': boxes2D}
+
+
+
