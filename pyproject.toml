@@ -28,6 +28,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",  # For generating test coverage reports
     "black>=23.0.0",     # For code formatting
+    "ruff>=0.16.0",      # For linting
     "h5py",
     "scikit-learn",
     "tensorboard",
@@ -39,6 +40,13 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]  # Tells setuptools to look inside the src/ folder for packages
 include = ["asd4hri*"]  # The asterisk ensures subpackages inside asd4hri are caught too
+
+[tool.ruff.lint]
+select = ["D", "DOC"]
+preview = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.pytest.ini_options]
 minversion = "7.0"

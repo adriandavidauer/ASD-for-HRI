@@ -21,14 +21,7 @@ import cv2
 
 from .run_asd_on_unitalk_video import run_asd_on_video
 from .download_uni_talk import download_video
-from .helpers import (
-    setup_logging,
-    load_annotations,
-    load_predictions_csv,
-    build_frame_map,
-    create_writer,
-    annotate_debug_frame,
-)
+from .helpers import setup_logging
 
 LOGGER = logging.getLogger('pipeline')
 
@@ -82,7 +75,7 @@ def load_video_list(args, data_dir: Path):
         return [(os.path.splitext(n)[0], video_dir / n, None) for n in names]
 
     video_dir = data_dir / 'videos' / args.split
-    video_list_path = _ROOT.parent / 'video_list' / 'val.csv'
+    video_list_path = _ROOT.parent / 'experiments' / 'video_list' / 'val.csv'
     if not video_list_path.exists():
         os.makedirs(video_list_path.parent, exist_ok=True)
         urllib.request.urlretrieve(_VIDEO_LIST_URL, video_list_path)
