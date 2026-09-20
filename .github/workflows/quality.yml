@@ -62,7 +62,7 @@ jobs:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: 274393500a8a3dd25c33fb1591d7a156
           filename: lint.json
-          label: ruff D+DOC
+          label: Ruff linting issuess
           message: ${{ steps.ruff.outputs.count == '0' && 'passing' || format('{0} issues', steps.ruff.outputs.count) }}
           color: ${{ steps.ruff.outputs.count == '0' && 'brightgreen' || 'yellow' }}
 
@@ -73,7 +73,7 @@ jobs:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: 274393500a8a3dd25c33fb1591d7a156
           filename: docs.json
-          label: docstring coverage
+          label: Docstring coverage
           message: ${{ steps.docs.outputs.pct }}%
           valColorRange: ${{ steps.docs.outputs.pct }}
           minColorRange: 50

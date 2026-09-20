@@ -12,10 +12,10 @@ pip install -r requirements.txt
 ```
 ## Running Experiments
 
-Predictions run inside the GPU Docker image; scoring runs on the host afterwards. All commands are
+Predictions run inside the GPU Docker image; stats calculation runs after it. All commands are
 issued from the repository root.
 
-### 1. Predictions — Docker (GPU)
+### 1. Predictions - Docker (GPU)
 
 Build from the repository root — the Dockerfile lives in `docker/` but its `COPY` paths are
 root-relative:
@@ -57,9 +57,9 @@ The run above writes to the host under `/Data/data/predictions_cnn1d_scores/`: o
 per video plus `aggregate_time.csv` (frames processed and elapsed time, consumed by the scoring
 step).
 
-### 2. Scoring — `src/experiments/run_stats_batch.sh`
+### 2. Stats - `src/experiments/run_stats_batch.sh`
 
-Scoring runs outside the image: `stats.py` has no imports from the rest of the repository, only needs pandas + numpy. The batch script runs it over one or more
+Stats calculation runs outside the image. The file `stats.py` has no imports from the rest of the repository, only needs pandas + numpy. The batch script runs it over one or more
 prediction folders:
 
 ```bash
@@ -80,7 +80,7 @@ Note:
 - `aggregate_time.csv` must exist in the prediction folder; the summary writer reads timing for
   every video unconditionally.
 
-To score a single folder directly, call
+To calculate stats for a single folder, call
 [`stats.py`](src/experiments/stats.py) using flags:
 (`--predictions_dir`, `--groundtruth_csv`, `--result_dir`, `--workers`) it accepts `--video <id>`,
 `--iou_threshold` (default `0.5`), `--timestamp_tolerance_ms` (default `20`, max prediction/GT frame
