@@ -55,7 +55,7 @@ jobs:
           exit $FAIL
 
       - name: Publish lint badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/36-official-evaluation-tool'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
@@ -66,7 +66,7 @@ jobs:
           color: ${{ steps.ruff.outputs.count == '0' && 'brightgreen' || 'yellow' }}
 
       - name: Publish docs badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/36-official-evaluation-tool'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
