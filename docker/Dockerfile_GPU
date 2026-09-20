@@ -1,17 +1,16 @@
 # ── UniTalk VVAD full evaluation pipeline ─────────────────────────────────────
 #
 #
-# Build:
-#   docker build -t unitalk-vvad .
+# Build (from the repository root, COPY paths are root-relative):
+#   docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
 #
-# Run (download + evaluate, data persisted in a named volume):
-#   docker run --rm -v $(pwd)/data:/app/data unitalk-vvad
+# Run (download + evaluate):
+#   docker run -d --gpus all -v $(pwd)/data:/app/data unitalk-gpu_buffer --data_dir /app/data
 #
-# Skip download if dataset is already present:
-#   docker run --rm -v unitalk-data:/app/data unitalk-vvad --no_download
-#
-# Resume an interrupted run:
-#   docker run --rm -v unitalk-data:/app/data unitalk-vvad --no_download --resume
+# Skip download and pick architecture / output folder (args replace CMD, so repeat --data_dir):
+#   docker run -d --gpus all -v /Data/data:/app/data unitalk-gpu_buffer \
+#       --data_dir /app/data --no_download \
+#       --predictions_dir predictions_cnn1d_scores --architecture CNN2Plus1D
 #
 
 
@@ -80,8 +79,8 @@ ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LI
 
 
 #### TalkNet
-COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
-RUN pip install -r src/TalkNet-ASD/requirement.txt
+#COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
+#RUN pip install -r src/TalkNet-ASD/requirement.txt
 
 
 # ── Application source ────────────────────────────────────────────────────────
