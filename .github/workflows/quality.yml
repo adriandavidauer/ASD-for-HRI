@@ -1,0 +1,79 @@
+name: Quality
+
+on:
+  push:
+    branches: [36-official-evaluation-tool]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install tools
+        run: pip install ruff interrogate
+
+      - name: Run ruff
+        id: ruff
+        run: |
+          ruff check . --output-format concise > ruff.txt || true
+          COUNT=$(grep -c . ruff.txt || true)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Ruff D+DOC violations: $COUNT"
+          cat ruff.txt
+
+      - name: Run interrogate
+        id: docs
+        run: |
+          interrogate -c pyproject.toml --fail-under 0 -v > docs.txt || true
+          PCT=$(grep -oE '[0-9]+\.[0-9]+%' docs.txt | tail -1 | tr -d '%')
+          echo "pct=$PCT" >> "$GITHUB_OUTPUT"
+          echo "Docstring coverage: $PCT%"
+
+      - name: Enforce ratchet
+        run: |
+          BASE_LINT=$(jq -r .ruff_violations .github/quality-baseline.json)
+          BASE_DOCS=$(jq -r .doc_coverage .github/quality-baseline.json)
+          LINT=${{ steps.ruff.outputs.count }}
+          DOCS=${{ steps.docs.outputs.pct }}
+          FAIL=0
+          if [ "$LINT" -gt "$BASE_LINT" ]; then
+            echo "::error::Ruff violations went up: $LINT > $BASE_LINT"; FAIL=1
+          fi
+          if awk "BEGIN{exit !($DOCS < $BASE_DOCS)}"; then
+            echo "::error::Docstring coverage dropped: $DOCS% < $BASE_DOCS%"; FAIL=1
+          fi
+          if [ "$LINT" -lt "$BASE_LINT" ] || awk "BEGIN{exit !($DOCS > $BASE_DOCS)}"; then
+            echo "::notice::Numbers improved — lower .github/quality-baseline.json to lock it in."
+          fi
+          exit $FAIL
+
+      - name: Publish lint badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 274393500a8a3dd25c33fb1591d7a156
+          filename: lint.json
+          label: ruff D+DOC
+          message: ${{ steps.ruff.outputs.count == '0' && 'passing' || format('{0} issues', steps.ruff.outputs.count) }}
+          color: ${{ steps.ruff.outputs.count == '0' && 'brightgreen' || 'yellow' }}
+
+      - name: Publish docs badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 274393500a8a3dd25c33fb1591d7a156
+          filename: docs.json
+          label: docstring coverage
+          message: ${{ steps.docs.outputs.pct }}%
+          valColorRange: ${{ steps.docs.outputs.pct }}
+          minColorRange: 50
+          maxColorRange: 100
