@@ -2,7 +2,7 @@ name: Quality
 
 on:
   push:
-    branches: [36-official-evaluation-tool]
+    branches: [main, 36-official-evaluation-tool]
   pull_request:
 
 jobs:
@@ -22,16 +22,17 @@ jobs:
       - name: Run ruff
         id: ruff
         run: |
-          ruff check . --output-format concise > ruff.txt || true
-          COUNT=$(grep -c . ruff.txt || true)
+          ruff check . --output-format json > ruff.json || true
+          COUNT=$(jq length ruff.json)
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "Ruff D+DOC violations: $COUNT"
-          cat ruff.txt
+          ruff check . --output-format concise || true
 
       - name: Run interrogate
         id: docs
         run: |
           interrogate -c pyproject.toml --fail-under 0 -v > docs.txt || true
+          cat docs.txt
           PCT=$(grep -oE '[0-9]+\.[0-9]+%' docs.txt | tail -1 | tr -d '%')
           echo "pct=$PCT" >> "$GITHUB_OUTPUT"
           echo "Docstring coverage: $PCT%"
@@ -50,12 +51,12 @@ jobs:
             echo "::error::Docstring coverage dropped: $DOCS% < $BASE_DOCS%"; FAIL=1
           fi
           if [ "$LINT" -lt "$BASE_LINT" ] || awk "BEGIN{exit !($DOCS > $BASE_DOCS)}"; then
-            echo "::notice::Numbers improved — lower .github/quality-baseline.json to lock it in."
+            echo "::notice::Numbers improved — update .github/quality-baseline.json to lock it in."
           fi
           exit $FAIL
 
       - name: Publish lint badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/36-official-evaluation-tool'
+        if: github.event_name == 'push'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
@@ -66,7 +67,7 @@ jobs:
           color: ${{ steps.ruff.outputs.count == '0' && 'brightgreen' || 'yellow' }}
 
       - name: Publish docs badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/36-official-evaluation-tool'
+        if: github.event_name == 'push'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
