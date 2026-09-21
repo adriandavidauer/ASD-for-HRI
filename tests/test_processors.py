@@ -355,10 +355,11 @@ def test_FaceDetectorYN_output():
     Test if the output with a test image is correct
     """
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    orig_img = image.copy()
     h, w, _ = image.shape
-    detector = FaceDetectorYN(input_size=(w, h), draw=True)
+    detector = FaceDetectorYN(input_size=(w, h), draw=False)
     output = detector(image)
-    assert np.all(np.equal(output['image'], image)), 'image forwarding does not work correctly'
+    assert np.all(np.equal(output['image'], orig_img)), 'image forwarding does not work correctly' 
     assert type(output['boxes2D']) == list
     expected_boxes2D = [Box2D((376, 49, 424, 112), 0.9374542236328125, 'Face'), Box2D((189, 38, 231, 95), 0.9337112307548523, 'Face'), Box2D((87, 70, 126, 130), 0.9286843538284302, 'Face'), Box2D((461, 67, 509, 126), 0.9188944101333618, 'Face'), Box2D((289, 33, 338, 93), 0.9140876531600952, 'Face')]
     for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
@@ -371,10 +372,11 @@ def test_FaceDetectorYN_output_no_inpt_size():
     Test if the output with a test image is correct even if no input_size is given (automatic setting during runtime)
     """
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    orig_img = image.copy()
     h, w, _ = image.shape
     detector = FaceDetectorYN()
     output = detector(image)
-    assert np.all(np.equal(output['image'], image)), 'image forwarding does not work correctly'
+    assert np.all(np.equal(output['image'], orig_img)), 'image forwarding does not work correctly' 
     assert type(output['boxes2D']) == list
     expected_boxes2D = [Box2D((376, 49, 424, 112), 0.9374542236328125, 'Face'), Box2D((189, 38, 231, 95), 0.9337112307548523, 'Face'), Box2D((87, 70, 126, 130), 0.9286843538284302, 'Face'), Box2D((461, 67, 509, 126), 0.9188944101333618, 'Face'), Box2D((289, 33, 338, 93), 0.9140876531600952, 'Face')]
     for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
@@ -427,3 +429,27 @@ def test_PreprocessImages_with_Nones():
             assert output_image.shape == (h,w,3), "should be resized to given shape"
             assert output_image.dtype == float, "should be casted to float"
             assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))
+
+def test_FaceDetectorRetinaFace_output():
+    """
+    Test if the output with a test image is correct
+    """
+    image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    orig_img = image.copy()
+
+    h, w, _ = image.shape
+    detector = FaceDetectorRetinaFace(draw=False)
+    output = detector(image)
+    # show_image(output['image'], 'test', True)
+    assert np.all(np.equal(output['image'], orig_img)), 'image forwarding does not work correctly' 
+    assert type(output['boxes2D']) == list
+    expected_boxes2D = [Box2D((184, 39, 234, 92), 0.987154483795166, 'Face'), 
+                        Box2D((460, 68, 508, 125), 0.9813412427902222, 'Face'), 
+                        Box2D((85, 72, 135, 132), 0.9796932935714722, 'Face'), 
+                        Box2D((373, 50, 424, 110), 0.9790538549423218, 'Face'), 
+                        Box2D((286, 39, 339, 92), 0.9758303165435791, 'Face')]
+    for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
+        assert exp_box.coordinates == box.coordinates
+        assert exp_box.score == box.score
+        assert exp_box.class_name == box.class_name

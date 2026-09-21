@@ -22,6 +22,9 @@ from paz import processors as pr
 from paz.abstract import Processor, SequentialProcessor
 from paz.backend.camera import VideoPlayer, Camera
 import paz.pipelines.detection as dt
+from paz.backend.image import show_image
+from tensorflow.keras.utils import get_file
+
 
 
 
@@ -69,8 +72,12 @@ def load_vvad_classifier(architecture):
     elif architecture.startswith('CNN2Plus1D'):
         return (CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture)), (38, 96, 96, 3))
     elif architecture == 'LipShape':
+        filename = 'paz_LipShape_0.8958.keras'
+        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras')), (38, 20, 2))
     elif architecture == 'FaceShape':
+        filename = 'faceFeatureModel.keras'
+        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras')), (38, 68, 2))
     else:
         raise ValueError(f"Unsupported architecture: {architecture}. Supported architectures are: {Architecture_Options}")
@@ -203,7 +210,7 @@ class ASD(Processor):
         elif detector == 'YuNet':
             self.detect = FaceDetectorYN(input_size=input_size) # TODO: parameter forwarding with kwargs?
         elif detector == 'RetinaFace':
-            raise NotImplementedError
+            self.detect = FaceDetectorRetinaFace() # TODO: parameter forwarding with kwargs?
         elif detector ==  'InsightFace':
             raise NotImplementedError
         elif detector == 'YOLOv10-Face':
@@ -223,12 +230,11 @@ class ASD(Processor):
             weighted=weighted,
             architecture=architecture, max_consecutive_empty=max_consecutive_empty
         )
-        class_names = get_class_names('VVAD_LRS3')
-        corrected_class_names = [class_names[1], class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
+        self.class_names = list(get_class_names('VVAD_LRS3'))
+        corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
         self.classifier = AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args), class_names=corrected_class_names, decision_threshold=decision_threshold)
         
 
-        self.class_names = list(get_class_names('VVAD_LRS3'))
         self.class_names.append('No Prediction yet')
 
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
@@ -241,6 +247,7 @@ class ASD(Processor):
         boxes2D = self.square(boxes2D)
         boxes2D = self.clip(image, boxes2D)
         cropped_images = self.crop(image, boxes2D)
+
 
         # call classifyVVAD for the whole batch of faces
         boxes2D = self.classifier(cropped_images, boxes2D)
@@ -264,7 +271,7 @@ if __name__ == '__main__':
     # load Processor for testing
     #test_classiffier = ClassifyVVAD(architecture='LipShape')
     # run processor for testing
-    pipeline = ASD(architecture='LipShape', annotate_output=True)
+    pipeline = ASD(architecture='LipShape', annotate_output=True, detector='YuNet')
     camera = Camera(0)
     player = VideoPlayer((640, 480), pipeline, camera)
     player.run()
