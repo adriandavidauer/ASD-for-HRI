@@ -75,9 +75,6 @@ RUN pip install tensorflow[and-cuda]==2.18.0
 ENV NV_PIP_LIB=/usr/local/lib/python3.10/dist-packages/nvidia
 ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LIB}/cuda_runtime/lib:${NV_PIP_LIB}/cuda_nvrtc/lib:${NV_PIP_LIB}/cufft/lib:${NV_PIP_LIB}/curand/lib:${NV_PIP_LIB}/cusolver/lib:${NV_PIP_LIB}/cusparse/lib:${NV_PIP_LIB}/nccl/lib:${LD_LIBRARY_PATH}
 
-# RUN python src/initialize_models.py
-# TODO: this needs to come back as soon as the pipeline is fixed
-
 
 #### TalkNet
 COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
@@ -88,6 +85,9 @@ RUN pip install -r src/TalkNet-ASD/requirement.txt
 COPY src/           src/
 
 RUN pip install --no-deps -e ".[dev]"
+
+# Downloads the needed Models into the Container
+RUN python src/initialize_models.py
 
 # ── Data volume ───────────────────────────────────────────────────────────────
 # Mount a volume here to persist downloaded data and evaluation outputs across

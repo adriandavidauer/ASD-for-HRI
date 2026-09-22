@@ -21,7 +21,7 @@ __author__      = 'Adrian Auer'
 def fourcc_to_str(fourcc_int):
     return fourcc_int.to_bytes(4, byteorder='little').decode('ascii', errors='ignore')
 
-
+# TODO: check if it actually works with show False...seems like not the case
 def record_from_file(pipeline, video_file_path, name='video.avi',
                          fps=20, fourCC='XVID', image_size=(640, 480), show=False):
         """Adjusted from PAZ, because the version in PAZ does not convert the colors correctly.
