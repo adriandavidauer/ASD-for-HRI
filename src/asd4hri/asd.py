@@ -196,13 +196,16 @@ class ASD(Processor):
             Not setting will trigger automatic setting during runtime which can slow down the pipeline a bit.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort'):
         super(ASD, self).__init__()
         self.annotate_output = annotate_output
         self.offsets = [0,0]
         self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
         self.absent_counts = []
-        
+        self.face_tracking_approach = face_tracking_approach
+        if self.face_tracking_approach not in FaceTracking_Options:
+            raise ValueError(f"Face tracking approach must be one of {FaceTracking_Options} but is {self.face_tracking_approach}")
+        self.face_tracker = FaceTracker(approach=self.face_tracking_approach)
         #detection
         self.copy = pr.Copy()
         if detector == 'HaarCascade':
@@ -244,6 +247,7 @@ class ASD(Processor):
         # get the face boxes and crop the faces from the image
         image_copy = self.copy(image)
         boxes2D = self.detect(image_copy)['boxes2D']
+        boxes2D = self.face_tracker(boxes2D)
         boxes2D = self.square(boxes2D)
         boxes2D = self.clip(image, boxes2D)
         cropped_images = self.crop(image, boxes2D)
