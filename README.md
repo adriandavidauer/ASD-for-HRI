@@ -12,19 +12,18 @@ pip install -r requirements.txt
 ```
 ## Running Experiments
 
-Predictions run inside the GPU Docker image; stats calculation runs after it. All commands are
-issued from the repository root.
+Evaluation script runs inside the GPU Docker image, which runs Predictions and stats calculation. The individual steps can also be run on their own (see *Individual steps* below). All
+commands are issued from the repository root.
 
 ### 1. Predictions - Docker (GPU)
 
-Build from the repository root — the Dockerfile lives in `docker/` but its `COPY` paths are
-root-relative:
+Build relative to the build context that is provided in the build command, in this case it is '.' (repository root) — the Dockerfile lives in `docker/` but its `COPY` paths are relative:
 
 ```bash
 docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
 ```
 
-Run:
+### Full evaluation - `src/experiments/run_evaluation.py`
 
 ```bash
 docker run -d --gpus all -v /Data/data:/app/data unitalk-gpu_buffer \
@@ -36,7 +35,8 @@ docker run -d --gpus all -v /Data/data:/app/data unitalk-gpu_buffer \
 - Follow a detached run with `docker logs -f <container>`.
 
 Everything after the image name is forwarded to the entrypoint
-(`python -m src.experiments.run_full_pipeline`) and *replaces* the image's default `CMD`
+(`python -m src.experiments.run_evaluation`) and *replaces* the image's default `CMD`, so repeat
+`--data_dir`. Prediction flags:
 
 | Flag | Meaning |
 | --- | --- |
@@ -50,12 +50,45 @@ Everything after the image name is forwarded to the entrypoint
 | `--stride` | Frames between predictions |
 | `-v` | Also log INFO to the console |
 
+Stats flags:
+
+| Flag | Meaning |
+| --- | --- |
+| `--groundtruth_csv` | Ground-truth CSV, relative to `--data_dir` (default `csv/val_orig.csv`) |
+| `--stats_dir` | Stats output folder, relative to `--data_dir` (default `stats/<predictions_dir>`) |
+| `--iou_threshold` | Minimum IoU for a box match (default `0.5`) |
+| `--timestamp_tolerance_ms` | Max prediction/GT frame offset in ms (default `20`) |
+| `--workers` | Parallel scoring processes (default: all CPUs) |
+| `--skip_stats` | Stop after predictions |
+
 Architectures: `VVAD-LRS3-LSTM`, `CNN2Plus1D`, `CNN2Plus1D_Filters`, `CNN2Plus1D_Layers`,
 `CNN2Plus1D_Light`, `LipShape`, `FaceShape`.
 
-The run above writes to the host under `/Data/data/predictions_cnn1d_scores/`: one `<video_id>.csv`
-per video plus `aggregate_time.csv` (frames processed and elapsed time, consumed by the scoring
-step).
+UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. With `--no_download`, videos missing from `--data_dir` are skipped with a warning.
+
+The run above writes to the host:
+
+- `/Data/data/predictions_cnn1d_scores/`: one `<video_id>.csv` per video plus `aggregate_time.csv`
+  (frames processed and elapsed time).
+- `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
+- `/Data/data/logs_stats/`: stats log files.
+
+## Individual steps
+
+The two phases of `run_evaluation.py` can also be run separately.
+
+### 1. Predictions - `src/experiments/run_full_pipeline.py`
+
+Accepts the prediction flags above. To run it inside the image, override the entrypoint:
+
+```bash
+docker run -d --gpus all -v /Data/data:/app/data \
+    --entrypoint python unitalk-gpu_buffer -m src.experiments.run_full_pipeline \
+    --data_dir /app/data --no_download \
+    --predictions_dir predictions_cnn1d_scores --architecture CNN2Plus1D
+```
+
+or equivalently use the default entrypoint with `--skip_stats`.
 
 ### 2. Stats - `src/experiments/run_stats_batch.sh`
 

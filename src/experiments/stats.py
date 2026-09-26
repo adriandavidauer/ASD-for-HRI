@@ -1,4 +1,4 @@
-"""Score VVAD predictions against UniTalk ground truth — purely from CSVs.
+"""Score ASD predictions against UniTalk ground truth — purely from CSVs.
 Having no dependencies from other files is intentional - Wanted to run in local setup without any use of docker.
 """
 
@@ -17,7 +17,7 @@ import pandas as pd
 
 CONTAINMENT_THRESHOLD = 0.5          # accept match when smaller box is ≥50% covered
 TIMESTAMP_TOLERANCE_MS = 20.0        # |pred.ts − gt.ts| must be within this to align frames
-LOGGER = logging.getLogger('UniTalk_VVAD')
+LOGGER = logging.getLogger('UniTalk_ASD')
 
 _AVA_POSITIVE = 'SPEAKING_AUDIBLE'
 _AVA_EVAL_SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -31,7 +31,7 @@ _LABEL_MAP = {
 }
 
 _PredBox = namedtuple('_PredBox', ['coordinates', 'class_name', 'score'])
-_GtBox   = namedtuple('_GtBox',   ['timestamp', 'index', 'entity_id', 'vvad_label', 'bbox',
+_GtBox   = namedtuple('_GtBox',   ['timestamp', 'index', 'entity_id', 'asd_label', 'bbox',
                                    'ava_label'])
 
 _DETAIL_FIELDS = ['frame_timestamp', 'x1', 'y1', 'x2', 'y2',
@@ -44,7 +44,7 @@ _SUMMARY_FIELDS = ['video_id', 'tp', 'tn', 'fp', 'fn', 'accuracy', 'precision', 
                    'frames_processed', 'elapsed_seconds', 'fps']
 
 def parse_args():
-    p = argparse.ArgumentParser(description='Score VVAD prediction CSVs against ground truth')
+    p = argparse.ArgumentParser(description='Score ASD prediction CSVs against ground truth')
     p.add_argument('--predictions_dir', default='data/predictions',
                    help='Directory of per-video prediction CSVs')
     p.add_argument('--groundtruth_csv', default='data/csv/val_orig.csv',
@@ -61,10 +61,10 @@ def parse_args():
     p.add_argument('--verbose', '-v',   action='store_true')
     return p.parse_args()
 
-def setup_logging(log_name='unitalk_stats', verbose=False):
+def setup_logging(log_name='unitalk_stats', verbose=False, log_dir='logs_stats'):
     """Configure file + console logging; return the log file path."""
-    os.makedirs('logs_stats', exist_ok=True)
-    path = f'logs_stats/{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log'
+    os.makedirs(log_dir, exist_ok=True)
+    path = os.path.join(log_dir, f'{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log')
     LOGGER.setLevel(logging.DEBUG)
     LOGGER.handlers.clear()
     LOGGER.propagate = False
@@ -83,7 +83,7 @@ def load_ground_truth(csv_path):
     """Read the master ground-truth CSV → dict[video_id] -> list[gt row dict].
     """
     df = pd.read_csv(csv_path)
-    df['vvad_label'] = df['label'].map(_LABEL_MAP).fillna('not-speaking')
+    df['asd_label'] = df['label'].map(_LABEL_MAP).fillna('not-speaking')
 
     by_video = {}
     for vid, group in df.groupby('video_id', sort=False):
@@ -92,7 +92,7 @@ def load_ground_truth(csv_path):
                 'frame_timestamp': r.frame_timestamp,
                 'bbox':            (r.entity_box_x1, r.entity_box_y1,
                                     r.entity_box_x2, r.entity_box_y2),
-                'vvad_label':      r.vvad_label,
+                'asd_label':       r.asd_label,
                 'ava_label':       r.label,
                 'entity_id':       r.entity_id,
             }
@@ -160,7 +160,7 @@ class GroundTruthIndex:
         self.entity_gt_rows = defaultdict(int)     # entity_id -> number of GT boxes
         for i, ts in enumerate(self.timestamps):
             boxes = tuple(
-                _GtBox(ts, gi, r['entity_id'], r['vvad_label'], r['bbox'], r['ava_label'])
+                _GtBox(ts, gi, r['entity_id'], r['asd_label'], r['bbox'], r['ava_label'])
                 for gi, r in enumerate(by_ts[ts])
             )
             self._buckets[i] = boxes
@@ -281,7 +281,7 @@ class Stats:
             self.detected_entities.add(gt.entity_id)
             self.entity_matched[gt.entity_id] += 1
 
-            if label == gt.vvad_label:
+            if label == gt.asd_label:
                 self.entity_correct[gt.entity_id] += 1
                 if label == 'speaking':
                     self.tp += 1
@@ -382,7 +382,7 @@ def _detail_rows(gt_index, match_info):
             'iou':         f'{iou:.4f}',
             'containment': f'{cont:.4f}',
             'entity_id':   gt.entity_id,
-            'gt_label':    gt.vvad_label,
+            'gt_label':    gt.asd_label,
             'pred_label':  pred_label,
             'score':       f'{score:.6f}',
             'matched':     matched,
@@ -577,30 +577,32 @@ def _score_video(vid, predictions_csv, gt_rows, iou_threshold, tol_s, result_dir
     return vid, stats
 
 
-def main():
-    args = parse_args()
-    log_path = setup_logging('unitalk_stats', args.verbose)
-    tol_s = args.timestamp_tolerance_ms / 1000.0
+def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_threshold=0.5,
+              timestamp_tolerance_ms=TIMESTAMP_TOLERANCE_MS, workers=None, verbose=False,
+              log_dir='logs_stats'):
+    """Score every prediction CSV in predictions_dir and write detail + aggregate CSVs."""
+    log_path = setup_logging('unitalk_stats', verbose, log_dir)
+    tol_s = timestamp_tolerance_ms / 1000.0
     LOGGER.info('stats run start predictions_dir=%s gt=%s tol_ms=%.1f log=%s',
-                args.predictions_dir, args.groundtruth_csv,
-                args.timestamp_tolerance_ms, log_path)
+                predictions_dir, groundtruth_csv,
+                timestamp_tolerance_ms, log_path)
 
-    gt_by_video = load_ground_truth(args.groundtruth_csv)
-    times_by_video = load_processing_times(args.predictions_dir)
-    os.makedirs(args.result_dir, exist_ok=True)
+    gt_by_video = load_ground_truth(groundtruth_csv)
+    times_by_video = load_processing_times(predictions_dir)
+    os.makedirs(result_dir, exist_ok=True)
 
-    if args.video:
-        video_ids = [args.video]
+    if video:
+        video_ids = [video]
     else:
         video_ids = [
             os.path.splitext(f)[0]
-            for f in os.listdir(args.predictions_dir)
+            for f in os.listdir(predictions_dir)
             if f.endswith('.csv') and os.path.splitext(f)[0] in gt_by_video
         ]
 
     tasks = []
     for vid in video_ids:
-        predictions_csv = os.path.join(args.predictions_dir, f'{vid}.csv')
+        predictions_csv = os.path.join(predictions_dir, f'{vid}.csv')
         if not os.path.isfile(predictions_csv):
             LOGGER.warning('Skipping video=%s reason=predictions_not_found path=%s',
                            vid, predictions_csv)
@@ -609,12 +611,12 @@ def main():
         if not gt_rows:
             LOGGER.warning('Skipping video=%s reason=no_ground_truth', vid)
             continue
-        tasks.append((vid, predictions_csv, gt_rows, args.iou_threshold, tol_s,
-                      args.result_dir))
+        tasks.append((vid, predictions_csv, gt_rows, iou_threshold, tol_s,
+                      result_dir))
 
     # Score videos in parallel
     per_video = []
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+    with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(_score_video, *task): task[0] for task in tasks}
         for future in as_completed(futures):
             vid = futures[future]
@@ -624,8 +626,17 @@ def main():
             except Exception:
                 LOGGER.exception('Failed scoring video=%s', vid)
 
-    write_aggregate_csv(args.result_dir, per_video, times_by_video)
+    write_aggregate_csv(result_dir, per_video, times_by_video)
     LOGGER.info('stats run complete videos_scored=%d', len(per_video))
+
+
+def main():
+    """Command-line entry point: parse flags and run the scoring."""
+    args = parse_args()
+    run_stats(args.predictions_dir, args.groundtruth_csv, args.result_dir,
+              video=args.video, iou_threshold=args.iou_threshold,
+              timestamp_tolerance_ms=args.timestamp_tolerance_ms,
+              workers=args.workers, verbose=args.verbose)
 
 
 if __name__ == '__main__':

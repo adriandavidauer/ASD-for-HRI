@@ -1,5 +1,5 @@
 """
-Full VVAD prediction pipeline over a dataset's videos.
+Full ASD prediction pipeline over a dataset's videos.
 
 UniTalk videos come from YouTube via download_uni_talk; AVA videos come from S3
 via AvaDataset. Everything after acquisition is shared.
@@ -31,9 +31,10 @@ _VIDEO_LIST_URL = (
 )
 
 
-def parse_args():
+def build_parser():
+    """Return the argument parser for the prediction flags."""
     p = argparse.ArgumentParser(
-        description='Run VVAD over every video of a dataset and write predictions.'
+        description='Run ASD over every video of a dataset and write predictions.'
     )
     p.add_argument('--data_dir', default='data',
                    help='Root data directory (default: data/)')
@@ -54,14 +55,15 @@ def parse_args():
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Also emit INFO-level messages on the console')
-    return p.parse_args()
+    return p
 
 
 def load_video_list(args, data_dir: Path):
     """Return an ordered list of (video_id, video_path, url) for the chosen dataset.
 
-    url is None when the file is already on disk: AvaDataset fetches AVA videos up
-    front, whereas UniTalk videos are pulled from YouTube one at a time in the loop.
+    AVA: AvaDataset downloads every video up front, so url is None.
+    UniTalk (fall-through branch): url is the YouTube link; run_pipeline_phase downloads
+    each missing video on demand unless --no_download is set.
     """
     if args.dataset == 'ava':
         from asd4hri.ava_dataset import AvaDataset
@@ -94,7 +96,7 @@ def load_video_list(args, data_dir: Path):
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
 def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
-    """Download data on demand, run DetectVVAD on every video, write predictions.
+    """Download data on demand, run ASD on every video, write predictions.
 
     Returns:
         tuple[list[str], list[tuple], list[tuple]]:
@@ -163,7 +165,7 @@ def print_run_summary(video_list, processed, skipped, failed, result_dir):
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    args = parse_args()
+    args = build_parser().parse_args()
     log_path = setup_logging('pipeline', args.verbose)
 
     data_dir = Path(args.data_dir)
