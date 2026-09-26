@@ -12,6 +12,7 @@ __pycache__/
 # C extensions
 *.so
 
+trial/
 *.wav
 *.mp4
 *.jpg

@@ -1,10 +1,13 @@
 """Build a LaTeX comparison table (one row per model) from the scoring outputs.
 
 For every model:
-    Accuracy / F1 / Precision / Recall  come from the ``micro_average`` row that
+    mAP / Accuracy / F1 / Precision / Recall  come from the ``micro_average`` row that
         stats.py writes at the end of <STATS_BASE>/predictions_<suffix>/aggregate_results.csv
     FPS  is the mean of ``fps_processed`` over the videos in
         <PRED_BASE>/predictions_<suffix>/aggregate_time.csv
+
+mAP is the pooled average precision of the official AVA scorer, blank for runs whose
+predictions predate the ``score`` column; those cells render as ``--``.
 
 The folder suffix for each display label is the label lowercased with every
 non-alphanumeric character removed (e.g. "CNN2Plus1D_Filters" -> "cnn2plus1dfilters").
@@ -32,14 +35,16 @@ MODELS = [
 ]
 
 # Column order requested for the table (label -> value formatter).
-METRIC_COLS = ["Accuracy", "FPS", "F1", "Precision", "Recall"]
+METRIC_COLS = ["mAP", "Accuracy", "FPS", "F1", "Precision", "Recall"]
 FORMATS = {
+    "mAP": "{:.4f}",
     "Accuracy": "{:.4f}",
     "FPS": "{:.2f}",
     "F1": "{:.4f}",
     "Precision": "{:.4f}",
     "Recall": "{:.4f}",
 }
+MISSING = "--"
 
 
 def folder_suffix(label):
@@ -79,6 +84,7 @@ def model_row(label):
 
     return {
         "Model": label,
+        "mAP": _to_float(micro.get("ap")),
         "Accuracy": float(micro["accuracy"]),
         "FPS": float(micro["fps"]),
         "F1": float(micro["f1"]),
@@ -101,7 +107,7 @@ def to_latex(rows):
         r"\midrule",
     ]
     for r in rows:
-        cells = [FORMATS[c].format(r[c]) for c in METRIC_COLS]
+        cells = [MISSING if r[c] is None else FORMATS[c].format(r[c]) for c in METRIC_COLS]
         lines.append(f"{r['Model']} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}", ""]
     return "\n".join(lines)

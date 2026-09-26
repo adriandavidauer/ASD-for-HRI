@@ -2,9 +2,6 @@ import os
 import urllib.request
 import tarfile
 from datetime import datetime
-import cv2
-import numpy as np
-import tensorflow as tf
 import logging
 
 class AvaDataset:
@@ -156,101 +153,6 @@ class AvaDataset:
                 })
         return annots
 
-    def _extract_frames(self, video_path):
-        """Extract frames from video at target FPS."""
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise ValueError(f'Could not open video file: {video_path}')
-        
-        frames = []
-        fps = cap.get(cv2.CAP_PROP_FPS) or self.target_fps
-        if fps <= 0:
-            fps = self.target_fps
-            self.logger.warning(f'Could not read FPS from video, using target_fps: {fps}')
-        
-        interval = max(1, int(fps / self.target_fps))
-        count = 0
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            if frame is None or frame.size == 0:
-                self.logger.warning(f'Skipping empty frame at count {count}')
-                count += 1
-                continue
-            if count % interval == 0:
-                # Keep original resolution unless resize is explicitly specified
-                if self.resize is not None and self.resize != (frame.shape[1], frame.shape[0]):
-                    frame_resized = cv2.resize(frame, self.resize)
-                    frames.append(frame_resized)
-                else:
-                    frames.append(frame)
-            count += 1
-        cap.release()
-        
-        if len(frames) == 0:
-            self.logger.warning(f'No frames extracted from video: {video_path}')
-        
-        return frames
-
-    def _compute_difficulty(self, frames):
-        """Compute difficulty score for frames (placeholder)."""
-        pass
-
-    def _generator(self):
-        """Generator that yields video frames and labels."""
-        for idx, file_name in enumerate(self.file_names):
-            video_name = os.path.splitext(file_name)[0]
-            annots = self._load_annotation_csv(video_name)
-            if annots == []:
-                continue
-            video_path = self._download_video(file_name)
-            frames = self._extract_frames(video_path)
-            #difficulty = self._compute_difficulty(frames)
-            labels = np.array([self._map_label(a["label"]) for a in annots[:len(frames)]], dtype=np.int32)
-            frames_np = np.stack(frames).astype(np.uint8)
-            yield {
-                "frames": frames_np,
-                "labels": labels,
-                #"difficulty": np.float32(difficulty["difficulty"])
-            }
-
-    def _map_label(self, label):
-        """Map label string to integer.
-        
-        Handles both SPEAKING_NOT_AUDIBLE and SPEAKING_BUT_NOT_AUDIBLE formats
-        from CSV annotations.
-        """
-        label_map = {
-            "SPEAKING_AUDIBLE": 2,
-            "SPEAKING_BUT_NOT_AUDIBLE": 1,
-            "SPEAKING_NOT_AUDIBLE": 1,  # Handle CSV variation
-            "NOT_SPEAKING": 0
-        }
-        return label_map.get(label, 0)
-
-    def as_tf_dataset(self, batch_size=2, shuffle=True, num_parallel_calls=tf.data.AUTOTUNE):
-        """Convert dataset to TensorFlow dataset."""
-        sample_video = self._generator().__next__()
-        num_frames, h, w, _ = sample_video["frames"].shape
-
-        output_signature = {
-            "frames": tf.TensorSpec(shape=(num_frames, h, w, 3), dtype=tf.uint8),
-            "labels": tf.TensorSpec(shape=(num_frames,), dtype=tf.int32),
-            "difficulty": tf.TensorSpec(shape=(), dtype=tf.float32)
-        }
-
-        ds = tf.data.Dataset.from_generator(lambda: self._generator(), output_signature=output_signature)
-
-        if shuffle:
-            ds = ds.shuffle(buffer_size=4)
-        ds = ds.map(lambda x: {"frames": tf.image.convert_image_dtype(x["frames"], tf.float32),
-                               "labels": x["labels"],
-                               #"difficulty": x["difficulty"]
-                              },
-                    num_parallel_calls=num_parallel_calls)
-        ds = ds.batch(batch_size).prefetch(tf.data.AUTOTUNE)
-        return ds
 
     def __len__(self):
         """Return number of videos in dataset."""

@@ -1,13 +1,8 @@
 #!/bin/bash
 # --predictions_dir for stats.py.
-INPUT_FOLDERS=(
-    "predictions_cnn2plus1d"
-    "predictions_cnn2plus1dfilters"
-    "predictions_cnn2plus1dlayers"
-    "predictions_cnn2plus1dlight"
-    "predictions_faceshape"
-    "predictions_lipshape"
-    "predictions_vvadlstmlatest"
+
+INPUT_FOLDERS=( 
+    "predictions_cnn1d_scores"
 )
 
 INPUT_BASE="/Data/data"                       # parent dir holding the input folders

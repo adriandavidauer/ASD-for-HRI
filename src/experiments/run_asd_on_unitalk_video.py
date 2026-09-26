@@ -14,7 +14,7 @@ import paz.pipelines.detection as dt
 
 from .helpers import setup_logging
 
-LOGGER = logging.getLogger('uniTalk_VVAD')
+LOGGER = logging.getLogger('uniTalk_ASD')
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -41,7 +41,7 @@ def parse_args():
 
 # ── CSV writers ───────────────────────────────────────────────────────────────
 
-_PREDICTION_FIELDS = ['frame_idx', 'timestamp', 'label', 'x1', 'y1', 'x2', 'y2']
+_PREDICTION_FIELDS = ['frame_idx', 'timestamp', 'label', 'x1', 'y1', 'x2', 'y2', 'score']
 _AGGREGATE_TIME_FIELDS = ['video_id', 'elapsed_seconds', 'frames_processed', 'fps_processed']
 
 def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes, width, height):
@@ -52,7 +52,8 @@ def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes, width, heig
         x1, y1, x2, y2 = pred.coordinates
         writer.writerow([frame_idx, f'{timestamp:.6f}', label,
                          f'{x1 / width:.6f}', f'{y1 / height:.6f}',
-                         f'{x2 / width:.6f}', f'{y2 / height:.6f}'])
+                         f'{x2 / width:.6f}', f'{y2 / height:.6f}',
+                         f'{float(getattr(pred, "score", 0.0)):.6f}'])
 
 
 def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processed,fps):
@@ -71,7 +72,7 @@ def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processe
 def run_asd_on_video(video_path,
                     predictions_csv=None,
                     aggregate_time_csv='results/aggregate_time.csv',
-                    video_id=None, architecture='CNN2Plus1D_Light', 
+                    video_id=None, architecture='CNN2Plus1D_Light',
                     stride=1, averaging_window_size: int = 1,
                     decision_threshold: float = 0.5,
                     weighted: bool = True,
@@ -109,6 +110,7 @@ def run_asd_on_video(video_path,
 
     t0 = time.time()
     frame_idx = 0
+    width = height = 0
 
     try:
         with open(predictions_csv, 'w', newline='') as f:
@@ -139,8 +141,8 @@ def run_asd_on_video(video_path,
                 frame_idx_list.append(frame_idx)
                 timestamp_list.append(timestamp)
                 pred_boxes_list.append(pred_boxes)
-                
-                
+
+
 
             frame_idx += 1
     finally:
@@ -150,12 +152,13 @@ def run_asd_on_video(video_path,
 
     with open(predictions_csv, 'a', newline='') as f:
         writer = csv.writer(f)
-        for frame_idx, timestamp, pred_boxes in zip(frame_idx_list, timestamp_list, pred_boxes_list):
-            _write_prediction_rows(writer, frame_idx, timestamp,
+        for idx, timestamp, pred_boxes in zip(frame_idx_list, timestamp_list, pred_boxes_list):
+            _write_prediction_rows(writer, idx, timestamp,
                                             pred_boxes, width, height)
 
     if aggregate_time_csv is not None:
-        append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,native_fps)
+        append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,
+                              frame_idx / elapsed if elapsed > 0 else 0.0)
 
     return frame_idx, elapsed
 
@@ -163,7 +166,7 @@ def run_asd_on_video(video_path,
 
 def main():
     args = parse_args()
-    log_path = setup_logging('uniTalk_VVAD', args.verbose, args.log_file)
+    log_path = setup_logging('uniTalk_ASD', args.verbose, args.log_file)
 
     try:
         run_asd_on_video(args.video, args.predictions,
