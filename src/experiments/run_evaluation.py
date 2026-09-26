@@ -11,13 +11,19 @@ from .stats import TIMESTAMP_TOLERANCE_MS, run_stats
 
 LOGGER = logging.getLogger('evaluation')
 
+_DEFAULT_GROUNDTRUTH = {
+    'unitalk': 'csv/val_orig.csv',
+    'ava':     'ava/annotations/ava_val_groundtruth.csv',
+}
+
 
 def parse_args():
     """Parse the prediction flags plus the scoring flags."""
     p = build_parser()
     p.description = 'Run ASD over every video of a dataset, then score the predictions.'
-    p.add_argument('--groundtruth_csv', default='csv/val_orig.csv',
-                   help='Master ground-truth CSV, relative to --data_dir (default: csv/val_orig.csv)')
+    p.add_argument('--groundtruth_csv', default=None,
+                   help='Master ground-truth CSV, relative to --data_dir (default: csv/val_orig.csv '
+                        'for unitalk, ava/annotations/ava_val_groundtruth.csv for ava)')
     p.add_argument('--stats_dir', default=None,
                    help='Directory for the stats CSVs, relative to --data_dir '
                         '(default: stats/<predictions_dir>)')
@@ -61,7 +67,8 @@ def main():
         return
 
     stats_dir = data_dir / (args.stats_dir or Path('stats') / args.predictions_dir)
-    run_stats(str(result_dir), str(data_dir / args.groundtruth_csv), str(stats_dir),
+    groundtruth_csv = args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset]
+    run_stats(str(result_dir), str(data_dir / groundtruth_csv), str(stats_dir),
               video=args.video, iou_threshold=args.iou_threshold,
               timestamp_tolerance_ms=args.timestamp_tolerance_ms,
               workers=args.workers, verbose=args.verbose,

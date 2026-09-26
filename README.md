@@ -54,7 +54,7 @@ Stats flags:
 
 | Flag | Meaning |
 | --- | --- |
-| `--groundtruth_csv` | Ground-truth CSV, relative to `--data_dir` (default `csv/val_orig.csv`) |
+| `--groundtruth_csv` | Ground-truth CSV, relative to `--data_dir` (default `csv/val_orig.csv` for UniTalk, `ava/annotations/ava_val_groundtruth.csv` for AVA) |
 | `--stats_dir` | Stats output folder, relative to `--data_dir` (default `stats/<predictions_dir>`) |
 | `--iou_threshold` | Minimum IoU for a box match (default `0.5`) |
 | `--timestamp_tolerance_ms` | Max prediction/GT frame offset in ms (default `20`) |

@@ -66,13 +66,13 @@ def load_video_list(args, data_dir: Path):
     each missing video on demand unless --no_download is set.
     """
     if args.dataset == 'ava':
-        from asd4hri.ava_dataset import AvaDataset
+        from .ava_dataset import AvaDataset
         root = data_dir / 'ava'
         video_dir = root / 'videos'
         if args.no_download:
             names = sorted(os.listdir(video_dir)) if video_dir.is_dir() else []
         else:
-            dataset = AvaDataset(root_dir=str(root))
+            dataset = AvaDataset(root_dir=str(root), log_dir=str(data_dir / 'logs'))
             names, video_dir = dataset.file_names, Path(dataset.video_dir)
         return [(os.path.splitext(n)[0], video_dir / n, None) for n in names]
 

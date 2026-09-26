@@ -31,6 +31,7 @@ class AvaDataset:
         os.makedirs(self.csv_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
         self.file_list_path = os.path.join(self.csv_dir, "ava_speech_file_names_v1.txt")
+        self.groundtruth_csv = os.path.join(self.csv_dir, "ava_val_groundtruth.csv")
 
         self.file_list_url = file_list_url
         self.video_url_template = video_url_template
@@ -80,6 +81,7 @@ class AvaDataset:
             self.logger.info(f"Using existing log directory: {self.log_dir}")
         
         self._download_annotations()
+        self._build_groundtruth_csv()
         self.file_names = self._load_file_list()
         
         self.download_all_videos()
@@ -111,6 +113,22 @@ class AvaDataset:
             self.logger.info("Annotation CSV files extracted.")
         else:
             self.logger.info("Annotation CSV files already exist.")
+
+    def _build_groundtruth_csv(self):
+        """Merge the per-video annotation CSVs into one headed CSV for stats.py."""
+        if os.path.exists(self.groundtruth_csv):
+            self.logger.info(f"Ground-truth CSV already exists: {self.groundtruth_csv}")
+            return
+        per_video = sorted(f for f in os.listdir(self.csv_dir) if f.endswith("-activespeaker.csv"))
+        with open(self.groundtruth_csv, "w") as out:
+            out.write("video_id,frame_timestamp,entity_box_x1,entity_box_y1,"
+                      "entity_box_x2,entity_box_y2,label,entity_id\n")
+            for name in per_video:
+                with open(os.path.join(self.csv_dir, name), "r") as f:
+                    for line in f:
+                        if len(line.strip().split(",")) >= 8:
+                            out.write(line.strip() + "\n")
+        self.logger.info(f"Built ground-truth CSV from {len(per_video)} files: {self.groundtruth_csv}")
 
     def _load_file_list(self):
         """Load video file names from file list."""
