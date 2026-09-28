@@ -64,7 +64,7 @@ Stats flags:
 Architectures: `VVAD-LRS3-LSTM`, `CNN2Plus1D`, `CNN2Plus1D_Filters`, `CNN2Plus1D_Layers`,
 `CNN2Plus1D_Light`, `LipShape`, `FaceShape`.
 
-UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. With `--no_download`, videos missing from `--data_dir` are skipped with a warning.
+UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With `--no_download`, nothing is downloaded and videos missing from `--data_dir` are skipped with a warning.
 
 The run above writes to the host:
 

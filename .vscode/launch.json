@@ -9,7 +9,7 @@
             "name": "Python Debugger: debug run on video",
             "type": "debugpy",
             "request": "launch",
-            "module": "src.experiments.run_asd_on_unitalk_video",
+            "module": "src.experiments.run_asd_on_video",
             "args": [
                 "--video",
                 "/home/vscode/host-home/Downloads/ABqo634gI5s.mp4",

@@ -19,8 +19,8 @@ sys.path.insert(0, str(_SRC))
 
 import cv2
 
-from .run_asd_on_unitalk_video import run_asd_on_video
-from .download_uni_talk import download_video
+from .run_asd_on_video import run_asd_on_video
+from .download_uni_talk import build_groundtruth_csv, download_video
 from .helpers import setup_logging
 
 LOGGER = logging.getLogger('pipeline')
@@ -61,16 +61,19 @@ def build_parser():
 def load_video_list(args, data_dir: Path):
     """Return an ordered list of (video_id, video_path, url) for the chosen dataset.
 
-    AVA: AvaDataset downloads every video up front, so url is None.
+    AVA: AvaDataset downloads every video and the ground-truth CSV up front, so url is None.
     UniTalk (fall-through branch): url is the YouTube link; run_pipeline_phase downloads
-    each missing video on demand unless --no_download is set.
+    each missing video on demand, and csv/<split>_orig.csv is built here if missing.
+    Nothing is downloaded when --no_download is set.
     """
     if args.dataset == 'ava':
         from .ava_dataset import AvaDataset
         root = data_dir / 'ava'
         video_dir = root / 'videos'
         if args.no_download:
-            names = sorted(os.listdir(video_dir)) if video_dir.is_dir() else []
+            names = sorted(n for n in os.listdir(video_dir) if (
+                root / 'annotations' / f'{os.path.splitext(n)[0]}-activespeaker.csv').exists()
+            ) if video_dir.is_dir() else []
         else:
             dataset = AvaDataset(root_dir=str(root), log_dir=str(data_dir / 'logs'))
             names, video_dir = dataset.file_names, Path(dataset.video_dir)
@@ -90,6 +93,10 @@ def load_video_list(args, data_dir: Path):
                 continue
             vid = url.split('v=')[-1]
             items.append((vid, video_dir / f'{vid}.mp4', url))
+
+    groundtruth_csv = data_dir / 'csv' / f'{args.split}_orig.csv'
+    if not args.no_download and not groundtruth_csv.exists():
+        build_groundtruth_csv([vid for vid, _, _ in items], str(groundtruth_csv.parent), args.split)
     return items
 
 
