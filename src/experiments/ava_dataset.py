@@ -31,6 +31,7 @@ class AvaDataset:
         os.makedirs(self.csv_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
         self.file_list_path = os.path.join(self.csv_dir, "ava_speech_file_names_v1.txt")
+        self.groundtruth_csv = os.path.join(self.csv_dir, "ava_val_groundtruth.csv")
 
         self.file_list_url = file_list_url
         self.video_url_template = video_url_template
@@ -80,7 +81,8 @@ class AvaDataset:
             self.logger.info(f"Using existing log directory: {self.log_dir}")
         
         self._download_annotations()
-        self.file_names = self._load_file_list()
+        self._build_groundtruth_csv()
+        self.file_names = self._annotated(self._load_file_list())
         
         self.download_all_videos()
 
@@ -112,6 +114,22 @@ class AvaDataset:
         else:
             self.logger.info("Annotation CSV files already exist.")
 
+    def _build_groundtruth_csv(self):
+        """Merge the per-video annotation CSVs into one headed CSV for stats.py."""
+        if os.path.exists(self.groundtruth_csv):
+            self.logger.info(f"Ground-truth CSV already exists: {self.groundtruth_csv}")
+            return
+        per_video = sorted(f for f in os.listdir(self.csv_dir) if f.endswith("-activespeaker.csv"))
+        with open(self.groundtruth_csv, "w") as out:
+            out.write("video_id,frame_timestamp,entity_box_x1,entity_box_y1,"
+                      "entity_box_x2,entity_box_y2,label,entity_id\n")
+            for name in per_video:
+                with open(os.path.join(self.csv_dir, name), "r") as f:
+                    for line in f:
+                        if len(line.strip().split(",")) >= 8:
+                            out.write(line.strip() + "\n")
+        self.logger.info(f"Built ground-truth CSV from {len(per_video)} files: {self.groundtruth_csv}")
+
     def _load_file_list(self):
         """Load video file names from file list."""
         if not os.path.exists(self.file_list_path):
@@ -122,6 +140,13 @@ class AvaDataset:
         self.logger.info(f"Loaded {len(file_names)} video file names.")
         return file_names
 
+    def _annotated(self, file_names):
+        """Keep only the videos that have a per-video annotation CSV."""
+        kept = [n for n in file_names if os.path.exists(
+            os.path.join(self.csv_dir, f"{os.path.splitext(n)[0]}-activespeaker.csv"))]
+        self.logger.info(f"Keeping {len(kept)} of {len(file_names)} videos that have annotations.")
+        return kept
+
     def _download_video(self, file_name):
         """Download video file if not already present."""
         local_path = os.path.join(self.video_dir, file_name)
@@ -130,43 +155,18 @@ class AvaDataset:
             return local_path
         url = self.video_url_template.format(file_name)
         self.logger.info(f"Downloading video: {file_name}")
-        urllib.request.urlretrieve(url, local_path)
+        urllib.request.urlretrieve(url, local_path + ".part")
+        os.rename(local_path + ".part", local_path)
         return local_path
-
-    def _load_annotation_csv(self, video_name):
-        """Load annotation CSV for a video."""
-        csv_path = os.path.join(self.csv_dir, f"{video_name}-activespeaker.csv")
-        if not os.path.exists(csv_path):
-            self.logger.warning(f"CSV annotations not found for video {csv_path}")
-            return []
-        annots = []
-        with open(csv_path, "r") as f:
-            for line in f:
-                parts = line.strip().split(",")
-                if len(parts) < 8:
-                    continue
-                annots.append({
-                    "timestamp": float(parts[1]),
-                    "bbox": tuple(map(float, parts[2:6])),
-                    "label": parts[6],
-                    "entity_id": parts[7]
-                })
-        return annots
-
 
     def __len__(self):
         """Return number of videos in dataset."""
         return len(self.file_names)
     
     def download_all_videos(self):
-        """Download all videos in the dataset if video_dir is empty."""
-        video_files = [f for f in os.listdir(self.video_dir) if os.path.isfile(os.path.join(self.video_dir, f))]
-        
-        if len(video_files) == 0:
-            for file_name in self.file_names:
-                self._download_video(file_name)
-        else:
-            self.logger.info("Video directory is not empty. Skipping download.")
+        """Download every video in file_names that is not already in video_dir."""
+        for file_name in self.file_names:
+            self._download_video(file_name)
 
 if __name__ == "__main__":
     import argparse

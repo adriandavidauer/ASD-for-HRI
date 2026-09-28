@@ -56,6 +56,22 @@ def download_csv(video_id: str, csv_dir: str, split: str = "val") -> str:
     return csv_path
 
 
+def build_groundtruth_csv(video_ids, csv_dir: str, split: str = "val") -> str:
+    """Download every per-video annotation CSV and merge them into <csv_dir>/<split>_orig.csv."""
+    frames = []
+    for video_id in video_ids:
+        try:
+            path = download_csv(video_id, csv_dir, split)
+            frames.append(pd.read_csv(path))
+            os.remove(path)
+        except Exception:
+            logger.exception(f"Failed to fetch annotations for {video_id}, skipping.")
+    out_merged = os.path.join(csv_dir, f"{split}_orig.csv")
+    pd.concat(frames, ignore_index=True).to_csv(out_merged, index=False)
+    logger.info(f"Wrote merged CSV for {split} ({len(frames)} videos): {out_merged}")
+    return out_merged
+
+
 # ── main entry point used by the pipeline ─────────────────────────────────────
 
 def download_video(video_id: str, url: str, video_dir: str, download_videos: bool = True):

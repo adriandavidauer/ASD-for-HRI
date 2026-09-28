@@ -1,10 +1,10 @@
-# ── UniTalk VVAD full evaluation pipeline ─────────────────────────────────────
+# ── UniTalk ASD full evaluation pipeline ──────────────────────────────────────
 #
 #
-# Build (from the repository root, COPY paths are root-relative):
+# Build (COPY paths are relative to the build context given in the build command, i.e. .):
 #   docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
 #
-# Run (download + evaluate):
+# Run (download + predictions + stats):
 #   docker run -d --gpus all -v $(pwd)/data:/app/data unitalk-gpu_buffer --data_dir /app/data
 #
 # Skip download and pick architecture / output folder (args replace CMD, so repeat --data_dir):
@@ -12,14 +12,16 @@
 #       --data_dir /app/data --no_download \
 #       --predictions_dir predictions_cnn1d_scores --architecture CNN2Plus1D
 #
+# Predictions only (no stats): append --skip_stats
+#
 
 
 
 
 FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 
-LABEL org.opencontainers.image.title="UniTalk VVAD Pipeline" \
-      org.opencontainers.image.description="Download + evaluate DetectVVAD on UniTalk val split"
+LABEL org.opencontainers.image.title="UniTalk ASD Pipeline" \
+      org.opencontainers.image.description="Download + evaluate ASD on UniTalk val split"
 
 # create non-root User
 ARG USERNAME=developer
@@ -79,8 +81,8 @@ ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LI
 
 
 #### TalkNet
-#COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
-#RUN pip install -r src/TalkNet-ASD/requirement.txt
+COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
+RUN pip install -r src/TalkNet-ASD/requirement.txt
 
 
 # ── Application source ────────────────────────────────────────────────────────
@@ -96,13 +98,15 @@ RUN pip install --no-deps -e ".[dev]"
 #   data/clips_videos/val/ short clip videos (downloaded by default)
 #   data/clips_audios/val/ short clip audio  (downloaded by default)
 #   data/output_videos/val annotated output MP4s
-#   data/results/          per-video and aggregate result text files
+#   data/<predictions_dir>/      per-video prediction CSVs + aggregate_time.csv
+#   data/stats/<predictions_dir>/ per-video detail CSVs + aggregate_results.csv
+#   data/logs_stats/             stats log files
 VOLUME ["/app/data"]
 
 # ── Entry point ───────────────────────────────────────────────────────────────
-# Default behaviour: download the dataset then evaluate all val videos.
-# Any extra flags passed to `docker run` are appended to CMD and forwarded
-# to run_full_pipeline.py (e.g. --skip_download, --resume, --video ID).
-ENTRYPOINT ["python", "-m", "src.experiments.run_full_pipeline"]
+# Default behaviour: download the dataset, predict on all val videos, then score them.
+# Any extra flags passed to `docker run` replace CMD and are forwarded
+# to run_evaluation.py (e.g. --no_download, --video ID, --skip_stats).
+ENTRYPOINT ["python", "-m", "src.experiments.run_evaluation"]
 CMD ["--data_dir", "/app/data"]
 USER $USERNAME

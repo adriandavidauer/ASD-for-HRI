@@ -14,7 +14,7 @@ import paz.pipelines.detection as dt
 
 from .helpers import setup_logging
 
-LOGGER = logging.getLogger('uniTalk_VVAD')
+LOGGER = logging.getLogger('uniTalk_ASD')
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -166,7 +166,7 @@ def run_asd_on_video(video_path,
 
 def main():
     args = parse_args()
-    log_path = setup_logging('uniTalk_VVAD', args.verbose, args.log_file)
+    log_path = setup_logging('uniTalk_ASD', args.verbose, args.log_file)
 
     try:
         run_asd_on_video(args.video, args.predictions,
