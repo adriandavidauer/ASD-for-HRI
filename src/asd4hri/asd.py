@@ -202,7 +202,7 @@ class ASD(Processor):
         self.offsets = [0,0]
         self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
         self.absent_counts = []
-        
+
         #detection
         self.copy = pr.Copy()
         if detector == 'HaarCascade':
