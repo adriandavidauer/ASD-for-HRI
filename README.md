@@ -1,7 +1,9 @@
 # ASD-for-HRI
 [![Quality](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml/badge.svg)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
-[![Lint](https://img.shields.io/endpoint?url=https://gist.github.com/arunimaCh29/274393500a8a3dd25c33fb1591d7a156/raw/lint.json)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
-[![Docstring coverage](https://img.shields.io/endpoint?url=https://gist.github.com/arunimaCh29/274393500a8a3dd25c33fb1591d7a156/raw/docs.json)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
+<!-- badges:start -->
+[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-pending-lightgrey)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
+[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-pending-lightgrey)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
+<!-- badges:end -->
 
 A scalable Active Speaker Detection for Human-Robot Interaction
 
