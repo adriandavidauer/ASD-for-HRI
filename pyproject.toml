@@ -31,6 +31,8 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",  # For generating test coverage reports
     "black>=23.0.0",     # For code formatting
+    "ruff>=0.16.0",      # For linting
+    "interrogate>=1.7.0",
     "h5py",
     "scikit-learn",
     "tensorboard",
@@ -43,6 +45,13 @@ dev = [
 where = ["src"]  # Tells setuptools to look inside the src/ folder for packages
 include = ["asd4hri*"]  # The asterisk ensures subpackages inside asd4hri are caught too
 
+[tool.ruff.lint]
+select = ["D", "DOC"]
+preview = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --tb=short"
@@ -52,3 +61,15 @@ testpaths = [
 pythonpath = [
     "src",  # Ensures pytest can easily find modules during test discovery
 ]
+
+[tool.ruff]
+extend-exclude = ["src/TalkNet-ASD", "src/LR-ASD", "trial", "docker"]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-magic = true
+ignore-private = true
+ignore-module = false
+fail-under = 0
+exclude = ["src/TalkNet-ASD", "src/LR-ASD", "trial", "docker", "build"]
+verbose = 1

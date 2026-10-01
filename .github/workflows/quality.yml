@@ -1,0 +1,86 @@
+name: Quality
+
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quality-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install tools
+        run: pip install ruff interrogate
+
+      - name: Run ruff
+        id: ruff
+        run: |
+          ruff check . --output-format json > ruff.json || true
+          COUNT=$(jq length ruff.json)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Ruff D+DOC violations: $COUNT"
+          ruff check . --output-format concise || true
+
+      - name: Run interrogate
+        id: docs
+        run: |
+          interrogate -c pyproject.toml --fail-under 0 -v > docs.txt || true
+          cat docs.txt
+          PCT=$(grep -oE '[0-9]+\.[0-9]+%' docs.txt | tail -1 | tr -d '%')
+          echo "pct=$PCT" >> "$GITHUB_OUTPUT"
+          echo "Docstring coverage: $PCT%"
+
+      - name: Enforce ratchet
+        run: |
+          BASE_LINT=$(jq -r .ruff_violations .github/quality-baseline.json)
+          BASE_DOCS=$(jq -r .doc_coverage .github/quality-baseline.json)
+          LINT=${{ steps.ruff.outputs.count }}
+          DOCS=${{ steps.docs.outputs.pct }}
+          FAIL=0
+          if [ "$LINT" -gt "$BASE_LINT" ]; then
+            echo "::error::Ruff violations went up: $LINT > $BASE_LINT"; FAIL=1
+          fi
+          if awk "BEGIN{exit !($DOCS < $BASE_DOCS)}"; then
+            echo "::error::Docstring coverage dropped: $DOCS% < $BASE_DOCS%"; FAIL=1
+          fi
+          if [ "$LINT" -lt "$BASE_LINT" ] || awk "BEGIN{exit !($DOCS > $BASE_DOCS)}"; then
+            echo "::notice::Numbers improved — update .github/quality-baseline.json to lock it in."
+          fi
+          exit $FAIL
+
+      - name: Update README badges
+        id: badges
+        if: ${{ !cancelled() }}
+        env:
+          LINT: ${{ steps.ruff.outputs.count }}
+          DOCS: ${{ steps.docs.outputs.pct }}
+        run: python .github/scripts/update_badges.py
+
+      - name: Commit badges to PR branch
+        # Fork PRs get a read-only token, so they only see the badges in the job log.
+        if: ${{ !cancelled() && steps.badges.outcome == 'success' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          if git diff --quiet README.md; then
+            echo "Badges unchanged"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git commit README.md -m "Update README badges"
+          git push || echo "::warning::Branch moved during the run; the next run will refresh the badges."
