@@ -19,7 +19,9 @@
 
     // Silences the root pip warning permanently inside the container
     "containerEnv": {
-        "PIP_ROOT_USER_ACTION": "ignore"
+        "PIP_ROOT_USER_ACTION": "ignore",
+        "NVIDIA_VISIBLE_DEVICES": "all",
+        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,graphics"
     },
     "customizations": 
         {"vscode": 

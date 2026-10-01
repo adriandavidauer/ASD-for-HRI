@@ -32,7 +32,9 @@
                 "--video",
                 "src/TalkNet-ASD/demo/001.avi",
                 "--output_video",
-                "result.avi"
+                "result.avi", 
+                "--face_detector",
+                "RetinaFace"
             ],
             "console": "integratedTerminal",
             "justMyCode": true
