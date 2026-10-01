@@ -1,13 +1,25 @@
 name: Quality
 
 on:
-  pull_request:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quality-${{ github.head_ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.head_ref }}
 
       - uses: actions/setup-python@v7
         with:
@@ -53,24 +65,22 @@ jobs:
           fi
           exit $FAIL
 
-      - name: Publish lint badge
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: 274393500a8a3dd25c33fb1591d7a156
-          filename: lint.json
-          label: Ruff linting issuess
-          message: ${{ steps.ruff.outputs.count == '0' && 'passing' || format('{0} issues', steps.ruff.outputs.count) }}
-          color: ${{ steps.ruff.outputs.count == '0' && 'brightgreen' || 'yellow' }}
+      - name: Update README badges
+        id: badges
+        if: ${{ !cancelled() }}
+        env:
+          LINT: ${{ steps.ruff.outputs.count }}
+          DOCS: ${{ steps.docs.outputs.pct }}
+        run: python .github/scripts/update_badges.py
 
-      - name: Publish docs badge
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: 274393500a8a3dd25c33fb1591d7a156
-          filename: docs.json
-          label: Docstring coverage
-          message: ${{ steps.docs.outputs.pct }}%
-          valColorRange: ${{ steps.docs.outputs.pct }}
-          minColorRange: 50
-          maxColorRange: 100
+      - name: Commit badges to PR branch
+        # Fork PRs get a read-only token, so they only see the badges in the job log.
+        if: ${{ !cancelled() && steps.badges.outcome == 'success' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          if git diff --quiet README.md; then
+            echo "Badges unchanged"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git commit README.md -m "Update README badges"
+          git push || echo "::warning::Branch moved during the run; the next run will refresh the badges."
