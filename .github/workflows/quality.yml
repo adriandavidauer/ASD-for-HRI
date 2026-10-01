@@ -1,7 +1,9 @@
 name: Quality
 
 on:
-  pull_request:
+  push:
+    branches:
+      - '**'
 
 permissions:
   contents: write
