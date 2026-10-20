@@ -1,6 +1,4 @@
-'''
-All paz processors needed for the full pipeline
-'''
+"""All paz processors needed for the full pipeline."""
 
 # System imports
 import os
@@ -49,19 +47,45 @@ __author__      = 'Adrian Auer'
 URL = 'https://github.com/adriandavidauer/ASD-for-HRI/releases/download/models/'
 
 class DownloadProgressBar(tqdm):
+    """``tqdm`` progress bar that can be used as a ``urllib.request.urlretrieve`` report hook."""
     def update_to(self, b=1, bsize=1, tsize=None):
+        """Update the progress bar from ``urlretrieve`` report hook arguments.
+
+        Args:
+            b: Number of blocks transferred so far.
+            bsize: Size of each block in bytes.
+            tsize: Total size in bytes, or None if unknown.
+        """
         if tsize is not None:
             self.total = tsize
         self.update(b * bsize - self.n)
 
 
 def download_url(url, output_path):
+    """Download a file while showing a progress bar.
+
+    Args:
+        url: URL of the file to download.
+        output_path: Path the file is written to.
+    """
     with DownloadProgressBar(unit='B', unit_scale=True,
                              miniters=1, desc=url.split('/')[-1]) as t:
         urllib.request.urlretrieve(
             url, filename=output_path, reporthook=t.update_to)
 
 def SHAPE_PREDICTOR_68_FACE_LANDMARKS():
+    """Return the path to dlib's 68 face landmark shape predictor, downloading it if necessary.
+
+    The compressed model is downloaded from the dlib-models repository to ``src/models``,
+    decompressed, and the archive is removed.
+
+    Returns:
+        pathlib.Path: Path to ``shape_predictor_68_face_landmarks.dat``.
+
+    Raises:
+        FileNotFoundError: If the file is missing after decompression, e.g. because it was
+            deleted externally.
+    """
     predictor_path = Path(__file__).absolute().parent.parent / "models" / \
         'shape_predictor_68_face_landmarks.dat'
     compressed_file = Path(predictor_path.parent /
@@ -88,27 +112,31 @@ def SHAPE_PREDICTOR_68_FACE_LANDMARKS():
 
 
 class BufferFeatures(Processor):
-    """Buffers features (e.g.images) for models that need timeseries of features. The Buffer is working as a FIFO (First In First Out) buffer. 
-    The Buffer handels batches dynamically with multiple buffers internally. It expects a sorted list like object of features as input to match to the internal buffers.
-    The List must be sorted to assure  
+    """FIFO buffer of features (e.g. images) for models that need a time series of features.
 
-    # Arguments
-        input_size: Tuple of integers. Input shape to the model in following format: (timesteps, dim0, dim1, ...) 
-            e.g. (frames, height, width, channels) for video
-        stride: Integer, specifies after how many added features the buffer will return the all buffered features.
-            In a scenario with an already full buffer and a stride of 10,
-            after each 10th call the buffer will be returned.
-            The stride must be smaller than the number of timesteps (the first argument of the input_size).
-        max_consecutive_empty: Integer. Buffer will be cleared after this amount of consecutive empty(None) or no inputs. 
-            None as input is needed if within the sorted list there is no input for an element between two others. 
-            If no input is in the end, the list will just be shorter.
-        return_incomplete_samples: Boolean.Flag if the samples should be returned even if not all timesteps are collected 
-            - practical for dynamic length with upper bound
+    Handles batches dynamically with one internal buffer per batch position. The input is
+    expected to be a sorted list-like object of features so that each position always belongs
+    to the same entity and is matched to the same internal buffer.
 
-    # Methods
-        call()
+    Args:
+        input_size: Shape of one model sample, ``(timesteps, dim0, dim1, ...)``, e.g.
+            ``(frames, height, width, channels)`` for video. Only ``timesteps`` is used as the
+            buffer length.
+        stride: Number of added features after which a full buffer is returned again. With an
+            already full buffer and a stride of 10, the buffer is returned on every 10th call.
+            Must not be larger than ``timesteps``.
+        max_consecutive_empty: Number of consecutive empty (None) or missing inputs after which
+            a buffer is cleared. Use None as input for an entity in the middle of the list that
+            has no feature in this step; missing entities at the end can simply be left out.
+        return_incomplete_samples: If True, every buffer is returned on every call, even if not
+            all timesteps are collected yet. Useful for dynamic lengths with an upper bound.
     """
     def __init__(self, input_size, stride=25, max_consecutive_empty=5, return_incomplete_samples=False):
+        """Set up the buffer configuration and empty internal buffers.
+
+        Raises:
+            ValueError: If ``input_size[0]`` is smaller than ``stride``.
+        """
         self.buffer_size = input_size[0]
         if self.buffer_size < stride:
             raise ValueError('Buffer size must be equal or larger than stride')
@@ -126,12 +154,15 @@ class BufferFeatures(Processor):
 
 
     def call(self, batch_of_features):
-        """
-        # Arguments
-            batch_of_features: sorted list like object of features. Must have the shape (N, dim0, dim1, ...) where N is the size of the batch.
-        # Returns
-            Numpy array. Batch of timeseries of features of the shape (M, timesteps, dim0, dim1, ...) where M is the number of internal Buffers that are full.
-            The buffer will return a sorted list of all buffers. When the stride is not reached or the buffer is not full the element will be None.
+        """Add one batch of features to the internal buffers.
+
+        Args:
+            batch_of_features: Sorted list-like object of features with shape
+                ``(N, dim0, dim1, ...)`` where N is the batch size. Entries may be None.
+
+        Returns:
+            list: One entry per input position: the corresponding buffer (a ``collections.deque``
+            holding up to ``timesteps`` features) if it is ready to be returned, otherwise None.
         """
         batch_return = []
         i = 0
@@ -167,10 +198,10 @@ class BufferFeatures(Processor):
         return batch_return
 
     def reset(self, index=None):
-        """
-        reset the state of all internal buffers if not specified differently
-        # Arguments:
-            index: Index for the buffer that should be resetted
+        """Reset one internal buffer, or all of them.
+
+        Args:
+            index: Index of the buffer to reset. If None, all buffers are reset.
         """
         if index is None:
             for i, _ in enumerate(self.buffers):
@@ -182,16 +213,23 @@ class BufferFeatures(Processor):
 
 
 class NormalizeShapeSample(Processor):
-    """Processor to normalize a batch of faceShape or LipShape samples"""
+    """Normalize a batch of FaceShape or LipShape samples.
+
+    Each sample is translated so that the first landmark of the first timestep is the origin,
+    then scaled to [-1, 1] by its largest absolute coordinate.
+    """
     def __init__(self):
+        """Initialize the processor."""
         super(NormalizeShapeSample, self).__init__()
 
     def _getDist(self, sample):
-        """
-        calcing the distance vectors for a sample
+        """Translate a sample so that the first landmark of the first timestep is the origin.
 
-        :param sample: the sample we want the distances to be calculated
-        :type sample: numpy array
+        Args:
+            sample: Sample of shape ``(timesteps, num_landmarks, 2)``.
+
+        Returns:
+            numpy.ndarray: The translated sample.
         """
         # print(f'{type(sample)=}')
         base = sample[0][0]
@@ -202,8 +240,13 @@ class NormalizeShapeSample(Processor):
         return output_sample
 
     def _normalize(self, arr):
-        """
-        Normalizes the features of the the array to [-1, 1]. 
+        """Scale an array to [-1, 1] by dividing by its largest absolute value.
+
+        Args:
+            arr: Array to scale.
+
+        Returns:
+            numpy.ndarray: The scaled array.
         """
         arrMax = np.max(arr)
         arrMin = np.min(arr)
@@ -211,6 +254,14 @@ class NormalizeShapeSample(Processor):
         return arr/absMax
     
     def call(self, samples):
+        """Normalize every sample in the batch.
+
+        Args:
+            samples: Batch of samples of shape ``(timesteps, num_landmarks, 2)``. Entries may be None.
+
+        Returns:
+            list: The normalized samples, with None at the positions of None inputs.
+        """
         output_list = []
         for sample in samples:
             if sample is None:
@@ -222,11 +273,16 @@ class NormalizeShapeSample(Processor):
         return output_list
 
 class GetShapeFeatures(Processor):
-    """
-    Processor to extract shape features from a batch of cropped RGB faces using dlib's shape predictor.
+    """Extract facial landmark (shape) features from a batch of cropped RGB faces with dlib.
 
+    Args:
+        architecture: 'LipShape' to return only the 20 lip landmarks (indices 48-67); any other
+            value returns all 68 landmarks.
+        shape_predictor_path: Path to a dlib shape predictor. If None, the 68 face landmark
+            predictor is downloaded if needed and used.
     """
     def __init__(self, architecture='FaceShape', shape_predictor_path=None):
+        """Load the dlib shape predictor."""
         super(GetShapeFeatures, self).__init__()
         if shape_predictor_path is None:
             shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
@@ -234,12 +290,18 @@ class GetShapeFeatures(Processor):
         self.architecture = architecture
 
     def call(self, face_images):
-        """
-        converts a batch of face images to a batch of face_shapes
-        # Argumants
-            face_images: a batch of cropped images of faces.
-        # Returns
-            List of numpy arrays: A batch of shape features for the input faces.
+        """Convert a batch of face images to a batch of landmark coordinates.
+
+        Args:
+            face_images: Batch of cropped face images.
+
+        Returns:
+            list: One numpy array of ``(x, y)`` landmark coordinates per face, of shape ``(68, 2)``
+            or ``(20, 2)`` for 'LipShape'.
+
+        Raises:
+            AssertionError: If an element of ``face_images`` is two-dimensional with a last
+                dimension of 3, which indicates that a single image was passed instead of a batch.
         """
         ret_batch = []
         for image in face_images:
@@ -256,18 +318,22 @@ class GetShapeFeatures(Processor):
 
 
 def predict_with_nones(x, model, preprocess=None, postprocess=None):
-    """Preprocess, predict and postprocess batched input.
-    Batch can contain None as samples or be None itself. 
-    If batch is None - output is None (no postprocessing is applied)
-    If batch contains Nones - output batch will contain Nones in sam position (No postprocessing if batch only contains Nones)
-    # Arguments
-        x: Noneable input to model
-        model: Callable i.e. Keras model.
-        preprocess: Callable, used for preprocessing input x.
-        postprocess: Callable, used for postprocessing output of model.
+    """Preprocess, predict and postprocess a batch that may contain None.
 
-    # Note
-        If model outputs a tf.Tensor is converted automatically to numpy array.
+    If the batch (after preprocessing) is None, the output is None. If it contains None
+    entries, the output contains None at the same positions. Postprocessing is skipped when the
+    batch is None, empty, or contains only None entries.
+
+    Args:
+        x: Input batch for the model; may be None or contain None.
+        model: Callable, e.g. a Keras model.
+        preprocess: Callable used to preprocess ``x``.
+        postprocess: Callable used to postprocess the output of the model.
+
+    Returns:
+        The (postprocessed) model output for the batch with None at the positions of None inputs,
+        None if the batch is None, or an empty list for an empty batch. A ``tf.Tensor`` output
+        is converted to a numpy array.
     """
     if preprocess is not None:
         x = preprocess(x)
@@ -297,29 +363,45 @@ def predict_with_nones(x, model, preprocess=None, postprocess=None):
     return y
 
 class PredictWithNones(Processor):
-    """Perform input preprocessing, model prediction and output postprocessing based on batches.
+    """Preprocess, predict and postprocess batches that may contain None.
 
-    # Arguments
-        model: Class with a ''predict'' method e.g. a Keras model.
-        preprocess: Function applied to given inputs.
-        postprocess: Function applied to outputted predictions from model.
+    See ``predict_with_nones``.
+
+    Args:
+        model: Callable, e.g. a Keras model.
+        preprocess: Function applied to the inputs.
+        postprocess: Function applied to the predictions of the model.
     """
 
     def __init__(self, model, preprocess=None, postprocess=None):
+        """Store the model and the pre- and postprocessing functions."""
         super(PredictWithNones, self).__init__()
         self.model = model
         self.preprocess = preprocess
         self.postprocess = postprocess
 
     def call(self, x):
+        """Run ``predict_with_nones`` on a batch.
+
+        Args:
+            x: Input batch; may be None or contain None.
+
+        Returns:
+            The prediction batch as returned by ``predict_with_nones``.
+        """
         return predict_with_nones(x, self.model, self.preprocess, self.postprocess)
 
 def flatten_predictions(batch_of_predictions):
-    """Flattens the given predictions because the model returns an array with shape (N, 1) instead of (N,) and the postprocessing expects a list of predictions.
-    # Arguments:
-        batch_of_predictions: List of predictions to be flattened.
-    # Returns
-        List of predictions. Flattened predictions.
+    """Flatten a batch of single-value predictions.
+
+    The model returns an array of shape ``(N, 1)``, but the following steps expect ``(N,)``.
+
+    Args:
+        batch_of_predictions: Batch of predictions; may contain None.
+
+    Returns:
+        numpy.ndarray of shape ``(N,)``, or a list of scalars with None kept in place if the
+        batch contains None.
     """
     # TOOD: if list inlcuding nones, reshape differently
     if None in batch_of_predictions:
@@ -328,26 +410,30 @@ def flatten_predictions(batch_of_predictions):
         
 
 class AveragePredictions(Processor):
-    """Averages the given predictions
-    # Arguments
-        weigthed: Boolean. 
-            If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
-            If False just the average over all entries
-        normalize: Boolean.
-            If True the outputvalue will be normalized to [0, 1]. This expects the input values to be in [0, 1] as well.
+    """Average each list of values in a batch.
+
+    Args:
+        weighted: If True, the i-th value (1-based) is multiplied by i before averaging, so
+            later (newer) values count more. If False, the plain mean is used.
+        normalize: If True, the result is divided by ``(n + 1) / 2`` (the weighted mean of n
+            ones), so a weighted average of values in [0, 1] stays in [0, 1].
     """
 
     def __init__(self, weighted=False, normalize=False):
+        """Store the averaging options."""
         super(AveragePredictions, self).__init__()
         self.weighted = weighted
         self.normalize = normalize
 
     def call(self, batch_of_list_of_values):
-        """
-        # Arguments:
-            batch_of_list_of_values: Batch of List of values to be averaged.
-        # Returns
-           list of  Bool, Int or Float value. batch of Averaged value.
+        """Average every list of values in the batch.
+
+        Args:
+            batch_of_list_of_values: Batch of lists of values. Entries may be None or empty.
+
+        Returns:
+            list: One averaged value per entry, None for None or empty entries. Returns None if the
+            batch is None and an empty list if the batch is empty.
         """
         if batch_of_list_of_values is None:
             return None
@@ -386,12 +472,19 @@ class AveragePredictions(Processor):
             
 
 class AddClassAndScoreToBoxes(Processor):
-    """Adds class name and score to boxes. Expects a batch of cropped images and a batch of boxes. 
+    """Classify cropped images and write the class name and score into the matching boxes.
 
-    # Arguments
-        classifier: Keras model.
+    Args:
+        classifier: Callable mapping a batch of cropped images to a batch of scores (None
+            where no score is available yet), e.g. ``ClassifyVVAD``.
+        class_names: Two class names, ``[negative, positive]``.
+        decision_threshold: Score above which the positive class is assigned.
     """
     def __init__(self, classifier, class_names, decision_threshold=0.5):
+        """Store the classifier and the class names.
+
+        Asserts that ``class_names`` contains exactly two names.
+        """
         super(AddClassAndScoreToBoxes, self).__init__()
         self.classify = classifier
         self.class_name = class_names
@@ -399,6 +492,17 @@ class AddClassAndScoreToBoxes(Processor):
         assert len(self.class_name) == 2, f"AddClassAndScoreToBoxes only supports binary classes. Number of classes names must be 2 for binary classification but is {len(self.class_name)}"
 
     def call(self, cropped_images, boxes):
+        """Classify the cropped images and update the boxes in place.
+
+        Boxes without a score get the class name 'No Prediction yet' and a score of -1.0.
+
+        Args:
+            cropped_images: Batch of cropped images, one per box.
+            boxes: List of ``paz.abstract.messages.Box2D``, in the same order as ``cropped_images``.
+
+        Returns:
+            list: The same boxes with ``class_name`` and ``score`` set.
+        """
         scores = self.classify(cropped_images)
         for score, box2D in zip(scores, boxes):
             if score is None:
@@ -411,14 +515,16 @@ class AddClassAndScoreToBoxes(Processor):
             # return_boxes.append(add_class_and_score({'class_name': class_name, 'scores': [score]}, box2D))
         return boxes            
 class PreprocessImages(Processor):
-    """Preprocess RGB images by resizing it to the given ``shape``. And cast it to the given ``dtype``. 
-    Can contain Nones in the batch and will return a batch with Nones in the same position.
+    """Resize, and optionally normalize, a batch of RGB images.
 
-    # Arguments
-        shape: List of two Ints. (w,h)
-        dtype: np.dtype. Data type to cast the image to.
+    The batch may contain None; the output then contains None at the same positions.
+
+    Args:
+        shape: Target size as a list of two integers, ``(width, height)``.
+        normalize: If True, the images are cast to float and normalized to [0, 1].
     """
     def __init__(self, shape, normalize=True):
+        """Create the resize, cast and normalize processors."""
         super(PreprocessImages, self).__init__()
         self.resize = pr.ResizeImage(shape)
         self.cast = pr.CastImage(float)
@@ -426,6 +532,14 @@ class PreprocessImages(Processor):
         self.normalize = normalize
 
     def call(self, images):
+        """Preprocess every image in the batch.
+
+        Args:
+            images: Batch of images; may be None or contain None.
+
+        Returns:
+            list: The preprocessed images with None kept in place, or None if ``images`` is None.
+        """
         ret_batch = []
         if images is None:
             return None
@@ -443,29 +557,25 @@ class PreprocessImages(Processor):
 
 
 class FaceDetectorYN(Processor):
-    """FaceDetectorYN pipeline for detecting faces
+    """Face detector based on OpenCV's YuNet (``cv2.FaceDetectorYN``).
 
-    # Arguments
-        input_size: Tuple of Integers: (Width, Height) of the input images. 
-                    Not setting will trigger automatic setting during runtime which can slow down the pipeline a bit.
-        class_name: String indicating the class name.
-        color: List indicating the RGB color e.g. ``[0, 255, 0]``.
-        draw: Boolean. If ``False`` the bounding boxes are not drawn.
-        model_path: path to the Model defaults to the 2026may model
-        conf_threshold: Float. the threshold to filter out bounding boxes of score smaller than the given value
-        nms_threshold: Float. the threshold to suppress bounding boxes of IoU bigger than the given value
-        topK: Integer. 	keep top K bboxes before NMS
-        backendId: Integer. the id of backend
-        targetId: Integer.	the id of target device
-
-    # Returns
-        A function that takes an RGB image and outputs the predictions
-        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
-        The corresponding values of these keys contain the image with the drawn
-        inferences and a list of ``paz.abstract.messages.Boxes2D``.
-
+    Args:
+        input_size: ``(width, height)`` of the input images. If it does not match an image,
+            the detector input size is updated at runtime, which can slow the pipeline down.
+        class_name: Class name used when drawing boxes.
+        color: RGB color for drawing boxes, e.g. ``[0, 255, 0]``.
+        draw: If True, the bounding boxes are drawn on the returned image.
+        model_path: Path to the ONNX model. Defaults to the 2026may YuNet model, which is
+            downloaded on first use.
+        conf_threshold: Boxes with a score below this value are filtered out.
+        nms_threshold: Boxes with an IoU above this value are suppressed.
+        topK: Number of boxes kept before non-maximum suppression.
+        backendId: OpenCV DNN backend id.
+        targetId: OpenCV DNN target device id.
+        name: Name of the processor.
     """
     def __init__(self, input_size=[320, 320], class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'), conf_threshold=0.6, nms_threshold=0.3, topK=500, backendId=0, targetId=0, name='FaceDetectorYN'):
+        """Create the YuNet detector, downloading the default model if needed."""
         super(FaceDetectorYN, self).__init__(name=name)
         if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'):
             filename = 'face_detection_yunet_2026may.onnx'
@@ -485,6 +595,16 @@ class FaceDetectorYN(Processor):
         self.drawer = pr.DrawBoxes2D([self.class_name], [self.color], True)
 
     def call(self, image):
+        """Detect faces in an image.
+
+        Args:
+            image: Image as a numpy array of shape ``(height, width, 3)``.
+
+        Returns:
+            dict: ``{'image': image, 'boxes2D': boxes2D}`` where ``boxes2D`` is a list of
+            ``paz.abstract.messages.Box2D`` in pixel coordinates with the detection score and the
+            class name 'Face'. The image has the boxes drawn on it if ``draw`` is True.
+        """
         # set input size if necessary
         if (image.shape[1], image.shape[0]) != self.input_size:
             self.detector.setInputSize((image.shape[1], image.shape[0]))
@@ -503,26 +623,26 @@ class FaceDetectorYN(Processor):
 
 
 class FaceDetectorRetinaFace(Processor):
-    """FaceDetectorRetinaFace pipeline for detecting faces
+    """Face detector based on a RetinaFace (ResNet-50) ONNX model.
 
-    # Arguments
-        class_name: String indicating the class name.
-        color: List indicating the RGB color e.g. ``[0, 255, 0]``.
-        draw: Boolean. If ``False`` the bounding boxes are not drawn.
-        model_path: path to the Model defaults to the 2026may model
-        conf_threshold: Float. the threshold to filter out bounding boxes of score smaller than the given value
-        nms_threshold: Float. the threshold to suppress bounding boxes of IoU bigger than the given value
-        pre_nms_top_k: top K before NMS
-        topK: Integer. 	keep top K bboxes before NMS
+    Runs on CUDA if available, otherwise on the CPU. Images are resized to 640x640 for inference.
 
-    # Returns
-        A function that takes an RGB image and outputs the predictions
-        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
-        The corresponding values of these keys contain the image with the drawn
-        inferences and a list of ``paz.abstract.messages.Boxes2D``.
-
+    Args:
+        class_name: Class name used when drawing boxes.
+        color: RGB color for drawing boxes, e.g. ``[0, 255, 0]``.
+        draw: If True, the bounding boxes are drawn on the returned image.
+        model_path: Path to the ONNX model. Defaults to ``retinaface_resnet50.onnx``, which is
+            downloaded on first use.
+        conf_threshold: Boxes with a score below this value are filtered out.
+        nms_threshold: Boxes with an IoU above this value are suppressed.
+        pre_nms_top_k: Number of highest-scoring boxes kept before non-maximum suppression.
+        topK: Number of boxes kept after non-maximum suppression.
+        backendId: Unused.
+        targetId: Unused.
+        name: Name of the processor.
     """
     def __init__(self, class_name='Face', color=[0, 255, 0], draw=False, model_path=str(Path(__file__).absolute().parent.parent / "models" / 'retinaface_resnet50.onnx'), conf_threshold=0.6, nms_threshold=0.3, pre_nms_top_k=1000, topK=500, backendId=0, targetId=0, name='FaceDetectorRetinaFace'):
+        """Create the ONNX Runtime session, downloading the default model if needed."""
         super(FaceDetectorRetinaFace, self).__init__(name=name)
         if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'retinaface_resnet50.onnx'):
             filename = 'retinaface_resnet50.onnx'
@@ -543,7 +663,16 @@ class FaceDetectorRetinaFace(Processor):
         self.input_name = self.retinaface.get_inputs()[0].name
 
     def call(self, image):
+        """Detect faces in an image.
 
+        Args:
+            image: Image as a numpy array of shape ``(height, width, 3)``.
+
+        Returns:
+            dict: ``{'image': image, 'boxes2D': boxes2D}`` where ``boxes2D`` is a list of
+            ``paz.abstract.messages.Box2D`` in pixel coordinates with the detection score and the
+            class name 'Face'. The image has the boxes drawn on it if ``draw`` is True.
+        """
         orig_height, orig_width, _ = image.shape
 
         img = cv2.resize(image, (640, 640)).astype(np.float32)

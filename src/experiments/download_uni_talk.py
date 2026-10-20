@@ -1,7 +1,6 @@
-'''
-Copied from UniTalk github repo for downloading the dataset, just made small change for
+"""Copied from UniTalk github repo for downloading the dataset, just made small change for
 only downloading the val set and using curl instead of wget.
-'''
+"""
 
 import argparse
 import logging
@@ -45,8 +44,7 @@ def download_youtube_video(url: str, output_dir: str) -> bool:
 
 
 def download_csv(video_id: str, csv_dir: str, split: str = "val") -> str:
-    """Download one per-video annotation CSV and rewrite it with a header row.
-    """
+    """Download one per-video annotation CSV and rewrite it with a header row."""
     os.makedirs(csv_dir, exist_ok=True)
     csv_path = os.path.join(csv_dir, f"{video_id}.csv")
     raw_url = f"{HF_BASE}/csv/{split}/{video_id}.csv".replace("/blob/", "/resolve/")

@@ -1,5 +1,4 @@
-"""
-Full ASD prediction pipeline over a dataset's videos.
+"""Full ASD prediction pipeline over a dataset's videos.
 
 UniTalk videos come from YouTube via download_uni_talk; AVA videos come from S3
 via AvaDataset. Everything after acquisition is shared.

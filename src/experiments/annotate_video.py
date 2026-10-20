@@ -1,6 +1,4 @@
-'''
-script to annotate video with bounding boxes, scores and label
-'''
+"""script to annotate video with bounding boxes, scores and label."""
 
 # System imports
 import argparse
@@ -25,7 +23,7 @@ def fourcc_to_str(fourcc_int):
 def record_from_file(pipeline, video_file_path, name='video.avi',
                          fps=20, fourCC='XVID', image_size=(640, 480), show=False):
         """Adjusted from PAZ, because the version in PAZ does not convert the colors correctly.
-        (show_image converts the image to BGR but not back)
+        (show_image converts the image to BGR but not back).
         
         Load video and records continuous inference using ``pipeline``.
 
@@ -36,7 +34,6 @@ def record_from_file(pipeline, video_file_path, name='video.avi',
             fourCC: String. Indicates the four character code of the video.
             e.g. XVID, MJPG, X264.
         """
-
         fourCC = cv2.VideoWriter_fourcc(*fourCC)
         writer = cv2.VideoWriter(name, fourCC, fps, image_size)
 

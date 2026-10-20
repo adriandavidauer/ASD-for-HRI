@@ -94,7 +94,7 @@ def model_row(label):
 
 
 def to_latex(rows):
-    """Render the rows as a booktabs LaTeX table (needs \\usepackage{booktabs})."""
+    r"""Render the rows as a booktabs LaTeX table (needs \usepackage{booktabs})."""
     col_fmt = "l" + "r" * len(METRIC_COLS)
     lines = [
         r"\begin{table}[ht]",
