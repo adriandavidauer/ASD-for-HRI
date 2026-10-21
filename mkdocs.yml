@@ -1,0 +1,53 @@
+site_name: ASD-for-HRI
+site_description: A scalable Active Speaker Detection for Human-Robot Interaction
+site_url: https://adriandavidauer.github.io/ASD-for-HRI/
+repo_url: https://github.com/adriandavidauer/ASD-for-HRI
+repo_name: adriandavidauer/ASD-for-HRI
+edit_uri: edit/main/docs/
+
+nav:
+  - Home: index.md
+  - Installation and usage: usage.md
+  - Evaluation: evaluation.md
+  - API reference:
+      - asd4hri.asd: api/asd.md
+      - asd4hri.processors: api/processors.md
+      - asd4hri.retinaface_onnx: api/retinaface_onnx.md
+      - asd4hri.models: api/models.md
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+
+extra:
+  version:
+    provider: mike
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      check_paths: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          # Static analysis with griffe: the package (and TensorFlow) is never imported.
+          paths: [src]
+          options:
+            docstring_style: google
+            docstring_options:
+              # The code has no type hints; types are written in the docstring text instead.
+              warn_missing_types: false
+              # Multi-line Returns descriptions are not indented, so read the section as one item.
+              returns_multiple_items: false
+            show_source: true
+            members_order: source
+            merge_init_into_class: true
+            show_signature_annotations: true

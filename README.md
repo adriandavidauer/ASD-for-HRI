@@ -7,6 +7,8 @@
 
 A scalable Active Speaker Detection for Human-Robot Interaction
 
+Documentation, including the API reference: [adriandavidauer.github.io/ASD-for-HRI](https://adriandavidauer.github.io/ASD-for-HRI/)
+
 ## Install
 In your Env run 
 ```bash
@@ -14,6 +16,7 @@ pip install -r requirements.txt
 ```
 ## Running Experiments
 
+<!-- --8<-- [start:evaluation] -->
 Evaluation script runs inside the GPU Docker image, which runs Predictions and stats calculation. The individual steps can also be run on their own (see *Individual steps* below). All
 commands are issued from the repository root.
 
@@ -22,8 +25,13 @@ commands are issued from the repository root.
 Build relative to the build context that is provided in the build command, in this case it is '.' (repository root) — the Dockerfile lives in `docker/` but its `COPY` paths are relative:
 
 ```bash
-docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
+docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) \
+    -t unitalk-gpu_buffer .
 ```
+
+The container runs as a non-root user with the uid/gid given at build time, so the results it
+writes to the mounted data directory belong to you. Without the build args it uses 1000:1000. The
+mounted directory must be writable by that user.
 
 ### Full evaluation - `src/experiments/run_evaluation.py`
 
@@ -74,6 +82,7 @@ The run above writes to the host:
   (frames processed and elapsed time).
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
+<!-- --8<-- [end:evaluation] -->
 
 ## Individual steps
 

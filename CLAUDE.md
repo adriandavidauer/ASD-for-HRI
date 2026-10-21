@@ -12,15 +12,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -e '.[dev]'                       # dev install (devcontainer postCreateCommand)
 pytest                                        # all tests (testpaths=tests, pythonpath=src)
 pytest tests/test_processors.py::test_name    # single test
+pytest --cov=asd4hri --cov-report=term-missing  # with coverage, as in CI
 ruff check .                                  # docstring lint (rules D + DOC, preview, google convention)
 interrogate -c pyproject.toml -v              # docstring coverage
 python src/initialize_models.py               # pre-download all model weights
+pip install -e '.[docs]' && mkdocs serve      # docs preview (mkdocs.yml, docs/)
+mkdocs build --strict                         # what the Docs CI runs
 ```
 
 Tests load real models, so the first run downloads weights.
 
+### Tests CI (`.github/workflows/tests.yml`)
+Runs `pytest` on every push, CPU only (ubuntu-latest, Python 3.10, TensorFlow pinned to 2.18.0 like the Docker image). pip and the weights in `src/models` are cached; bump the `model-weights-v*` cache key when the weights change. Coverage goes to the job summary; it is reported only, not enforced.
+
 ### Quality CI (`.github/workflows/quality.yml`)
-CI runs only ruff and interrogate, not pytest. It is a **ratchet** against `.github/quality-baseline.json`: the job fails if the ruff violation count goes up or docstring coverage goes down. When the numbers improve, update the baseline file. The ruff version is pinned to `0.16.9` in both `pyproject.toml` and the workflow; keep them in sync because preview rules change between releases. CI also rewrites the badges in `README.md` (between `<!-- badges:start/end -->`) and commits them, so don't edit those lines by hand.
+Runs ruff and interrogate. It is a **ratchet** against `.github/quality-baseline.json`: the job fails if the ruff violation count goes up or docstring coverage goes down. When the numbers improve, update the baseline file. The ruff version is pinned to `0.16.9` in both `pyproject.toml` and the workflow; keep them in sync because preview rules change between releases. On pushes to main, Quality (lint and docstring badges) and Tests (coverage badge) rewrite the badges in `README.md` between `<!-- badges:start/end -->` with `.github/scripts/update_badges.py` and commit them with `[skip ci]` (`commit_badges.sh`), so don't edit those lines by hand. Quality updates the badges even when the ratchet fails, and the job still fails.
+
+### Docs CI (`.github/workflows/docs.yml`)
+mkdocs (Material) with mkdocstrings, which reads `src/asd4hri` statically with griffe, so the docs build needs only the `docs` extra, not TensorFlow. Every push runs `mkdocs build --strict`. With mike, pushes to main deploy the `dev` version and `v*` tags deploy `X.Y.Z` with the alias `latest` to the `gh-pages` branch (https://adriandavidauer.github.io/ASD-for-HRI/). `docs/evaluation.md` includes the evaluation section of `README.md` between the `--8<-- [start:evaluation]`/`[end:evaluation]` markers. `docs/api/asd.md` lists the members of `asd.py` explicitly because it star-imports `processors.py`; add new public members of `asd.py` there.
 
 Write new docstrings in Google style with `Args:`/`Returns:`/`Raises:` sections that match the signature (the DOC rules check this).
 
@@ -48,5 +57,5 @@ Everything is a PAZ `Processor`/`SequentialProcessor` chain:
 
 ### Other
 - `src/TalkNet-ASD` and `src/LR-ASD` are git submodules (forks of baseline ASD models) and are excluded from ruff and interrogate. `src/eval/` holds the official AVA evaluation script. `src/model_training/` holds the training scripts.
-- Docker: `docker/Dockerfile_GPU` is both the devcontainer image and the evaluation image. Build it from the repo root: `docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .`. Arguments passed to `docker run` replace `CMD`, so you must repeat `--data_dir /app/data`. The README documents all evaluation flags.
+- Docker: `docker/Dockerfile_GPU` is both the devcontainer image and the evaluation image. Build it from the repo root with your ids, so results on the data mount belong to you: `docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t unitalk-gpu_buffer .` (default 1000:1000). The image runs as the non-root user `developer`; model weights are downloaded at build time as that user (`src/models`, `~/.keras/paz`). Arguments passed to `docker run` replace `CMD`, so you must repeat `--data_dir /app/data`. The README documents all evaluation flags.
 - The devcontainer does not persist data. The host home directory is mounted at `/home/developer/host-home`.

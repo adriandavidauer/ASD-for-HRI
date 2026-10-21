@@ -395,3 +395,202 @@ def test_FaceDetectorRetinaFace_output():
         assert exp_box.coordinates == box.coordinates
         assert exp_box.score == box.score
         assert exp_box.class_name == box.class_name
+
+
+def test_stride_BufferFeatures():
+    """A full buffer is returned first after `timesteps` inputs and then after every `stride` inputs."""
+    buffer = BufferFeatures(input_size=(4,), stride=3)
+    returned = {}
+    for step in range(1, 11):
+        ret_val = buffer([step])
+        if ret_val[0] is not None:
+            returned[step] = list(ret_val[0])
+    assert returned == {4: [1, 2, 3, 4], 7: [4, 5, 6, 7], 10: [7, 8, 9, 10]}
+
+
+def test_stride_larger_than_buffer_BufferFeatures():
+    """A stride larger than the number of timesteps is rejected."""
+    with pytest.raises(ValueError, match='Buffer size must be equal or larger than stride'):
+        BufferFeatures(input_size=(4,), stride=5)
+
+
+def test_max_consecutive_empty_clears_buffer_BufferFeatures():
+    """An entity missing for `max_consecutive_empty` steps starts over; shorter gaps keep the buffer."""
+    buffer = BufferFeatures(input_size=(3,), stride=1, max_consecutive_empty=2)
+    buffer([1])
+    buffer([2])
+    buffer([None])  # one gap is tolerated
+    assert buffer([3]) == [buffer.buffers[0]] and list(buffer.buffers[0]) == [1, 2, 3]
+    buffer([None])
+    buffer([None])  # second consecutive gap clears the buffer
+    assert list(buffer.buffers[0]) == []
+    assert buffer([4]) == [None]
+
+
+def test_entities_appear_and_disappear_BufferFeatures():
+    """Trailing entities that disappear keep their buffer for a short gap and are removed after a long one."""
+    buffer = BufferFeatures(input_size=(2,), stride=1, max_consecutive_empty=2)
+    buffer(['a1', 'b1'])
+    buffer(['a2'])  # b missing once: kept
+    assert len(buffer.buffers) == 2
+    assert buffer(['a3', 'b2'])[1] is not None and list(buffer.buffers[1]) == ['b1', 'b2']
+    buffer(['a4'])
+    buffer(['a5'])  # b missing twice: removed
+    assert len(buffer.buffers) == 1
+    assert buffer(['a6', 'c1']) == [buffer.buffers[0], None]  # new entity starts empty
+    assert list(buffer.buffers[1]) == ['c1']
+
+
+def test_empty_batch_ages_all_buffers_BufferFeatures():
+    """Frames without any entity count as missing for every buffer, including the first one."""
+    buffer = BufferFeatures(input_size=(2,), stride=1, max_consecutive_empty=2)
+    buffer(['a1'])
+    buffer([])
+    buffer([])
+    assert len(buffer.buffers) == 0
+    assert buffer(['a2']) == [None]  # no stale features from before the gap
+
+
+def test_missing_middle_entity_keeps_later_buffer_BufferFeatures():
+    """A dropped entity that is not the last one is cleared without removing the buffers after it."""
+    buffer = BufferFeatures(input_size=(3,), stride=1, max_consecutive_empty=2)
+    buffer(['a1', None, 'c1'])  # b missed once, c present
+    buffer(['a2'])  # b missed twice, c once
+    assert len(buffer.buffers) == 3
+    assert list(buffer.buffers[1]) == []
+    buffer(['a3', 'b1', 'c2'])
+    assert list(buffer.buffers[2]) == ['c1', 'c2']
+
+
+def test_None_batch_AveragePredictions():
+    """A None batch is forwarded as None."""
+    assert AveragePredictions()(None) is None
+
+
+def test_different_lengths_weighted_AveragePredictions():
+    """Shorter buffers in a batch are not distorted by the zero padding of longer ones."""
+    average = AveragePredictions(weighted=True, normalize=True)
+    output_batch = average([[0.6], None, [0.0, 0.5, 1.0]])
+    expected = [0.6, None, np.average([0.0, 0.5, 1.0], weights=[1, 2, 3])]
+    assert output_batch[1] is None
+    np.testing.assert_allclose([output_batch[0], output_batch[2]], [expected[0], expected[2]])
+
+
+def test_normalized_weighted_is_weighted_average_AveragePredictions():
+    """Normalized weighted averaging equals the average weighted by the positions 1..n."""
+    values = [0.2, 0.9, 0.4, 0.7]
+    output_batch = AveragePredictions(weighted=True, normalize=True)([values])
+    np.testing.assert_allclose(output_batch, [np.average(values, weights=[1, 2, 3, 4])])
+
+
+class RecordingModel:
+    """Fake model that records its inputs and returns a ``tf.Tensor`` of doubled inputs."""
+
+    def __init__(self):
+        """Start without recorded calls."""
+        self.calls = []
+
+    def __call__(self, x):
+        """Record the batch and predict ``2 * x``.
+
+        Args:
+            x: Batch as a numpy array.
+
+        Returns:
+            tf.Tensor: The doubled batch.
+        """
+        self.calls.append(x)
+        return tf.constant(2 * x)
+
+
+def test_model_sees_only_non_None_PredictWithNones():
+    """Only non-None samples reach the model and predictions are mapped back to their positions."""
+    model = RecordingModel()
+    output_batch = PredictWithNones(model=model)([None, 1.5, None, 3.0])
+    assert len(model.calls) == 1
+    np.testing.assert_array_equal(model.calls[0], [1.5, 3.0])
+    assert output_batch[0] is None and output_batch[2] is None
+    assert output_batch[1] == 3.0 and output_batch[3] == 6.0
+
+
+def test_tensor_output_and_postprocess_PredictWithNones():
+    """A ``tf.Tensor`` prediction is converted to numpy before postprocessing."""
+    seen = []
+    def postprocess(y):
+        """Record the type of the predictions.
+
+        Args:
+            y: Predictions of the model.
+
+        Returns:
+            The unchanged predictions.
+        """
+        seen.append(type(y))
+        return y
+    output_batch = PredictWithNones(model=RecordingModel(), postprocess=postprocess)(np.array([[1.0], [2.0]]))
+    assert seen == [np.ndarray]
+    np.testing.assert_array_equal(output_batch, [[2.0], [4.0]])
+
+
+def test_skip_model_and_postprocess_PredictWithNones():
+    """None batches and batches of only None skip the model and the postprocessing."""
+    model = RecordingModel()
+    def postprocess(y):
+        """Fail if called.
+
+        Args:
+            y: Predictions of the model.
+
+        Raises:
+            AssertionError: Always.
+        """
+        raise AssertionError('postprocess must not be called')
+    predictor = PredictWithNones(model=model, preprocess=lambda x: x, postprocess=postprocess)
+    assert predictor(None) is None
+    assert predictor([None, None]) == [None, None]
+    assert model.calls == []
+
+
+def test_model_output_flatten_predictions():
+    """A model output of shape (N, 1) is flattened to (N,)."""
+    output_batch = flatten_predictions(np.array([[0.1], [0.7], [0.4]]))
+    assert output_batch.shape == (3,)
+    np.testing.assert_allclose(output_batch, [0.1, 0.7, 0.4])
+
+
+def test_sort_FaceTracker():
+    """Boxes are ordered by their left edge, then by their top edge, independent of the score order."""
+    boxes2D = [Box2D((50, 10, 60, 20), 0.9, 'Face'),
+               Box2D((5, 40, 15, 50), 0.8, 'Face'),
+               Box2D((5, 30, 15, 40), 0.7, 'Face')]
+    tracked = FaceTracker(approach='sort')(boxes2D)
+    assert [box.coordinates for box in tracked] == [(5, 30, 15, 40), (5, 40, 15, 50), (50, 10, 60, 20)]
+    assert FaceTracker()([]) == []
+
+
+def test_invalid_approach_FaceTracker():
+    """An unknown tracking approach is rejected."""
+    with pytest.raises(ValueError, match='Approach must be one of'):
+        FaceTracker(approach='kalman')
+
+
+def test_face_recognition_FaceTracker():
+    """Face recognition based tracking is not implemented yet."""
+    with pytest.raises(NotImplementedError):
+        FaceTracker(approach='face_recognition')([])
+
+
+def test_AddClassAndScoreToBoxes():
+    """Scores above the threshold get the positive class, missing scores get 'No Prediction yet'."""
+    boxes2D = [Box2D((0, 0, 10, 10), 0.9, 'Face') for _ in range(3)]
+    add_class = AddClassAndScoreToBoxes(lambda images: [None, 0.7, 0.3], ['not speaking', 'speaking'],
+                                        decision_threshold=0.5)
+    boxes2D = add_class([test_image] * 3, boxes2D)
+    assert [(box.class_name, box.score) for box in boxes2D] == [
+        ('No Prediction yet', -1.0), ('speaking', 0.7), ('not speaking', 0.3)]
+
+
+def test_non_binary_AddClassAndScoreToBoxes():
+    """Only two class names are supported."""
+    with pytest.raises(AssertionError, match='only supports binary classes'):
+        AddClassAndScoreToBoxes(lambda images: [], ['a', 'b', 'c'])

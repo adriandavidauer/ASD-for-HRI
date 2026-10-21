@@ -20,6 +20,7 @@ dependencies = [
     "pypaz @ git+https://github.com/adriandavidauer/paz.git", #TODO: change after PR is merged and package released
     "dlib", # TODO: fix version or upper bound at least
     "keras==3.6.0", 
+    "opencv-python<5", # pypaz uses cv2.SOLVEPNP_UPNP, which OpenCV 5 removed
     "tqdm", # TODO: fix version or upper bound at least
     # Never install both: they share the `onnxruntime` import package and the CPU build overwrites
     # the GPU one. onnxruntime-gpu also ships the CPU provider; it has no ARM wheels (Raspberry Pi).
@@ -41,6 +42,14 @@ dev = [
     "pandas",
     "wget",
     "yt-dlp"
+]
+# Static docs build (griffe), no runtime deps needed: CI installs only this list.
+docs = [
+    "mkdocs<2",                # MkDocs 2 drops the plugin system that mkdocstrings and material need
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "pymdown-extensions<12",   # 12.x breaks the code highlighting of mkdocstrings 1.0
+    "mike",
 ]
 
 [tool.setuptools.packages.find]

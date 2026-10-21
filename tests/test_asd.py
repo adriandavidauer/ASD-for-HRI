@@ -107,3 +107,40 @@ def test_full_asd_pipeline():
                     assert box.score >= 0.0 and box.score <= 1.0, f"box should have a valid score but is {box.score} in step {i}"
     assert predictions > 0, f"there should be at least one prediction in the video but there are {predictions} predictions"
     video.release()
+
+
+def test_invalid_architecture_load_vvad_classifier():
+    """An unknown architecture is rejected before anything is downloaded."""
+    with pytest.raises(ValueError, match='Unsupported architecture'):
+        load_vvad_classifier('ResNet')
+
+
+def test_invalid_architecture_ClassifyVVAD():
+    """ClassifyVVAD only accepts the architectures in Architecture_Options."""
+    with pytest.raises(AssertionError, match='is not in'):
+        ClassifyVVAD(architecture='ResNet')
+
+
+def test_invalid_face_tracking_approach_ASD():
+    """ASD rejects unknown face tracking approaches."""
+    with pytest.raises(ValueError, match='Face tracking approach must be one of'):
+        ASD(face_tracking_approach='kalman')
+
+
+@pytest.mark.parametrize('detector, error', [('InsightFace', NotImplementedError),
+                                             ('YOLOv10-Face', NotImplementedError),
+                                             ('MTCNN', ValueError)])
+def test_invalid_detector_ASD(detector, error):
+    """ASD rejects detectors that are unknown or not implemented yet."""
+    with pytest.raises(error):
+        ASD(detector=detector)
+
+
+def test_reset_ClassifyVVAD():
+    """After a reset, a full sample has to be buffered again before the next prediction."""
+    vvad = ClassifyVVAD(architecture='LipShape', stride=1)
+    for _ in range(IMAGE_INPUT_SHAPE[0]):
+        ret_val = vvad([test_image])
+    assert ret_val[0] is not None
+    vvad.reset()
+    assert vvad([test_image]) == [None]
