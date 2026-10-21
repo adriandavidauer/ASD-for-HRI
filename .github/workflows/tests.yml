@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          # Also caches the dlib wheel that pip builds from source (needs cmake, preinstalled).
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # Weights the tests download into src/models: LipShape, YuNet, RetinaFace and the dlib
+      # landmarks. (PAZ's models would go to ~/.keras/paz; no test loads them.) Bump the key to
+      # refresh them.
+      - uses: actions/cache@v6
+        with:
+          path: src/models
+          key: model-weights-v1
+
+      - name: Install
+        # TensorFlow comes unpinned through pypaz; pin the version of the Docker image.
+        # onnxruntime-gpu (picked on x86_64) falls back to its CPU provider without CUDA.
+        run: pip install -e '.[dev]' tensorflow==2.18.0
+
+      - name: Run pytest
+        run: pytest
