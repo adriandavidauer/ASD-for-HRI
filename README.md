@@ -25,8 +25,13 @@ commands are issued from the repository root.
 Build relative to the build context that is provided in the build command, in this case it is '.' (repository root) — the Dockerfile lives in `docker/` but its `COPY` paths are relative:
 
 ```bash
-docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
+docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) \
+    -t unitalk-gpu_buffer .
 ```
+
+The container runs as a non-root user with the uid/gid given at build time, so the results it
+writes to the mounted data directory belong to you. Without the build args it uses 1000:1000. The
+mounted directory must be writable by that user.
 
 ### Full evaluation - `src/experiments/run_evaluation.py`
 

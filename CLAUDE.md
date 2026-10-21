@@ -57,5 +57,5 @@ Everything is a PAZ `Processor`/`SequentialProcessor` chain:
 
 ### Other
 - `src/TalkNet-ASD` and `src/LR-ASD` are git submodules (forks of baseline ASD models) and are excluded from ruff and interrogate. `src/eval/` holds the official AVA evaluation script. `src/model_training/` holds the training scripts.
-- Docker: `docker/Dockerfile_GPU` is both the devcontainer image and the evaluation image. Build it from the repo root: `docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .`. Arguments passed to `docker run` replace `CMD`, so you must repeat `--data_dir /app/data`. The README documents all evaluation flags.
+- Docker: `docker/Dockerfile_GPU` is both the devcontainer image and the evaluation image. Build it from the repo root with your ids, so results on the data mount belong to you: `docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t unitalk-gpu_buffer .` (default 1000:1000). The image runs as the non-root user `developer`; model weights are downloaded at build time as that user (`src/models`, `~/.keras/paz`). Arguments passed to `docker run` replace `CMD`, so you must repeat `--data_dir /app/data`. The README documents all evaluation flags.
 - The devcontainer does not persist data. The host home directory is mounted at `/home/developer/host-home`.

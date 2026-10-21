@@ -1,12 +1,25 @@
+# Build with your host ids, so that the files written to the data mount belong to you:
+#   docker build -f docker/Dockerfile_PI --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t asd4hri .
 FROM python:3.11-slim
 
+# Non-root user that runs the container
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+# -o (--non-unique): the host uid may already exist in the image (e.g. 0 when building as root);
+# USER $USERNAME still resolves, since it looks up the name.
+RUN (getent group $USER_GID || groupadd --gid $USER_GID $USERNAME) \
+    && useradd -o --uid $USER_UID --gid $USER_GID -m $USERNAME
+
 WORKDIR /app
+# Owned by the user: initialize_models.py creates src/models, and an anonymous /app/data volume
+# must be writable.
+RUN mkdir src data && chown $USER_UID:$USER_GID src data
 COPY requirements.txt .
 ## Dependencies for dlib
 RUN apt update && apt install -y git-all build-essential cmake
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
-COPY src/ src/
 
 ## Addinitional Deps for OpenCV
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
@@ -14,9 +27,11 @@ RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
 ## Addinitional Deps for dlib and downloading
 RUN apt-get update && apt-get install -y libopenblas-dev curl
 # ── Application source ────────────────────────────────────────────────────────
-COPY src/           src/
+COPY --chown=$USER_UID:$USER_GID src/ src/
 COPY video_list/    video_list/
 
+# As the user, so the weights land in the user's src/models and ~/.keras/paz
+USER $USERNAME
 RUN python src/initialize_models.py
 
 # ── Data volume ───────────────────────────────────────────────────────────────

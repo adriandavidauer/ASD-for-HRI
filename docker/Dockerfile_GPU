@@ -1,8 +1,10 @@
 # ── UniTalk ASD full evaluation pipeline ──────────────────────────────────────
 #
 #
-# Build (COPY paths are relative to the build context given in the build command, i.e. .):
-#   docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
+# Build (COPY paths are relative to the build context given in the build command, i.e. .).
+# The container runs as your host user, so the files it writes to the data mount belong to you:
+#   docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) \
+#       -t unitalk-gpu_buffer .
 #
 # Run (download + predictions + stats):
 #   docker run -d --gpus all -v $(pwd)/data:/app/data unitalk-gpu_buffer --data_dir /app/data
@@ -23,14 +25,18 @@ FROM nvcr.io/nvidia/tensorflow:24.05-tf2-py3
 LABEL org.opencontainers.image.title="UniTalk ASD Pipeline" \
       org.opencontainers.image.description="Download + evaluate ASD on UniTalk val split"
 
-# create non-root User
+# Non-root user that runs the container. Set USER_UID/USER_GID to your host ids (see Build above)
+# so that results written to the mounted data directory are owned by you. The devcontainer keeps
+# the defaults and remaps the uid itself (updateRemoteUserUID).
 ARG USERNAME=developer
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-# Create the user
-RUN groupadd --gid $USER_GID $USERNAME \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME 
+# Create the user; reuse the group if the base image already has one with this gid
+# -o (--non-unique): the host uid may already exist in the image (e.g. 0 when building as root);
+# USER $USERNAME still resolves, since it looks up the name.
+RUN (getent group $USER_GID || groupadd --gid $USER_GID $USERNAME) \
+    && useradd -o --uid $USER_UID --gid $USER_GID -m $USERNAME
 
 # ── System packages ────────────────────────────────────────────────────────────
 # ffmpeg         : H264 video encoding used by FFmpegWriter
@@ -69,8 +75,9 @@ WORKDIR /app
 # ── Python dependencies ────────────────────────────────────────────────────────
 COPY pyproject.toml .
 COPY README.md .
-# Create the empty src directory so setuptools doesn't crash
-RUN mkdir src
+# Create the empty src directory so setuptools doesn't crash. src and data are owned by the user:
+# initialize_models.py below creates src/models, and an anonymous /app/data volume must be writable.
+RUN mkdir src data && chown $USER_UID:$USER_GID src data
 # Install dependencies using a persistent pip cache
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install .[dev] 
@@ -87,16 +94,21 @@ ENV LD_LIBRARY_PATH=${NV_PIP_LIB}/cudnn/lib:${NV_PIP_LIB}/cublas/lib:${NV_PIP_LI
 
 
 #### TalkNet
-COPY src/TalkNet-ASD/requirement.txt           src/TalkNet-ASD/requirement.txt
+COPY --chown=$USER_UID:$USER_GID src/TalkNet-ASD/requirement.txt src/TalkNet-ASD/requirement.txt
 RUN pip install -r src/TalkNet-ASD/requirement.txt
 
 
 # ── Application source ────────────────────────────────────────────────────────
-COPY src/           src/
+COPY --chown=$USER_UID:$USER_GID src/ src/
 
 RUN pip install --no-deps -e ".[dev]"
 
-# Download all model weights once so they are baked into the image
+# Everything from here on, including the container itself, runs as the user.
+USER $USERNAME
+
+# Download all model weights once so they are baked into the image. As the user, so that they
+# end up where the user's runs look for them: src/models and ~/.keras/paz (as root, PAZ's
+# weights went to /root/.keras and were downloaded again on every run).
 RUN python src/initialize_models.py
 
 # ── Data volume ───────────────────────────────────────────────────────────────
@@ -118,4 +130,3 @@ VOLUME ["/app/data"]
 # to run_evaluation.py (e.g. --no_download, --video ID, --skip_stats).
 ENTRYPOINT ["python", "-m", "src.experiments.run_evaluation"]
 CMD ["--data_dir", "/app/data"]
-USER $USERNAME
