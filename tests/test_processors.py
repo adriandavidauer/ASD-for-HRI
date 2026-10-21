@@ -332,6 +332,7 @@ def test_FaceDetectorYN_output_no_inpt_size():
         assert exp_box.score == box.score
         assert exp_box.class_name == box.class_name
 
+
 def test_PreprocessImages():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
@@ -371,6 +372,7 @@ def test_PreprocessImages_with_Nones():
             assert output_image.shape == (h,w,3), "should be resized to given shape"
             assert output_image.dtype == float, "should be casted to float"
             assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))
+
 
 def test_FaceDetectorRetinaFace_output():
     """Test if the output with a test image is correct."""

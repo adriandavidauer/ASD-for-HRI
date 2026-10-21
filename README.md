@@ -129,4 +129,6 @@ We provide a Devcontainer for the development of ASD4HRI.
 You need to [install Docker](https://docs.docker.com/engine/install/) and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/1.14.1/install-guide.html) if you whish to use GPU support.
 
 ### Usage of Data in the Container
-The Container does not safe any data. If you want to use Data for Experiments, you can use `/home/vscode/host-home/` which is mounted from your local home directory.
+The container does not save any data: everything outside the mounted folders is lost when the container is rebuilt. To use data for experiments, or to keep results, use `~/host-home/` (`/home/developer/host-home/`). It is a bind mount of your local home directory (`$HOME` on the host), so files written there end up directly on your machine.
+
+The container runs as the non-root user `developer` (created in `docker/Dockerfile_GPU`), so the mount is placed in that user's home. If you change the user in the Dockerfile, update the mount `target` in `.devcontainer/devcontainer.json` to match.

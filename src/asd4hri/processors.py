@@ -45,7 +45,7 @@ from .retinaface_onnx import PriorBox, decode, py_cpu_nms
 __author__      = 'Adrian Auer'
 
 URL = 'https://github.com/adriandavidauer/ASD-for-HRI/releases/download/models/'
-
+FaceTracking_Options = ['sort', 'face_recognition']
 class DownloadProgressBar(tqdm):
     """``tqdm`` progress bar that can be used as a ``urllib.request.urlretrieve`` report hook."""
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -144,8 +144,6 @@ class BufferFeatures(Processor):
         self.stride = stride 
         self.max_consecutive_empty = max_consecutive_empty
         self.return_incomplete_samples = return_incomplete_samples
-        
-
         # Buffers: 
         self.buffers = []
         # Counters for return after stride
@@ -740,5 +738,43 @@ class FaceDetectorRetinaFace(Processor):
             image = self.drawer(image, boxes2D)
         return {'image': image, 'boxes2D': boxes2D}
 
+class FaceTracker(Processor):
+    """Order face boxes so that each face keeps the same index across frames.
 
+    The buffers in ``ClassifyVVAD`` identify an entity by its index in the batch, so the boxes must
+    come in a stable order.
 
+    Args:
+        approach: Tracking approach. One of ``FaceTracking_Options``: 'sort' naively sorts the boxes
+            by their position, 'face_recognition' (not implemented yet) would use a face
+            recognition model to track the same face over time.
+    """
+    def __init__(self, approach='sort'):
+        """Validate and store the tracking approach.
+
+        Raises:
+            ValueError: If ``approach`` is not in ``FaceTracking_Options``.
+        """
+        super(FaceTracker, self).__init__()
+        if approach not in FaceTracking_Options:
+            raise ValueError(f"Approach must be one of {FaceTracking_Options} but is {approach}")
+        self.approach = approach
+
+    def call(self, boxes2D):
+        """Return the boxes in tracking order.
+
+        Args:
+            boxes2D: List of ``paz.abstract.messages.Box2D`` from the face detector.
+
+        Returns:
+            list: The same boxes, sorted by their top-left corner (x, then y) for 'sort'.
+
+        Raises:
+            NotImplementedError: If the approach is 'face_recognition'.
+        """
+        if self.approach == 'sort':
+            # boxes2D is sorted by score descending, so the first box is the best one but I need them sorted by bounding box position for the buffer to work properly
+            ret_boxes2D = sorted(boxes2D, key=lambda box: (box.coordinates[0], box.coordinates[1])) # This could go in a separate processor with different sorting technigues from this naive one to tracking.
+        elif self.approach == 'face_recognition':
+            raise NotImplementedError("Face recognition based tracking is not implemented yet. Please use 'sort' as approach.")
+        return ret_boxes2D

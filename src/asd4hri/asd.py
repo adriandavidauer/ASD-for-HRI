@@ -133,7 +133,8 @@ class ClassifyVVAD(SequentialProcessor):
         if 'Shape' in architecture:            
             preprocess.add(GetShapeFeatures(architecture=architecture)) # works on batch of face images not on batch of samples - needs to be done before buffering into a sample
         else:
-            preprocess.add(PreprocessImages(input_size[1:3])) # works on batch of images not on batch of samples - needs to be done before buffering into a sample 
+            # PreprocessImage is set to not normalize the image to [0, 1] because the model is trained on images in [0, 255]
+            preprocess.add(PreprocessImages(input_size[1:3], normalize=False)) # works on batch of images not on batch of samples - needs to be done before buffering into a sample 
         self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty)
         # We buffer the incoming face images or features
         preprocess.add(self.buffer_features)
@@ -209,9 +210,11 @@ class ASD(Processor):
             'HaarCascade' and 'RetinaFace' are implemented.
         input_size: ``(width, height)`` of the input images, used by the YuNet detector.
             If None, it is set at runtime, which can slow the pipeline down slightly.
+        face_tracking_approach: How faces are kept in a stable order across frames. One of
+            ``FaceTracking_Options``; see ``FaceTracker``.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort'):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -223,7 +226,10 @@ class ASD(Processor):
         self.offsets = [0,0]
         self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
         self.absent_counts = []
-
+        self.face_tracking_approach = face_tracking_approach
+        if self.face_tracking_approach not in FaceTracking_Options:
+            raise ValueError(f"Face tracking approach must be one of {FaceTracking_Options} but is {self.face_tracking_approach}")
+        self.face_tracker = FaceTracker(approach=self.face_tracking_approach)
         #detection
         self.copy = pr.Copy()
         if detector == 'HaarCascade':
@@ -275,6 +281,7 @@ class ASD(Processor):
         # get the face boxes and crop the faces from the image
         image_copy = self.copy(image)
         boxes2D = self.detect(image_copy)['boxes2D']
+        boxes2D = self.face_tracker(boxes2D)
         boxes2D = self.square(boxes2D)
         boxes2D = self.clip(image, boxes2D)
         cropped_images = self.crop(image, boxes2D)
