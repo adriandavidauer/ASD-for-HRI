@@ -27,7 +27,8 @@ jobs:
           cache: pip
 
       - name: Install tools
-        run: pip install ruff interrogate
+        # Keep the ruff pin in sync with pyproject.toml: preview rules change between releases.
+        run: pip install ruff==0.16.9 interrogate
 
       - name: Run ruff
         id: ruff

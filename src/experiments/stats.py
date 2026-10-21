@@ -80,8 +80,7 @@ def setup_logging(log_name='unitalk_stats', verbose=False, log_dir='logs_stats')
 # ── data loading ─────────────────────────────────────────────────────────────
 
 def load_ground_truth(csv_path):
-    """Read the master ground-truth CSV → dict[video_id] -> list[gt row dict].
-    """
+    """Read the master ground-truth CSV → dict[video_id] -> list[gt row dict]."""
     df = pd.read_csv(csv_path)
     df['asd_label'] = df['label'].map(_LABEL_MAP).fillna('not-speaking')
 
@@ -104,8 +103,7 @@ def load_ground_truth(csv_path):
 
 
 def load_predictions_csv(path):
-    """Read a prediction CSV → sorted list of (timestamp, [_PredBox, ...]).
-    """
+    """Read a prediction CSV → sorted list of (timestamp, [_PredBox, ...])."""
     by_ts = defaultdict(list)
     with open(path, newline='') as f:
         for row in csv.DictReader(f):
@@ -121,8 +119,7 @@ def load_predictions_csv(path):
 
 
 def load_processing_times(predictions_dir):
-    """Read ``aggregate_time.csv`` -> dict[video_id] -> {frames, elapsed, fps}.
-    """
+    """Read ``aggregate_time.csv`` -> dict[video_id] -> {frames, elapsed, fps}."""
     path = os.path.join(predictions_dir, 'aggregate_time.csv')
     if not os.path.isfile(path):
         LOGGER.warning('aggregate_time.csv not found path=%s', path)
@@ -147,8 +144,7 @@ def load_processing_times(predictions_dir):
 
 
 class GroundTruthIndex:
-    """Sorted-timestamp index  with binary search over one video's ground truth annotations.
-    """
+    """Sorted-timestamp index  with binary search over one video's ground truth annotations."""
 
     def __init__(self, gt_rows):
         by_ts = defaultdict(list)
@@ -210,8 +206,7 @@ def _overlap(a, b):
 
 
 def match_frame(pred_boxes, gt_boxes, iou_threshold):
-    """Greedy highest-IoU matching of one frame's predictions to its GT boxes.
-    """
+    """Greedy highest-IoU matching of one frame's predictions to its GT boxes."""
     overlaps    = {}
     best_per_gt = [(0.0, 0.0, '', 0.0)] * len(gt_boxes)
     for pi, pred in enumerate(pred_boxes):
@@ -329,8 +324,7 @@ class Stats:
 
 def compute_stats_from_predictions(video_id, predictions_csv, gt_rows, iou_threshold,
                                    timestamp_tolerance_s):
-    """Score one video's prediction CSV and return (Stats, per-GT-box match info).
-    """
+    """Score one video's prediction CSV and return (Stats, per-GT-box match info)."""
     gt_index = GroundTruthIndex(gt_rows)
     stats = Stats(gt_index)
     # (timestamp, gi) -> [iou, containment, pred_label, matched, score] for the best
@@ -476,8 +470,7 @@ def write_detail_csv(result_dir, video_id, detail_rows):
 
 
 def write_aggregate_csv(result_dir, per_video, times_by_video=None):
-    """Write one CSV holding a summary row per video.
-    """
+    """Write one CSV holding a summary row per video."""
     if not per_video:
         return
     times_by_video = times_by_video or {}
@@ -569,8 +562,7 @@ def write_aggregate_csv(result_dir, per_video, times_by_video=None):
 
 
 def _score_video(vid, predictions_csv, gt_rows, iou_threshold, tol_s, result_dir):
-    """Worker: score one video, write its detail CSV, return (vid, Stats).
-    """
+    """Worker: score one video, write its detail CSV, return (vid, Stats)."""
     stats, detail_rows = compute_stats_from_predictions(
         vid, predictions_csv, gt_rows, iou_threshold, tol_s)
     write_detail_csv(result_dir, vid, detail_rows)

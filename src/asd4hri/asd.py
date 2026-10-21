@@ -1,6 +1,4 @@
-'''
-Adjusted Version of ClassifyVVAD to use dlib and lib_shape or face_shape model.
-'''
+"""Adjusted Version of ClassifyVVAD to use dlib and lib_shape or face_shape model."""
 
 # System imports
 import os
@@ -60,12 +58,21 @@ FaceDetector_Options = ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YO
 
 def load_vvad_classifier(architecture):
     """Load the Keras classifier model for the given architecture.
-    
-    # Arguments
-        architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
-    
-    # Returns
-        tuple: (Keras model for the given architecture, input shape of the model)
+
+    The ``LipShape`` and ``FaceShape`` weights are downloaded to ``src/models`` on first use.
+
+    Args:
+        architecture: Name of the architecture to load. One of ``Architecture_Options``:
+            'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
+            'CNN2Plus1D_Light', 'LipShape' or 'FaceShape'.
+
+    Returns:
+        tuple: ``(model, input_shape)`` where ``model`` is the Keras model and ``input_shape`` is the
+        shape of one sample expected by the model, e.g. ``(38, 96, 96, 3)`` for the image models,
+        ``(38, 20, 2)`` for 'LipShape' and ``(38, 68, 2)`` for 'FaceShape'.
+
+    Raises:
+        ValueError: If ``architecture`` is not supported.
     """
     if architecture == 'VVAD-LRS3-LSTM':
         return (VVAD_LRS3_LSTM(weights='VVAD_LRS3'), (38, 96, 96, 3))
@@ -84,26 +91,34 @@ def load_vvad_classifier(architecture):
 
 
 class ClassifyVVAD(SequentialProcessor):
-    """Visual Voice Activity Detection pipeline for classifying speaking and not speaking from cropped RGB face
-    video clips.
-    Expects a batch of face images - each image representig a different entity. 
-    Images will be buffered until the inputsize of the model.
-    Returns a batch of (averaged) predictions - each prediction corresponding to the entity in the input image at the same index.
+    """Visual Voice Activity Detection pipeline for cropped face video clips.
 
-    # Arguments
-        input_size: Tuple of integers. Input shape to the model in following format: (frames, height, width, channels)
-            e.g. (38, 96, 96, 3).
-        architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D',
-            'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
-        stride: Integer. How many frames are between the predictions (computational expansive (low update rate) vs
-            high latency (high update rate))
-        averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
-        weigthed: Boolean. 
-                If True weigthed by the index+1 (otherwise the first entry will always be zero and single values will be removed) of the value.
-                If False just the average over all entries
+    Classifies speaking vs. not speaking. Expects a batch of face images per call, each image
+    representing a different entity (the order must be stable across calls). Images, or the shape
+    features extracted from them, are buffered until a full sample for the model is collected.
+    Returns a batch of (averaged) predictions, each corresponding to the entity at the same index
+    of the input batch, or ``None`` where no prediction is available yet.
+
+    Args:
+        architecture: Name of the architecture to use. One of ``Architecture_Options``:
+            'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
+            'CNN2Plus1D_Light', 'LipShape' or 'FaceShape'.
+        stride: Number of frames between two predictions. A low stride is computationally
+            expensive (high update rate), a high stride adds latency (low update rate).
+        averaging_window_size: Number of consecutive predictions that are averaged.
+            Set to 1 to disable averaging.
+        weighted: If True, the predictions in the averaging window are weighted by their
+            position (index + 1), so newer predictions count more. If False, a plain average
+            is used.
+        max_consecutive_empty: Number of consecutive missing face images after which the
+            buffer of an entity is cleared.
     """
     def __init__(self, architecture='CNN2Plus1D_Light',
                  stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5):
+        """Load the classifier and assemble the preprocessing, buffering and averaging steps.
+
+        Asserts that ``architecture`` is in ``Architecture_Options``.
+        """
         super(ClassifyVVAD, self).__init__()
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
@@ -150,7 +165,7 @@ class ClassifyVVAD(SequentialProcessor):
         # self.add(pr.WrapOutput(['class_name', 'scores']))
     
     def reset(self):
-        """Clear temporal state: clip buffer (BufferImages) and score window (AveragePredictions)."""
+        """Clear the temporal state: the feature buffers and the prediction averaging window."""
         # Clear Buffer
         self.buffer_features.reset()
 
@@ -163,41 +178,47 @@ class ClassifyVVAD(SequentialProcessor):
 class ASD(Processor):
     """Active Speaker Detection pipeline.
 
-    # Example
-        ``` python
-            pipeline = ASD(architecture='LipShape')
-            camera = Camera(0)
-            player = VideoPlayer((640, 480), pipeline, camera)
-            player.run()
+    Detects faces in each RGB frame, crops them and classifies every face as speaking or not
+    speaking with ``ClassifyVVAD``. Multiple consecutive frames are needed before the first
+    prediction is produced; until then boxes are labelled 'No Prediction yet' with score -1.
+
+    Example:
+        ```python
+        pipeline = ASD(architecture='LipShape')
+        camera = Camera(0)
+        player = VideoPlayer((640, 480), pipeline, camera)
+        player.run()
         ```
 
-    # Returns
-        Dictionary with ``image`` and ``boxes2D``.
-
-    # Returns
-        A function that takes an RGB image and outputs the predictions
-        as a dictionary with ``keys``: ``image`` and ``boxes2D``.
-        The corresponding values of these keys contain the image with the drawn
-        inferences and a list of ``paz.abstract.messages.Boxes2D``.
-        Note multiple images are needed to produce a prediction.
-
-    # Arguments
-        architecture: String. Name of the architecture to use. Currently supported: 'VVAD-LRS3-LSTM', 'CNN2Plus1D',
-            'CNN2Plus1D_Filters' and 'CNN2Plus1D_Light', 'LipShape' and 'FaceShape'
-        stride: Integer. How many frames are between the predictions (computational expansive (low stride) vs
-            high latency (high stride))
-        averaging_window_size: Integer. How many predictions are averaged. Set to 1 to disable averaging
-        weighted: Bool. Flag if the window averaging should be performed weighted by the index of the frame in the averaging window.
-        decision_threshold: Float. Threashold for deciding positive or negative sample with the score of the model.
-        max_consecutive_empty: Integer. Number of face images that can be missed before the buffer will be cleared. 
-            Low number might cause small samples or missing predictions for fixed sample length. High number might cause glitches in samples. 
-        annotate_output: Bool. Flag if the bounding box, score  and predicted label should be written to the image.
-        detector: String. Possible choices for the face detector: ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YOLOv10-Face'].
-        input_size: Tuple of Integers: (Width, Height) of the input images. This is needed by some of the face detectors. 
-            Not setting will trigger automatic setting during runtime which can slow down the pipeline a bit.
+    Args:
+        architecture: Name of the architecture to use. One of ``Architecture_Options``:
+            'VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
+            'CNN2Plus1D_Light', 'LipShape' or 'FaceShape'.
+        stride: Number of frames between two predictions. A low stride is computationally
+            expensive, a high stride adds latency.
+        averaging_window_size: Number of consecutive predictions that are averaged.
+            Set to 1 to disable averaging.
+        decision_threshold: Score above which a face is classified as speaking.
+        weighted: If True, the averaging window is weighted by the position of each prediction,
+            so newer predictions count more.
+        max_consecutive_empty: Number of frames a face may be missing before its buffer is
+            cleared. A low number can cause short samples or missing predictions for models with
+            a fixed sample length; a high number can cause glitches in samples.
+        annotate_output: If True, the bounding box, score and predicted label are drawn on the
+            returned image.
+        detector: Face detector to use. One of ``FaceDetector_Options``. Only 'YuNet',
+            'HaarCascade' and 'RetinaFace' are implemented.
+        input_size: ``(width, height)`` of the input images, used by the YuNet detector.
+            If None, it is set at runtime, which can slow the pipeline down slightly.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort'):
+        """Build the face detection, cropping and classification steps.
+
+        Raises:
+            NotImplementedError: If ``detector`` is 'InsightFace' or 'YOLOv10-Face'.
+            ValueError: If ``detector`` is unknown.
+        """
         super(ASD, self).__init__()
         self.annotate_output = annotate_output
         self.offsets = [0,0]
@@ -245,6 +266,16 @@ class ASD(Processor):
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
     def call(self, image):
+        """Detect faces in one frame and classify each of them as speaking or not speaking.
+
+        Args:
+            image: RGB image as a numpy array of shape ``(height, width, 3)``.
+
+        Returns:
+            dict: ``{'image': image, 'boxes2D': boxes2D}``. ``boxes2D`` is a list of
+            ``paz.abstract.messages.Box2D`` whose ``class_name`` and ``score`` hold the prediction.
+            The image has the boxes drawn on it if ``annotate_output`` is True.
+        """
         # get the face boxes and crop the faces from the image
         image_copy = self.copy(image)
         boxes2D = self.detect(image_copy)['boxes2D']
@@ -263,10 +294,14 @@ class ASD(Processor):
         return self.wrap(image, boxes2D)
 
 class DetectVVAD(ASD):
-    """Deprecated Version of ASD.
-    """
+    """Deprecated version of ``ASD``. Use ``ASD`` instead."""
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3,
                  average_type='weighted', offsets=[0,0], colors=[[0, 255, 0], [255, 0, 0]], min_frames=38, patience=5):
+        """Fail on construction because the class is deprecated.
+
+        Raises:
+            DeprecationWarning: Always; use ``ASD`` instead.
+        """
         super(DetectVVAD, self).__init__(architecture=architecture, stride=stride,
                                          averaging_window_size=averaging_window_size,
                                          average_type=average_type, offsets=offsets,

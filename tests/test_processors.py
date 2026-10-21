@@ -1,6 +1,4 @@
-'''
-Tests for the paz processors needed for the full pipeline
-'''
+"""Tests for the paz processors needed for the full pipeline."""
 
 # System imports
 
@@ -56,9 +54,7 @@ def test_return_batched_BufferFeatures():
                 assert ret_val[2] is not None, f"In timestep {i} the third buffer should be full an returned. Returned {ret_val} in timestep {i} instead."        
 
 def test_auto_reset_BufferFeatures():
-    """
-    Testing if the max_consecutive_empty parameter triggers acutually reseting the buffer.
-    """
+    """Testing if the max_consecutive_empty parameter triggers acutually reseting the buffer."""
     buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1)
     for i in range(1000):
         input_list = [None, None]
@@ -69,9 +65,7 @@ def test_auto_reset_BufferFeatures():
         assert ret_val[1] is None, f"Second buffer should always be None, because max_consecutive_empty is smaller than each step in which the buffer is filled"
 
 def test_reset_single_BufferFeatures():
-    """
-    Testing if resting the buffer works - filling a buffer and reset it every x steps where x is smaller timesteps - buffer should always return None.
-    """
+    """Testing if resting the buffer works - filling a buffer and reset it every x steps where x is smaller timesteps - buffer should always return None."""
     buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1)
     for i in range(1000):
         ret_val = buffer([test_image])
@@ -80,9 +74,7 @@ def test_reset_single_BufferFeatures():
         assert ret_val[0] is None, f"before {IMAGE_INPUT_SHAPE[0]} timesteps None should be returned, returned {type(ret_val[0])} in timestep {i} instead."
 
 def test_reset_all_BufferFeatures():
-    """
-    Testing if resting the buffer works - filling a buffer and reset it every x steps where x is smaller timesteps - buffer should always return None.
-    """
+    """Testing if resting the buffer works - filling a buffer and reset it every x steps where x is smaller timesteps - buffer should always return None."""
     buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1)
     for i in range(1000):
         input_list = [None, None, None]
@@ -93,9 +85,7 @@ def test_reset_all_BufferFeatures():
         assert ret_val == [None, None, None], f"before {(IMAGE_INPUT_SHAPE[0]-1)*3} timesteps [None, None, None] should be returned, returned [{type(ret_val[0])},{type(ret_val[1])},{type(ret_val[2])}]  in timestep {i} instead."
 
 def test_remove_dangeling_BufferFeatures():
-    """
-    Test if dangeling buffers are removed.
-    """
+    """Test if dangeling buffers are removed."""
     buffer = BufferFeatures(input_size=IMAGE_INPUT_SHAPE, stride=1, max_consecutive_empty=5)
     max_buffers = 42
     buffer([None]*max_buffers)
@@ -118,9 +108,7 @@ def test_return_incomplete_samples_BufferFeatures():
     
 
 def test_GetShapeFeatures():
-    """
-    test if the processor returns the correct shapes
-    """
+    """Test if the processor returns the correct shapes."""
     shape_features = GetShapeFeatures()
     for i in range(5):
         input_batch = [test_image]*i
@@ -128,26 +116,20 @@ def test_GetShapeFeatures():
         assert len(output_batch) == len(input_batch), f"Output batch should have the same length as the input batch but they are: \ninput: {len(input_batch)}\noutput: {len(output_batch)}"
 
 def test_no_batch_GetShapeFeatures():
-    """
-    Test if processor raises an error when not feeded a batch
-    """
+    """Test if processor raises an error when not feeded a batch."""
     shape_features = GetShapeFeatures()
     with pytest.raises(AssertionError, match="Probably not receiving a batch"):
         output_no_batch = shape_features(test_image) # this should crash
 
 
 def test_no_batch_NormalizeShapeSample():
-    """
-    Test if processor raises an error when not feeded a batch
-    """
+    """Test if processor raises an error when not feeded a batch."""
     normalizer = NormalizeShapeSample()
     with pytest.raises(IndexError, match="invalid index to scalar variable"):
         output = normalizer(test_lip_features)
 
 def test_NormalizeShapeSample():
-    """
-    test if the processor returns the correct shapes
-    """
+    """Test if the processor returns the correct shapes."""
     normalizer = NormalizeShapeSample()
     batch_input = [test_lip_features]*5
     batch_output = normalizer(batch_input)
@@ -155,9 +137,7 @@ def test_NormalizeShapeSample():
 
 
 def test_AveragePredictions():
-    """
-    test if it calculates the average correctly
-    """
+    """Test if it calculates the average correctly."""
     average = AveragePredictions(weighted=False)
     element_1 = [1,2,3]
     single_value = [4]
@@ -167,9 +147,7 @@ def test_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
 def test_with_Nones_AveragePredictions():
-    """
-    test if it calculates the average with Nones correctly
-    """
+    """Test if it calculates the average with Nones correctly."""
     average = AveragePredictions(weighted=False)
     element_1 = [1,2,3]
     single_value = [4]
@@ -179,9 +157,7 @@ def test_with_Nones_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
 def test_weighted_AveragePredictions():
-    """
-    test if it calculates the weigthed average correctly
-    """
+    """Test if it calculates the weigthed average correctly."""
     average = AveragePredictions(weighted=True)
     element_1 = [0,1,2,3]
     element_2 = [3,2,1,0]
@@ -192,9 +168,7 @@ def test_weighted_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
 
 def test_with_Nones_weighted_AveragePredictions():
-    """
-    test if it calculates the weighted average with Nones correctly
-    """
+    """Test if it calculates the weighted average with Nones correctly."""
     average = AveragePredictions(weighted=True)
     element_1 = [1,2,3]
     element_2 = [3,2,1]
@@ -205,9 +179,7 @@ def test_with_Nones_weighted_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"    
 
 def test_empty_batch_AveragePredictions():
-    """
-    test if it calculates the (weighted) average with an empty batch correctly
-    """
+    """Test if it calculates the (weighted) average with an empty batch correctly."""
     # weighted
     average = AveragePredictions(weighted=True)
     input_batch = []
@@ -220,9 +192,7 @@ def test_empty_batch_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
 def test_empty_buffer_in_batch_AveragePredictions():
-    """
-    test if it calculates the (weighted) average with an empty buffer in batch correctly
-    """
+    """Test if it calculates the (weighted) average with an empty buffer in batch correctly."""
     # weighted
     average = AveragePredictions(weighted=True)
     element_1 = [1,2,3]
@@ -239,9 +209,7 @@ def test_empty_buffer_in_batch_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
 def test_only_empty_buffer_in_batch_AveragePredictions():
-    """
-    test if it calculates the (weighted) average with only an empty buffer in batch correctly
-    """
+    """Test if it calculates the (weighted) average with only an empty buffer in batch correctly."""
     # weighted
     average = AveragePredictions(weighted=True)
     input_batch = [[]]
@@ -254,9 +222,7 @@ def test_only_empty_buffer_in_batch_AveragePredictions():
     assert np.all(np.equal(excepted_output, output_batch)), f"mean should be {excepted_output} but is {output_batch}"
 
 def test_normalize_AveragePredictions():
-    """
-    test if it calculates the (weighted) average with normalization correctly
-    """
+    """Test if it calculates the (weighted) average with normalization correctly."""
     # weighted
     average = AveragePredictions(weighted=True, normalize=True)
     element_1 = [1,1,1]
@@ -280,9 +246,7 @@ def postprocess(input):
     return input
 
 def test_empty_batch_PredictWithNones():
-    """
-    Test if prediction works with an empty batch
-    """
+    """Test if prediction works with an empty batch."""
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     input_batch = []
     for i in range(100):
@@ -291,9 +255,7 @@ def test_empty_batch_PredictWithNones():
  
 
 def test_without_Nones_PredictWithNones():
-    """
-    Test if prediction works and Nones are forwarded
-    """
+    """Test if prediction works and Nones are forwarded."""
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     input_batch = [1, 2, 3]
     for i in range(100):
@@ -302,18 +264,14 @@ def test_without_Nones_PredictWithNones():
         assert np.all(np.equal(input_batch, output_batch)), f"predictions should be {input_batch} but is {output_batch}"
         
 def test_without_Nones_pure_np_array_PredictWithNones():
-    """
-    Test if prediction works and Nones are forwarded
-    """
+    """Test if prediction works and Nones are forwarded."""
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     input_batch = np.array([[1, 2], [2, 3], [3, 4]])
     output_batch = predictor(input_batch)
     assert np.all(np.equal(input_batch,output_batch))
         
 def test_without_Nones_batchList_of_np_arrays_PredictWithNones():
-    """
-    Test if prediction works and Nones are forwarded
-    """
+    """Test if prediction works and Nones are forwarded."""
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     input_batch = [np.array([test_lip_features]*38)]
     output_batch = predictor(input_batch)
@@ -321,9 +279,7 @@ def test_without_Nones_batchList_of_np_arrays_PredictWithNones():
 
 
 def test_with_Nones_PredictWithNones():
-    """
-    Test if prediction works and Nones are forwarded
-    """
+    """Test if prediction works and Nones are forwarded."""
     predictor = PredictWithNones(model=model, preprocess=preprocess, postprocess=postprocess)
     for i in range(100):
         input_batch = [None, None, None]
@@ -332,18 +288,14 @@ def test_with_Nones_PredictWithNones():
         assert input_batch == output_batch
 
 def test_flatten_predictions():
-    """
-    Test if flattening predictions works
-    """
+    """Test if flattening predictions works."""
     input_batch = np.array([[1]]) # [np.array([[1], [2], [3]]), np.array([[4], [5], [6]])]
     output_batch = flatten_predictions(input_batch)
     expected_output = np.array([1]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
     assert np.all(np.equal(output_batch, expected_output)), f"flattened predictions should be {expected_output} but is {output_batch}"
 
 def test_flatten_predictions_with_Nones():
-    """
-    Test if flattening predictions works with Nones
-    """
+    """Test if flattening predictions works with Nones."""
     input_batch = [np.array([[1]]), None, np.array([[3]])]
     output_batch = flatten_predictions(input_batch)
     expected_output = np.array([1, None, 3]) # [np.array([1, 2, 3]), np.array([4, 5, 6])]
@@ -351,9 +303,7 @@ def test_flatten_predictions_with_Nones():
 
 
 def test_FaceDetectorYN_output():
-    """
-    Test if the output with a test image is correct
-    """
+    """Test if the output with a test image is correct."""
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
     orig_img = image.copy()
     h, w, _ = image.shape
@@ -368,9 +318,7 @@ def test_FaceDetectorYN_output():
         assert exp_box.class_name == box.class_name
 
 def test_FaceDetectorYN_output_no_inpt_size():
-    """
-    Test if the output with a test image is correct even if no input_size is given (automatic setting during runtime)
-    """
+    """Test if the output with a test image is correct even if no input_size is given (automatic setting during runtime)."""
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
     orig_img = image.copy()
     h, w, _ = image.shape
@@ -386,9 +334,7 @@ def test_FaceDetectorYN_output_no_inpt_size():
 
 
 def test_PreprocessImages():
-    """
-    Test if the processor returns the correct output shape and range for values
-    """
+    """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
     w = random.randint(0, 1024)
     h = random.randint(0, 1024)
@@ -400,9 +346,7 @@ def test_PreprocessImages():
         assert np.all((output_image.min() >= 0) and (output_image.max() <= 1))
 
 def test_PreprocessImages_no_normalization():
-    """
-    Test if the processor returns the correct output shape and range for values
-    """
+    """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
     w = random.randint(0, 1024)
     h = random.randint(0, 1024)
@@ -414,9 +358,7 @@ def test_PreprocessImages_no_normalization():
         assert np.all((output_image.min() >= 0) and (output_image.max() <= 255))
 
 def test_PreprocessImages_with_Nones():
-    """
-    Test if the processor returns the correct output shape and range for values
-    """
+    """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
     w = random.randint(0, 1024)
     h = random.randint(0, 1024)
@@ -433,9 +375,7 @@ def test_PreprocessImages_with_Nones():
 
 
 def test_FaceDetectorRetinaFace_output():
-    """
-    Test if the output with a test image is correct
-    """
+    """Test if the output with a test image is correct."""
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     orig_img = image.copy()

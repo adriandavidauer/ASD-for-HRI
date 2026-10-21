@@ -1,6 +1,4 @@
-'''
-Code from https://github.com/kingardor/retinaface-onnx
-'''
+"""Code from https://github.com/kingardor/retinaface-onnx."""
 
 # System imports
 from math import ceil
@@ -36,10 +34,20 @@ cfg_re50 = {
 }
 
 class PriorBox(object):
-    """
-    From https://github.com/kingardor/retinaface-onnx/blob/main/layers/functions/prior_box.py
+    """Generate the RetinaFace anchor (prior) boxes for a given input size.
+
+    From https://github.com/kingardor/retinaface-onnx/blob/main/layers/functions/prior_box.py.
     """
     def __init__(self, cfg, format:str="tensor", image_size=None, phase='train'):
+        """Compute the feature map sizes for the given configuration and image size.
+
+        Args:
+            cfg: RetinaFace configuration, e.g. ``cfg_re50``. Uses the keys 'min_sizes', 'steps'
+                and 'clip'.
+            format: Kept for compatibility with the original code; the output is always numpy.
+            image_size: ``(height, width)`` of the network input.
+            phase: Unused; kept for compatibility with the original code.
+        """
         super(PriorBox, self).__init__()
         self.min_sizes = cfg['min_sizes']
         self.steps = cfg['steps']
@@ -50,6 +58,12 @@ class PriorBox(object):
         self.__format = format
 
     def forward(self):
+        """Generate the prior boxes.
+
+        Returns:
+            numpy.ndarray: Array of shape ``(num_priors, 4)`` with priors in center-offset form
+            ``(cx, cy, w, h)``, normalized to the image size.
+        """
         anchors = []
         for k, f in enumerate(self.feature_maps):
             min_sizes = self.min_sizes[k]
@@ -81,18 +95,19 @@ class PriorBox(object):
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd
 def decode(loc, priors, variances):
-    """Decode locations from predictions using priors to undo
-    the encoding we did for offset regression at train time.
-    Args:
-        loc (tensor): location predictions for loc layers,
-            Shape: [num_priors,4]
-        priors (tensor): Prior boxes in center-offset form.
-            Shape: [num_priors,4].
-        variances: (list[float]) Variances of priorboxes
-    Return:
-        decoded bounding box predictions
-    """
+    """Decode box predictions using the priors.
 
+    Undoes the encoding applied for offset regression at training time.
+
+    Args:
+        loc: Location predictions of shape ``(num_priors, 4)``.
+        priors: Prior boxes in center-offset form, shape ``(num_priors, 4)``.
+        variances: Variances of the prior boxes, e.g. ``[0.1, 0.2]``.
+
+    Returns:
+        numpy.ndarray: Decoded boxes of shape ``(num_priors, 4)`` as
+        ``(x_min, y_min, x_max, y_max)`` in normalized coordinates.
+    """
     boxes = None
     # if isinstance(loc, torch.Tensor) and isinstance(priors, torch.Tensor) :
     #     boxes = torch.cat((
@@ -111,7 +126,15 @@ def decode(loc, priors, variances):
     return boxes
 
 def py_cpu_nms(dets, thresh):
-    """Pure Python NMS baseline."""
+    """Apply non-maximum suppression (pure numpy baseline).
+
+    Args:
+        dets: Detections of shape ``(N, 5)`` as ``(x_min, y_min, x_max, y_max, score)``.
+        thresh: IoU threshold above which the lower-scoring box is suppressed.
+
+    Returns:
+        list: Indices into ``dets`` of the kept detections, in descending score order.
+    """
     x1 = dets[:, 0]
     y1 = dets[:, 1]
     x2 = dets[:, 2]

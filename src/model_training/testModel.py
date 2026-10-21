@@ -1,6 +1,4 @@
-'''
-Test model on TestData
-'''
+"""Test model on TestData."""
 
 # System imports
 import glob

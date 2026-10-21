@@ -1,5 +1,4 @@
-"""End-to-end ASD evaluation: run predictions over a dataset, then calculates stats.
-"""
+"""End-to-end ASD evaluation: run predictions over a dataset, then calculates stats."""
 
 import logging
 from datetime import datetime
