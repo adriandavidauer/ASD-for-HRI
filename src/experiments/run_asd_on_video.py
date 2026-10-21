@@ -1,5 +1,4 @@
-"""Run ASD on a single video and persist its per-frame predictions.
-"""
+"""Run ASD on a single video and persist its per-frame predictions."""
 
 import argparse
 import csv
@@ -45,8 +44,7 @@ _PREDICTION_FIELDS = ['frame_idx', 'timestamp', 'label', 'x1', 'y1', 'x2', 'y2',
 _AGGREGATE_TIME_FIELDS = ['video_id', 'elapsed_seconds', 'frames_processed', 'fps_processed']
 
 def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes, width, height):
-    """Write one row per predicted box with bbox coords normalised to [0, 1].
-    """
+    """Write one row per predicted box with bbox coords normalised to [0, 1]."""
     for pred in pred_boxes:
         label = getattr(pred, 'class_name', '') or ''
         x1, y1, x2, y2 = pred.coordinates

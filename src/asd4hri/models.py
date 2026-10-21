@@ -1,6 +1,4 @@
-'''
-Model Architectures for VVAD.
-'''
+"""Model Architectures for VVAD."""
 
 # System imports
 
@@ -22,7 +20,23 @@ __author__      = 'Adrian Auer'
 
 
 def buildFeatureLSTM(input_shape, num_lstm_layers=1, lstm_dims=32, num_dense_layers=1, dense_dims=512, **kwargs):
-        """adjusted from https://github.com/adriandavidauer/VVAD/tree/main to rebuild model with weights in Keras 3 format."""
+        """Build and compile the LSTM classifier used for facial landmark (shape) features.
+
+        Adjusted from https://github.com/adriandavidauer/VVAD/tree/main to rebuild the model with
+        weights in Keras 3 format.
+
+        Args:
+            input_shape: Shape of one sample, ``(timesteps, num_landmarks, 2)``.
+            num_lstm_layers: Number of stacked LSTM layers.
+            lstm_dims: Number of units per LSTM layer.
+            num_dense_layers: Number of ReLU dense layers after the LSTM layers.
+            dense_dims: Number of units per dense layer.
+            **kwargs: Ignored.
+
+        Returns:
+            tuple: ``(model, model_name)``, the compiled Keras ``Sequential`` model and a name
+            encoding its hyperparameters.
+        """
         model = Sequential()
         # handels input shape for Keras 3
         model.add(Input(shape=input_shape))        

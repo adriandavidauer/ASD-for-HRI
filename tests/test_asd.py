@@ -1,6 +1,4 @@
-'''
-Tests for the main asd processors
-'''
+"""Tests for the main asd processors."""
 
 # System imports
 from pathlib import Path
@@ -22,9 +20,7 @@ __author__      = 'Adrian Auer'
 
 
 def test_input_output_ClassifyVVAD():
-    """
-    Test for the correct input and output shapes for ClassifyVVAD pipeline
-    """
+    """Test for the correct input and output shapes for ClassifyVVAD pipeline."""
     averaging_window_size = 2
     weighted = True
     max_consecutive_empty = 5
@@ -42,9 +38,7 @@ def test_input_output_ClassifyVVAD():
             assert ret_val[0] >= 0 and ret_val[0] <= 1, f"ret_val should be between 0 and 1 but is {ret_val[0]} in step {i}"
 
 def test_input_output_batch_ClassifyVVAD():
-    """
-    Test for the correct input and output shapes for ClassifyVVAD pipeline
-    """
+    """Test for the correct input and output shapes for ClassifyVVAD pipeline."""
     averaging_window_size = 2
     weighted = True
     max_consecutive_empty = 5
@@ -64,9 +58,7 @@ def test_input_output_batch_ClassifyVVAD():
 
 
 def test_input_output_empty_batch_ClassifyVVAD():
-    """
-    Test for the correct input and output shapes for ClassifyVVAD pipeline
-    """
+    """Test for the correct input and output shapes for ClassifyVVAD pipeline."""
     averaging_window_size = 2
     weighted = True
     max_consecutive_empty = 5
@@ -85,9 +77,7 @@ def test_input_output_empty_batch_ClassifyVVAD():
 
 
 def test_full_asd_pipeline():
-    """
-    Test for the correct input and output shapes for the full ASD pipeline
-    """
+    """Test for the correct input and output shapes for the full ASD pipeline."""
     averaging_window_size = 2
     weighted = True
     max_consecutive_empty = 5

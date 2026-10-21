@@ -1,6 +1,4 @@
-'''
-Train Models using hdf5 data or with PAZ pipeline from the fullsize Dataset
-'''
+"""Train Models using hdf5 data or with PAZ pipeline from the fullsize Dataset."""
 
 # System imports
 import argparse
