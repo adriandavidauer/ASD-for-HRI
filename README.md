@@ -7,6 +7,8 @@
 
 A scalable Active Speaker Detection for Human-Robot Interaction
 
+Documentation, including the API reference: [adriandavidauer.github.io/ASD-for-HRI](https://adriandavidauer.github.io/ASD-for-HRI/)
+
 ## Install
 In your Env run 
 ```bash
@@ -14,6 +16,7 @@ pip install -r requirements.txt
 ```
 ## Running Experiments
 
+<!-- --8<-- [start:evaluation] -->
 Evaluation script runs inside the GPU Docker image, which runs Predictions and stats calculation. The individual steps can also be run on their own (see *Individual steps* below). All
 commands are issued from the repository root.
 
@@ -74,6 +77,7 @@ The run above writes to the host:
   (frames processed and elapsed time).
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
+<!-- --8<-- [end:evaluation] -->
 
 ## Individual steps
 

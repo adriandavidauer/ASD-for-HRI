@@ -43,6 +43,14 @@ dev = [
     "wget",
     "yt-dlp"
 ]
+# Static docs build (griffe), no runtime deps needed: CI installs only this list.
+docs = [
+    "mkdocs<2",                # MkDocs 2 drops the plugin system that mkdocstrings and material need
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "pymdown-extensions<12",   # 12.x breaks the code highlighting of mkdocstrings 1.0
+    "mike",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]  # Tells setuptools to look inside the src/ folder for packages
