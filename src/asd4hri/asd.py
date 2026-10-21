@@ -210,6 +210,8 @@ class ASD(Processor):
             'HaarCascade' and 'RetinaFace' are implemented.
         input_size: ``(width, height)`` of the input images, used by the YuNet detector.
             If None, it is set at runtime, which can slow the pipeline down slightly.
+        face_tracking_approach: How faces are kept in a stable order across frames. One of
+            ``FaceTracking_Options``; see ``FaceTracker``.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort'):

@@ -12,7 +12,7 @@
             "module": "src.experiments.run_asd_on_video",
             "args": [
                 "--video",
-                "/home/vscode/host-home/Downloads/ABqo634gI5s.mp4",
+                "/home/developer/host-home/Downloads/ABqo634gI5s.mp4",
                 "-v",
                 "--log_file",
                 "monday.log", 
