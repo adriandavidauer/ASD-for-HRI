@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -e '.[dev]'                       # dev install (devcontainer postCreateCommand)
 pytest                                        # all tests (testpaths=tests, pythonpath=src)
 pytest tests/test_processors.py::test_name    # single test
+pytest --cov=asd4hri --cov-report=term-missing  # with coverage, as in CI
 ruff check .                                  # docstring lint (rules D + DOC, preview, google convention)
 interrogate -c pyproject.toml -v              # docstring coverage
 python src/initialize_models.py               # pre-download all model weights
@@ -20,10 +21,10 @@ python src/initialize_models.py               # pre-download all model weights
 Tests load real models, so the first run downloads weights.
 
 ### Tests CI (`.github/workflows/tests.yml`)
-Runs `pytest` on every push, CPU only (ubuntu-latest, Python 3.10, TensorFlow pinned to 2.18.0 like the Docker image). pip and the weights in `src/models` are cached; bump the `model-weights-v*` cache key when the weights change.
+Runs `pytest` on every push, CPU only (ubuntu-latest, Python 3.10, TensorFlow pinned to 2.18.0 like the Docker image). pip and the weights in `src/models` are cached; bump the `model-weights-v*` cache key when the weights change. Coverage goes to the job summary; it is reported only, not enforced.
 
 ### Quality CI (`.github/workflows/quality.yml`)
-Runs ruff and interrogate. It is a **ratchet** against `.github/quality-baseline.json`: the job fails if the ruff violation count goes up or docstring coverage goes down. When the numbers improve, update the baseline file. The ruff version is pinned to `0.16.9` in both `pyproject.toml` and the workflow; keep them in sync because preview rules change between releases. CI also rewrites the badges in `README.md` (between `<!-- badges:start/end -->`) and commits them, so don't edit those lines by hand.
+Runs ruff and interrogate. It is a **ratchet** against `.github/quality-baseline.json`: the job fails if the ruff violation count goes up or docstring coverage goes down. When the numbers improve, update the baseline file. The ruff version is pinned to `0.16.9` in both `pyproject.toml` and the workflow; keep them in sync because preview rules change between releases. On pushes to main, Quality (lint and docstring badges) and Tests (coverage badge) rewrite the badges in `README.md` between `<!-- badges:start/end -->` with `.github/scripts/update_badges.py` and commit them with `[skip ci]` (`commit_badges.sh`), so don't edit those lines by hand. Quality updates the badges even when the ratchet fails, and the job still fails.
 
 Write new docstrings in Google style with `Args:`/`Returns:`/`Raises:` sections that match the signature (the DOC rules check this).
 

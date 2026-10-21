@@ -6,7 +6,7 @@ on:
       - '**'
 
 permissions:
-  contents: read
+  contents: write  # coverage badge commit on main
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -39,4 +39,21 @@ jobs:
         run: pip install -e '.[dev]' tensorflow==2.18.0
 
       - name: Run pytest
-        run: pytest
+        id: pytest
+        run: pytest --cov=asd4hri --cov-report=term-missing
+
+      # Coverage is reported, not enforced: no ratchet on a number that moves with test changes.
+      - name: Coverage summary
+        id: coverage
+        if: ${{ !cancelled() && steps.pytest.outcome != 'skipped' }}
+        run: |
+          coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          echo "pct=$(coverage report --format=total)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit coverage badge to main
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' && github.ref == 'refs/heads/main' }}
+        env:
+          COVERAGE: ${{ steps.coverage.outputs.pct }}
+        run: |
+          python .github/scripts/update_badges.py
+          bash .github/scripts/commit_badges.sh
