@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: quality-${{ github.head_ref }}
+  group: quality-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
