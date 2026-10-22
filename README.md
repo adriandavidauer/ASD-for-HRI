@@ -121,6 +121,30 @@ To calculate stats for a single folder, call
 `--iou_threshold` (default `0.5`), `--timestamp_tolerance_ms` (default `20`, max prediction/GT frame
 offset) and `-v`.
 
+## Publishing results
+
+Evaluation results are attached to a GitHub release by hand. For `v0.0.0`:
+
+1. Run the experiments for every architecture on each machine (GPU cluster, Raspberry Pi).
+2. On each machine, zip the predictions and stats of each run. The script needs only the Python
+   standard library, so it runs outside the image:
+
+   ```bash
+   python src/experiments/package_results.py --data_dir /Data/data \
+       --predictions_dir predictions_cnn1d_scores [--predictions_dir ...] \
+       --out_dir release_assets --label gpu
+   ```
+
+   Pass `--all` instead of `--predictions_dir` to package every folder in `--data_dir` that has a
+   matching `stats/` folder. Each run becomes `results_<label>_<predictions_dir>.zip`. It holds
+   `<predictions_dir>/` (per-video CSVs and `aggregate_time.csv`) and `stats/<predictions_dir>/`
+   (detail CSVs and `aggregate_results.csv`) under the same paths as in `--data_dir`. Videos,
+   audio and logs are left out. The script stops if a folder, `aggregate_time.csv` or
+   `aggregate_results.csv` is missing, and it only overwrites existing zips with `--force`.
+3. Tag `main` and push the tag: `git tag v0.0.0 && git push origin v0.0.0`.
+4. Create the release for `v0.0.0` in the GitHub web UI (*Releases → Draft a new release*).
+5. Upload the zips from every machine as release assets, then publish the release.
+
 # Contributing
 
 ## Devcontainer

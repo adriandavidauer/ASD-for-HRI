@@ -44,7 +44,8 @@ Everything is a PAZ `Processor`/`SequentialProcessor` chain:
 - `run_evaluation.py` is the Docker entrypoint (`python -m src.experiments.run_evaluation`). It runs the prediction phase from `run_full_pipeline.py`, then the scoring phase from `stats.py`.
 - `run_full_pipeline.py` fetches the videos (UniTalk via `download_uni_talk.py`/yt-dlp, AVA via `ava_dataset.py`) and calls `run_asd_on_video.py` for each video. That writes `<predictions_dir>/<video_id>.csv` with boxes normalised to [0, 1], plus `aggregate_time.csv`.
 - `stats.py` is deliberately standalone: it only needs pandas and numpy and imports nothing from the repo, so it can run outside the image. It matches predictions to ground truth by IoU and timestamp tolerance. It requires `aggregate_time.csv` in the predictions folder.
-- `--predictions_dir`, `--stats_dir` and `--groundtruth_csv` are resolved **relative to `--data_dir`**.
+- `--predictions_dir`, `--stats_dir` and `--groundtruth_csv` are resolved **relative to `--data_dir`**. `run_evaluation.py` turns an absolute `--predictions_dir`/`--stats_dir` inside `--data_dir` into a relative one and rejects one outside it; otherwise `stats/<abs path>` would collapse onto the predictions folder.
+- `package_results.py` is standalone as well (stdlib only). It zips the CSVs of each run (`<predictions_dir>/` and `stats/<predictions_dir>/`) into `results_<label>_<predictions_dir>.zip`. The zips are uploaded to the GitHub release by hand; see "Publishing results" in the README. Tests import it as `experiments.package_results`.
 
 ### Other
 - `src/TalkNet-ASD` and `src/LR-ASD` are git submodules (forks of baseline ASD models) and are excluded from ruff and interrogate. `src/eval/` holds the official AVA evaluation script. `src/model_training/` holds the training scripts.
