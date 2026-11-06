@@ -1,3 +1,4 @@
+# DEPRECATED: use docker/Dockerfile, which builds for linux/arm64 too (#78).
 # Build with your host ids, so that the files written to the data mount belong to you:
 #   docker build -f docker/Dockerfile_PI --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t asd4hri .
 FROM python:3.11-slim

@@ -192,7 +192,8 @@ def run_asd_on_video(video_path,
                     decision_threshold: float = 0.5,
                     weighted: bool = True,
                     max_consecutive_empty: int = 2,
-                    groundtruth=None, av_window=25, audio_fallback='noise', use_audio=True,
+                    groundtruth=None, causal_mode='streaming', window=38,
+                    av_window=25, audio_fallback='noise', use_audio=True,
                     time_range=None, frame_crop=None):
     """Run ASD on one video and write predictions + timing rows.
 
@@ -215,6 +216,9 @@ def run_asd_on_video(video_path,
         av_window:          frames per prediction of the audio-visual models ('AV:<model>', #80).
         audio_fallback:     what the audio-visual models get without audio: 'noise' or 'visual'.
         use_audio:          use the video's audio track (False tests the fallback).
+        causal_mode:        'streaming' or 'window', for the causal landmark models (#45);
+                            ignored by the other architectures.
+        window:             frames per prediction in the causal 'window' mode.
         time_range:         Optional ``(start_s, end_s)``: only frames in this range are
                             processed (e.g. AVA's annotated 15 minutes of a movie).
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
@@ -244,6 +248,7 @@ def run_asd_on_video(video_path,
 
 
     pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty,
+                   causal_mode=causal_mode, window_size=window,
                    av_window=av_window, audio_fallback=audio_fallback)
     if pipeline.av is not None:
         with pipeline.timer.stage('audio_decode'):

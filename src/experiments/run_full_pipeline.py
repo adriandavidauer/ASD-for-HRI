@@ -62,6 +62,11 @@ def build_parser():
                    help='What the audio-visual models get without audio (#40)')
     p.add_argument('--no_audio', action='store_true',
                    help='Ignore the audio track (tests the audio fallback)')
+    p.add_argument('--causal_mode', default='streaming', choices=['streaming', 'window'],
+                   help='Only for LipShapeCausal/FaceShapeCausal: one LSTM step per frame '
+                        '(streaming) or the model on the last --window frames (window); see #45')
+    p.add_argument('--window', type=int, default=38,
+                   help='Frames per prediction for --causal_mode window (default: 38)')
     p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
                    help='Face boxes to classify: the face detector (end-to-end protocol) or the '
                         'ground-truth boxes (literature protocol, detector skipped); see #75')
@@ -256,6 +261,8 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 av_window=getattr(args, 'av_window', 25),
                 audio_fallback=getattr(args, 'audio_fallback', 'noise'),
                 use_audio=not getattr(args, 'no_audio', False),
+                causal_mode=getattr(args, 'causal_mode', 'streaming'),
+                window=getattr(args, 'window', 38),
                 time_range=annotated_range(all_gt.get(vid)),
                 frame_crop=_frame_crop(args.dataset, video_path)
             )

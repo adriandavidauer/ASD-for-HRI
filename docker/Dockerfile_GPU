@@ -1,3 +1,4 @@
+# DEPRECATED for evaluation runs: use docker/Dockerfile (multi-arch, #78). Kept as the devcontainer image.
 # ── UniTalk ASD full evaluation pipeline ──────────────────────────────────────
 #
 #

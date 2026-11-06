@@ -1,9 +1,9 @@
 # ASD-for-HRI
 [![Quality](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml/badge.svg)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
 <!-- badges:start -->
-[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-42%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42243723673)
-[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-92.5%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42243723673)
-[![Test coverage](https://img.shields.io/badge/Test%20coverage-95%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42241575463)
+[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-41%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42251771488)
+[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-92.7%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42251771488)
+[![Test coverage](https://img.shields.io/badge/Test%20coverage-97%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42251771587)
 <!-- badges:end -->
 
 A scalable Active Speaker Detection for Human-Robot Interaction
@@ -15,6 +15,27 @@ In your Env run
 ```bash
 pip install -r requirements.txt
 ```
+## Docker image (cluster and Raspberry Pi)
+
+One multi-arch image is built by CI (`.github/workflows/docker.yml`) from `docker/Dockerfile`:
+`linux/amd64` with CUDA (TensorFlow, ONNX Runtime and PyTorch from pip wheels; the host only
+needs the NVIDIA driver and container toolkit) and `linux/arm64` on CPU (Raspberry Pi 4/5 with
+a 64-bit OS). `docker pull` picks the right one:
+
+```bash
+docker pull ghcr.io/adriandavidauer/asd-for-hri:main
+# cluster (GPU)
+docker run --rm --gpus all --user $(id -u):$(id -g) -v /Data/data:/app/data \
+    ghcr.io/adriandavidauer/asd-for-hri:main --data_dir /app/data --no_download
+# Raspberry Pi: the same without --gpus all
+```
+
+`--user $(id -u):$(id -g)` makes the results on the data mount yours; the model weights live
+outside `$HOME`, so any uid works. Build locally with
+`git submodule update --init && docker build -f docker/Dockerfile -t asd4hri .`
+(targets: `base` = asd4hri only, `experiments` = default, adds the evaluation and PyTorch deps).
+`docker/Dockerfile_GPU` (also the devcontainer) and `docker/Dockerfile_PI` are kept for now.
+
 ## Running Experiments
 
 <!-- --8<-- [start:evaluation] -->
@@ -74,7 +95,13 @@ Stats flags:
 | `--skip_stats` | Stop after predictions |
 
 Architectures: `VVAD-LRS3-LSTM`, `CNN2Plus1D`, `CNN2Plus1D_Filters`, `CNN2Plus1D_Layers`,
-`CNN2Plus1D_Light`, `LipShape`, `FaceShape`.
+`CNN2Plus1D_Light`, `LipShape`, `FaceShape`, `LipShapeCausal`, `FaceShapeCausal`.
+
+`LipShapeCausal` / `FaceShapeCausal` (#45) predict **every frame from that frame and the frames
+before it** (zero look-ahead), from the first frame of a face on. `--causal_mode streaming`
+(default) keeps one LSTM state per face and costs one step per frame; `--causal_mode window`
+re-runs the model on the last `--window` frames (default 38). Retrain them with
+`python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/`.
 
 Audio-visual baselines (#40, #80; `pip install -e '.[av]'`, needs the git submodules):
 `AV:LR-ASD` (0.84 M parameters) and `AV:TalkNet` (15.7 M), both with their AVA weights. They
