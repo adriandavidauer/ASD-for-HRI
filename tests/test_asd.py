@@ -145,6 +145,32 @@ def test_reset_ClassifyVVAD():
     vvad.reset()
     assert vvad([test_image]) == [None]
 
+def test_ClassifyVVAD_ids_keep_entities_apart():
+    """With ids, swapping the batch order gives each entity the same score as without swapping."""
+    rng = np.random.default_rng(0)
+    faces = {k: rng.integers(0, 255, (60, 60, 3), dtype=np.uint8) for k in 'ab'}
+    plain = ClassifyVVAD(architecture='LipShape', stride=1, averaging_window_size=1)
+    keyed = ClassifyVVAD(architecture='LipShape', stride=1, averaging_window_size=1)
+    for i in range(IMAGE_INPUT_SHAPE[0]):
+        out_plain = plain([faces['a'], faces['b']])
+        order = ['a', 'b'] if i % 2 else ['b', 'a']
+        out_keyed = dict(zip(order, keyed([faces[k] for k in order], ids=order)))
+    assert out_plain[0] is not None
+    assert out_keyed['a'] == pytest.approx(out_plain[0])
+    assert out_keyed['b'] == pytest.approx(out_plain[1])
+
+
+def test_ASD_with_given_boxes_skips_detector():
+    """Given boxes and ids are classified directly; the detector is not called."""
+    asd = ASD(architecture='LipShape', stride=1, averaging_window_size=1)
+    asd.detect = None                         # would fail if called
+    image = cv2.cvtColor(cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg')),
+                         cv2.COLOR_BGR2RGB)
+    for _ in range(IMAGE_INPUT_SHAPE[0]):
+        boxes = [Box2D((10, 10, 110, 110), 1.0, 'Face')]
+        out = asd(image, boxes, ['e1'])
+    assert len(out['boxes2D']) == 1
+    assert 0.0 <= out['boxes2D'][0].score <= 1.0
 
 @pytest.mark.parametrize('detector_class', [FaceDetectorYN, FaceDetectorRetinaFace])
 def test_face_detectors_take_rgb(detector_class):

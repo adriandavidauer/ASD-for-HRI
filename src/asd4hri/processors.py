@@ -149,19 +149,27 @@ class BufferFeatures(Processor):
         # Counters for return after stride
         self.timesteps_since_last_return = [] # I have to keep track of that for each internal buffer, because otherwise a full buffer could return even if only input for another buffer came in.
         self.missed_consecutive_timesteps = []
+        # Buffers keyed by entity id, used when ``call`` gets ``ids`` (#75)
+        self.keyed = {}
 
 
-    def call(self, batch_of_features):
+    def call(self, batch_of_features, ids=None):
         """Add one batch of features to the internal buffers.
 
         Args:
             batch_of_features: Sorted list-like object of features with shape
                 ``(N, dim0, dim1, ...)`` where N is the batch size. Entries may be None.
+            ids: Optional entity ids, one per feature. If given, every entity gets its own
+                buffer keyed by its id, independent of its position in the batch; entities
+                missing from a call count as empty for that call. If None, buffers are matched
+                by batch position.
 
         Returns:
             list: One entry per input position: the corresponding buffer (a ``collections.deque``
             holding up to ``timesteps`` features) if it is ready to be returned, otherwise None.
         """
+        if ids is not None:
+            return self._call_keyed(batch_of_features, ids)
         batch_return = []
         for i, features in enumerate(batch_of_features):
             if i == len(self.buffers):
@@ -197,13 +205,46 @@ class BufferFeatures(Processor):
                     self.reset(index=j)
         return batch_return
 
+    def _call_keyed(self, batch_of_features, ids):
+        """``call`` with buffers keyed by entity id; see ``call``."""
+        if len(ids) != len(batch_of_features):
+            raise ValueError(f'Got {len(ids)} ids for {len(batch_of_features)} features')
+        if len(set(ids)) != len(ids):
+            raise ValueError(f'Entity ids must be unique within a batch: {list(ids)}')
+        batch_return = []
+        for key, features in zip(ids, batch_of_features):
+            state = self.keyed.setdefault(
+                key, {'buffer': deque(maxlen=self.buffer_size), 'since_return': 0, 'missed': 0})
+            if features is None:
+                state['missed'] += 1
+            else:
+                state['buffer'].append(features)
+                state['missed'] = 0
+            state['since_return'] += 1
+            if self.return_incomplete_samples or (len(state['buffer']) == self.buffer_size
+                                                  and state['since_return'] >= self.stride):
+                batch_return.append(state['buffer'])
+                state['since_return'] = 0
+            else:
+                batch_return.append(None)
+        present = set(ids)
+        for key in list(self.keyed):
+            state = self.keyed[key]
+            if key not in present:
+                state['missed'] += 1
+            if state['missed'] >= self.max_consecutive_empty:
+                del self.keyed[key]
+        return batch_return
+
     def reset(self, index=None):
         """Reset one internal buffer, or all of them.
 
         Args:
-            index: Index of the buffer to reset. If None, all buffers are reset.
+            index: Index of the buffer to reset. If None, all buffers are reset, including the
+                buffers keyed by entity id.
         """
         if index is None:
+            self.keyed = {}
             for i, _ in enumerate(self.buffers):
                 self.reset(index=i)
         else:
@@ -491,7 +532,7 @@ class AddClassAndScoreToBoxes(Processor):
         self.decision_threshold = decision_threshold
         assert len(self.class_name) == 2, f"AddClassAndScoreToBoxes only supports binary classes. Number of classes names must be 2 for binary classification but is {len(self.class_name)}"
 
-    def call(self, cropped_images, boxes):
+    def call(self, cropped_images, boxes, ids=None):
         """Classify the cropped images and update the boxes in place.
 
         Boxes without a score get the class name 'No Prediction yet' and a score of -1.0.
@@ -499,11 +540,12 @@ class AddClassAndScoreToBoxes(Processor):
         Args:
             cropped_images: Batch of cropped images, one per box.
             boxes: List of ``paz.abstract.messages.Box2D``, in the same order as ``cropped_images``.
+            ids: Optional entity ids, one per box, passed on to the classifier.
 
         Returns:
             list: The same boxes with ``class_name`` and ``score`` set.
         """
-        scores = self.classify(cropped_images)
+        scores = self.classify(cropped_images) if ids is None else self.classify(cropped_images, ids)
         for score, box2D in zip(scores, boxes):
             if score is None:
                 class_name = 'No Prediction yet'

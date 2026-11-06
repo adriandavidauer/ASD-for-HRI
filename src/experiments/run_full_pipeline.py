@@ -31,7 +31,11 @@ _VIDEO_LIST_URL = (
 
 
 def build_parser():
-    """Return the argument parser for the prediction flags."""
+    """Return the argument parser for the prediction flags.
+
+    Returns:
+        argparse.ArgumentParser: The parser.
+    """
     p = argparse.ArgumentParser(
         description='Run ASD over every video of a dataset and write predictions.'
     )
@@ -52,18 +56,48 @@ def build_parser():
                    help='Override the auto-generated log file path')
     p.add_argument('--stride', default=1,
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
+    p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
+                   help='Face boxes to classify: the face detector (end-to-end protocol) or the '
+                        'ground-truth boxes (literature protocol, detector skipped); see #75')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Also emit INFO-level messages on the console')
     return p
 
 
-def load_video_list(args, data_dir: Path):
-    """Return an ordered list of (video_id, video_path, url) for the chosen dataset.
+def load_groundtruth_boxes(groundtruth_csv):
+    """Read an AVA-format GT CSV, with or without a header row.
 
-    AVA: AvaDataset downloads every video and the ground-truth CSV up front, so url is None.
-    UniTalk (fall-through branch): url is the YouTube link; run_pipeline_phase downloads
-    each missing video on demand, and csv/<split>_orig.csv is built here if missing.
-    Nothing is downloaded when --no_download is set.
+    Args:
+        groundtruth_csv: The CSV.
+
+    Returns:
+        dict: video_id -> list of ``(timestamp, entity_id, (x1, y1, x2, y2))``.
+    """
+    import csv
+    by_video = {}
+    with open(groundtruth_csv, newline='') as f:
+        for row in csv.reader(f):
+            if not row or row[0] == 'video_id':
+                continue
+            by_video.setdefault(row[0], []).append(
+                (float(row[1]), row[7], tuple(float(v) for v in row[2:6])))
+    return by_video
+
+
+def load_video_list(args, data_dir: Path):
+    """Return the ordered list of videos of the chosen dataset.
+
+    AVA downloads every video and the ground-truth CSV up front, so ``url`` is None. UniTalk
+    (fall-through branch) gives the YouTube link; ``run_pipeline_phase`` downloads each missing
+    video on demand, and ``csv/<split>_orig.csv`` is built here if missing. Nothing is downloaded
+    with ``--no_download``.
+
+    Args:
+        args: Parsed flags.
+        data_dir: Root data directory.
+
+    Returns:
+        list[tuple]: ``(video_id, video_path, url)`` per video.
     """
     if args.dataset == 'ava':
         from .ava_dataset import AvaDataset
@@ -101,12 +135,44 @@ def load_video_list(args, data_dir: Path):
 
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
-def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
-    """Download data on demand, run ASD on every video, write predictions.
+def annotated_range(gt_rows, warmup_s=1.0, tail_s=0.5):
+    """Time span of a video's annotations, widened by ``warmup_s`` for the temporal buffers.
+
+    Only this span is processed, e.g. the annotated 15 minutes of an AVA movie.
+
+    Args:
+        gt_rows: ``(timestamp, entity_id, box)`` rows of the video, or None.
+        warmup_s: Seconds before the first annotation.
+        tail_s: Seconds after the last annotation.
 
     Returns:
-        tuple[list[str], list[tuple], list[tuple]]:
-            (processed, skipped, failed)
+        tuple or None: ``(start_s, end_s)``, or None (= whole video) without annotations.
+    """
+    if not gt_rows:
+        return None
+    times = [row[0] for row in gt_rows]
+    return max(0.0, min(times) - warmup_s), max(times) + tail_s
+
+
+def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groundtruth_csv=None):
+    """Download data on demand, run ASD on every video, write predictions.
+
+    With ``args.boxes == 'gt'`` the GT boxes from ``groundtruth_csv`` are classified instead of
+    detected faces.
+
+    Args:
+        args: Parsed flags.
+        video_list: Output of ``load_video_list``.
+        result_dir: Folder for the prediction CSVs.
+        architecture: Classifier architecture.
+        stride: Frames between predictions.
+        groundtruth_csv: GT CSV; needed for ``--boxes gt`` and to limit the processed time span.
+
+    Returns:
+        tuple[list, list, list]: ``(processed, skipped, failed)``.
+
+    Raises:
+        ValueError: If ``--boxes gt`` is used without a ground-truth CSV.
     """
     aggregate_time_csv = result_dir / 'aggregate_time.csv'
 
@@ -119,6 +185,14 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
     processed = []
     skipped = []
     failed = []
+
+    gt_boxes = None
+    all_gt = load_groundtruth_boxes(groundtruth_csv) \
+        if groundtruth_csv is not None and Path(groundtruth_csv).is_file() else {}
+    if getattr(args, 'boxes', 'detector') == 'gt':
+        if not all_gt:
+            raise ValueError('--boxes gt needs the ground-truth CSV')
+        gt_boxes = all_gt
 
     for i, (vid, video_path, url) in enumerate(video_list, 1):
         predictions_csv = result_dir / f'{vid}.csv'
@@ -143,7 +217,10 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
         try:
             run_asd_on_video(
                 str(video_path), str(predictions_csv),
-                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride
+                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture,
+                stride=int(stride),
+                groundtruth=None if gt_boxes is None else gt_boxes.get(vid, []),
+                time_range=annotated_range(all_gt.get(vid))
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)
@@ -157,6 +234,15 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
 # ── summary ───────────────────────────────────────────────────────────────────
 
 def print_run_summary(video_list, processed, skipped, failed, result_dir):
+    """Log how many videos were processed, skipped and failed.
+
+    Args:
+        video_list: All videos of the run.
+        processed: Ids of the processed videos.
+        skipped: ``(video_id, reason)`` of the skipped videos.
+        failed: ``(video_id, reason)`` of the failed videos.
+        result_dir: Folder with the prediction CSVs.
+    """
     LOGGER.info('  Total videos found    : %d', len(video_list))
     LOGGER.info('  Successfully evaluated: %d', len(processed))
     LOGGER.info('  Skipped               : %d', len(skipped))
@@ -171,6 +257,11 @@ def print_run_summary(video_list, processed, skipped, failed, result_dir):
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    """Command-line entry point.
+
+    Raises:
+        SystemExit: If a requested video is not found or processing fails.
+    """
     args = build_parser().parse_args()
     log_path = setup_logging('pipeline', args.verbose)
 

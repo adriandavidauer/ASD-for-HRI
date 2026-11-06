@@ -1,5 +1,7 @@
-"""Score ASD predictions against UniTalk ground truth — purely from CSVs.
-Having no dependencies from other files is intentional - Wanted to run in local setup without any use of docker.
+"""Score ASD predictions against AVA-format ground truth, purely from CSVs.
+
+Having no dependencies on other files of the repo is intentional: it runs in a local setup
+without docker (pandas + numpy only).
 """
 
 import os
@@ -30,7 +32,8 @@ _LABEL_MAP = {
     'NOT_SPEAKING':     'not-speaking',
 }
 
-_PredBox = namedtuple('_PredBox', ['coordinates', 'class_name', 'score'])
+_PredBox = namedtuple('_PredBox', ['coordinates', 'class_name', 'score', 'entity_id'],
+                      defaults=(None,))
 _GtBox   = namedtuple('_GtBox',   ['timestamp', 'index', 'entity_id', 'asd_label', 'bbox',
                                    'ava_label'])
 
@@ -44,6 +47,11 @@ _SUMMARY_FIELDS = ['video_id', 'tp', 'tn', 'fp', 'fn', 'accuracy', 'precision', 
                    'frames_processed', 'elapsed_seconds', 'fps']
 
 def parse_args():
+    """Parse the command-line flags.
+
+    Returns:
+        argparse.Namespace: The parsed flags.
+    """
     p = argparse.ArgumentParser(description='Score ASD prediction CSVs against ground truth')
     p.add_argument('--predictions_dir', default='data/predictions',
                    help='Directory of per-video prediction CSVs')
@@ -62,7 +70,16 @@ def parse_args():
     return p.parse_args()
 
 def setup_logging(log_name='unitalk_stats', verbose=False, log_dir='logs_stats'):
-    """Configure file + console logging; return the log file path."""
+    """Configure file and console logging.
+
+    Args:
+        log_name: Prefix of the log file name.
+        verbose: If True, INFO messages also go to the console.
+        log_dir: Directory for the log file.
+
+    Returns:
+        str: Path of the log file.
+    """
     os.makedirs(log_dir, exist_ok=True)
     path = os.path.join(log_dir, f'{log_name}_{datetime.now():%Y%m%d_%H%M%S}.log')
     LOGGER.setLevel(logging.DEBUG)
@@ -80,7 +97,14 @@ def setup_logging(log_name='unitalk_stats', verbose=False, log_dir='logs_stats')
 # ── data loading ─────────────────────────────────────────────────────────────
 
 def load_ground_truth(csv_path):
-    """Read the master ground-truth CSV → dict[video_id] -> list[gt row dict]."""
+    """Read the master ground-truth CSV.
+
+    Args:
+        csv_path: AVA-format CSV with a header row.
+
+    Returns:
+        dict: video_id -> list of GT row dicts (timestamp, bbox, labels, entity id).
+    """
     df = pd.read_csv(csv_path)
     df['asd_label'] = df['label'].map(_LABEL_MAP).fillna('not-speaking')
 
@@ -102,8 +126,34 @@ def load_ground_truth(csv_path):
     return by_video
 
 
+_LABEL_SCORES = {'speaking': 1.0, 'not-speaking': 0.0}
+
+
+def _row_score(row):
+    """Score of a prediction row.
+
+    Runs older than the score column get 1/0 from the label, and -1 for 'No Prediction yet'.
+
+    Args:
+        row: One row of a prediction CSV as a dict.
+
+    Returns:
+        float: The score.
+    """
+    if row.get('score') not in (None, ''):
+        return float(row['score'])
+    return _LABEL_SCORES.get(row['label'], -1.0)
+
+
 def load_predictions_csv(path):
-    """Read a prediction CSV → sorted list of (timestamp, [_PredBox, ...])."""
+    """Read a prediction CSV.
+
+    Args:
+        path: Prediction CSV written by ``run_asd_on_video``.
+
+    Returns:
+        dict: timestamp -> list of ``_PredBox``.
+    """
     by_ts = defaultdict(list)
     with open(path, newline='') as f:
         for row in csv.DictReader(f):
@@ -113,13 +163,22 @@ def load_predictions_csv(path):
                 (float(row['x1']), float(row['y1']),
                  float(row['x2']), float(row['y2'])),
                 row['label'],
-                float(row['score']),
+                _row_score(row),
+                row.get('entity_id') or None,   # set only by --boxes gt runs
             ))
     return by_ts
 
 
 def load_processing_times(predictions_dir):
-    """Read ``aggregate_time.csv`` -> dict[video_id] -> {frames, elapsed, fps}."""
+    """Read ``aggregate_time.csv`` of a predictions folder.
+
+    Args:
+        predictions_dir: Folder with the prediction CSVs.
+
+    Returns:
+        dict: video_id -> {frames_processed, elapsed_seconds, fps, width, height}; empty if the
+        file is missing.
+    """
     path = os.path.join(predictions_dir, 'aggregate_time.csv')
     if not os.path.isfile(path):
         LOGGER.warning('aggregate_time.csv not found path=%s', path)
@@ -138,15 +197,34 @@ def load_processing_times(predictions_dir):
                 'frames_processed': frames,
                 'elapsed_seconds':  elapsed,
                 'fps':              frames / elapsed,
+                # frame size in pixels; only in runs written after #75, needed for face-size bins
+                'width':            _int_or_none(row.get('width')),
+                'height':           _int_or_none(row.get('height')),
             }
     LOGGER.info('processing_times videos=%d path=%s', len(by_video), path)
     return by_video
+
+
+def _int_or_none(value):
+    """Parse an int from a CSV cell.
+
+    Args:
+        value: Cell content, possibly None or blank.
+
+    Returns:
+        int or None: The number, or None for blanks and missing columns.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class GroundTruthIndex:
     """Sorted-timestamp index  with binary search over one video's ground truth annotations."""
 
     def __init__(self, gt_rows):
+        """Index the GT rows of one video by timestamp."""
         by_ts = defaultdict(list)
         for r in gt_rows:
             by_ts[r['frame_timestamp']].append(r)
@@ -166,7 +244,15 @@ class GroundTruthIndex:
         self.total_gt_boxes = sum(self.entity_gt_rows.values())
 
     def nearest(self, timestamp, tolerance_s):
-        """Return the closest GT frame's boxes within tolerance, or () if none."""
+        """Return the closest GT frame's boxes within the tolerance.
+
+        Args:
+            timestamp: Prediction timestamp in seconds.
+            tolerance_s: Max distance in seconds.
+
+        Returns:
+            tuple: The GT boxes of the closest frame, or () if none is close enough.
+        """
         ts = self.timestamps
         if not ts:
             return ()
@@ -180,7 +266,11 @@ class GroundTruthIndex:
         return self._buckets[best_i] if best_i is not None else ()
 
     def all_boxes(self):
-        """Iterate every GT box in timestamp order."""
+        """Iterate every GT box in timestamp order.
+
+        Yields:
+            _GtBox: The next GT box.
+        """
         for boxes in self._buckets:
             yield from boxes
 
@@ -206,7 +296,19 @@ def _overlap(a, b):
 
 
 def match_frame(pred_boxes, gt_boxes, iou_threshold):
-    """Greedy highest-IoU matching of one frame's predictions to its GT boxes."""
+    """Greedy highest-IoU matching of one frame's predictions to its GT boxes.
+
+    A pair matches at IoU >= ``iou_threshold`` or containment >= ``CONTAINMENT_THRESHOLD``.
+
+    Args:
+        pred_boxes: Predictions of the frame.
+        gt_boxes: GT boxes of the frame.
+        iou_threshold: Minimum IoU.
+
+    Returns:
+        tuple: ``(matches, best_per_gt)``: list of (pred index, gt index), and per GT box the
+        best (iou, containment, label, score) of any prediction.
+    """
     overlaps    = {}
     best_per_gt = [(0.0, 0.0, '', 0.0)] * len(gt_boxes)
     for pi, pred in enumerate(pred_boxes):
@@ -240,6 +342,7 @@ class Stats:
     """Accumulates precision / recall / F1, missed detections and entity identification."""
 
     def __init__(self, gt_index):
+        """Start empty counts for the GT of one video (a ``GroundTruthIndex``)."""
         self.total_gt_boxes = gt_index.total_gt_boxes
         self.gt_entities    = set(gt_index.entities)
         self.entity_gt_rows = dict(gt_index.entity_gt_rows)
@@ -258,6 +361,13 @@ class Stats:
         self.ap_positives = np.empty(0, dtype=bool)
 
     def update(self, pred_boxes, gt_boxes, matches):
+        """Add one frame's predictions and their matches to the counts.
+
+        Args:
+            pred_boxes: Predictions of the frame.
+            gt_boxes: GT boxes of the frame.
+            matches: (prediction index, GT index) pairs from ``match_frame``.
+        """
         gt_for_pred = {pi: gi for pi, gi in matches}
 
         for pi, pred in enumerate(pred_boxes):
@@ -289,22 +399,38 @@ class Stats:
 
     @property
     def precision(self):
+        """Precision of the matched-box classification.
+
+        Returns:
+            float: tp / (tp + fp).
+        """
         return self.tp / max(1, self.tp + self.fp)
 
     @property
     def recall(self):
+        """Recall of the matched-box classification.
+
+        Returns:
+            float: tp / (tp + fn).
+        """
         return self.tp / max(1, self.tp + self.fn)
 
     @property
     def f1(self):
+        """F1 of the matched-box classification.
+
+        Returns:
+            float: Harmonic mean of precision and recall.
+        """
         p, r = self.precision, self.recall
         return 2 * p * r / max(1e-9, p + r)
 
     @property
     def accuracy(self):
-        """Label accuracy on matched boxes: entity_correct / entity_matched.
+        """Label accuracy on matched boxes (``entity_correct`` / ``entity_matched``).
 
-        Counts only spatially-matched GT boxes;
+        Returns:
+            float: The accuracy over spatially matched GT boxes.
         """
         correct = sum(self.entity_correct.values())
         matched = sum(self.entity_matched.values())
@@ -312,19 +438,38 @@ class Stats:
 
     @property
     def missed_detections(self):
-        """GT boxes that no prediction matched (detection misses)."""
+        """GT boxes that no prediction matched (detection misses).
+
+        Returns:
+            int: The number of missed GT boxes.
+        """
         return self.total_gt_boxes - self.matched_boxes
 
     @property
     def correctly_identified_entities(self):
-        """Entities detected spatially and labelled atleast once."""
+        """Entities detected spatially and labelled at least once.
+
+        Returns:
+            set: Their entity ids.
+        """
         return {eid for eid in self.detected_entities
                 if self.entity_matched[eid]}
 
 
 def compute_stats_from_predictions(video_id, predictions_csv, gt_rows, iou_threshold,
                                    timestamp_tolerance_s):
-    """Score one video's prediction CSV and return (Stats, per-GT-box match info)."""
+    """Score one video's prediction CSV with the matched-box metrics.
+
+    Args:
+        video_id: Video id.
+        predictions_csv: Prediction CSV of the video.
+        gt_rows: GT rows of the video (``load_ground_truth``).
+        iou_threshold: Minimum IoU for a match.
+        timestamp_tolerance_s: Max distance between prediction and GT timestamps.
+
+    Returns:
+        tuple: ``(Stats, detail_rows)``.
+    """
     gt_index = GroundTruthIndex(gt_rows)
     stats = Stats(gt_index)
     # (timestamp, gi) -> [iou, containment, pred_label, matched, score] for the best
@@ -364,7 +509,15 @@ def compute_stats_from_predictions(video_id, predictions_csv, gt_rows, iou_thres
 
 
 def _detail_rows(gt_index, match_info):
-    """Build per-GT-box detail rows (one per GT box, missed boxes included)."""
+    """Build the per-GT-box detail rows, missed boxes included.
+
+    Args:
+        gt_index: ``GroundTruthIndex`` of the video.
+        match_info: (timestamp, gt index) -> [iou, containment, label, matched, score].
+
+    Returns:
+        list[dict]: One row per GT box.
+    """
     rows = []
     for gt in gt_index.all_boxes():
         iou, cont, pred_label, matched, score = match_info.get(
@@ -391,7 +544,11 @@ _AVA_EVAL_MODULE = None
 
 
 def _ava_eval():
-    """Import the official AVA active-speaker scorer by path, once per process."""
+    """Import the official AVA active-speaker scorer by path, once per process.
+
+    Returns:
+        module: The scorer module.
+    """
     global _AVA_EVAL_MODULE
     if _AVA_EVAL_MODULE is None:
         spec = importlib.util.spec_from_file_location('ava_active_speaker_eval', _AVA_EVAL_SCRIPT)
@@ -405,6 +562,14 @@ def _ap_rows(video_id, gt_index, match_info):
 
     Only matched boxes carry a score, so unmatched ground truth is left out and the AP
     reflects the classifier rather than the detector.
+
+    Args:
+        video_id: Video id.
+        gt_index: ``GroundTruthIndex`` of the video.
+        match_info: (timestamp, gt index) -> [iou, containment, label, matched, score].
+
+    Returns:
+        list[tuple]: One row per scored GT box.
     """
     rows = []
     for gt in gt_index.all_boxes():
@@ -416,7 +581,14 @@ def _ap_rows(video_id, gt_index, match_info):
 
 
 def average_precision(ap_rows):
-    """AP for one video, run through the official scorer's own merge and PR code."""
+    """AP for one video, run through the official scorer's own merge and PR code.
+
+    Args:
+        ap_rows: AVA rows (8 GT columns + score) of the matched GT boxes.
+
+    Returns:
+        float: The AP, NaN without positives.
+    """
     positives = sum(r[6] == _AVA_POSITIVE for r in ap_rows)
     if not positives:
         return float('nan')                 # recall would divide by zero
@@ -435,6 +607,13 @@ def pooled_average_precision(scores, positives):
 
     Builds the merged frame directly instead of re-running the scorer's CSV alignment
     checks, which the per-video pass has already applied to these same boxes.
+    
+    Args:
+        scores: Scores of all scored boxes.
+        positives: True for SPEAKING_AUDIBLE boxes.
+
+    Returns:
+        float: The pooled AP, NaN without positives.
     """
     if not positives.any():
         return float('nan')
@@ -450,8 +629,250 @@ def pooled_average_precision(scores, positives):
 
 
 def _format_ap(ap):
-    """Blank out an AP that has no positives to score."""
+    """Format an AP for the CSV.
+
+    Args:
+        ap: The AP.
+
+    Returns:
+        str: 4 decimals, or blank if the AP is NaN.
+    """
     return '' if np.isnan(ap) else f'{ap:.4f}'
+
+
+
+# ── comparable protocols (#75) ────────────────────────────────────────────────
+#
+# Both protocols give every GT box exactly one score and rank them with the official AVA scorer:
+#
+#   gt        The classifier ran on the ground-truth boxes (``--boxes gt``). Predictions carry the
+#             GT ``entity_id`` and are joined on (timestamp, entity_id). This is the protocol of
+#             every AVA / UniTalk / WASD paper.
+#   detector  End-to-end mAP@0.5 (Ego4D protocol). Detections are matched one-to-one to GT boxes
+#             at IoU >= 0.5 (greedy, highest IoU first). Detections without a GT box in an
+#             annotated frame are added to the ranking as negatives (false positives).
+#
+# A GT box without a score (missed by the detector, or no prediction yet during buffer warm-up)
+# gets score 0, the lowest possible score, exactly as the official script requires a score for
+# every GT row.
+
+E2E_IOU_THRESHOLD = 0.5
+DECISION_THRESHOLD = 0.5
+FACE_SIZE_BINS = (('small', 0, 64), ('medium', 64, 128), ('large', 128, float('inf')))
+_MISSING_SCORE = 0.0
+
+
+def face_size_bin(width_px):
+    """Return the AVA face-size bin of a face.
+
+    Args:
+        width_px: Face width in pixels, or None/NaN if unknown.
+
+    Returns:
+        str: 'small', 'medium', 'large', or '' if unknown.
+    """
+    if width_px is None or np.isnan(width_px):
+        return ''
+    for name, lo, hi in FACE_SIZE_BINS:
+        if lo <= width_px < hi:
+            return name
+    return ''
+
+
+def _match_iou(pred_boxes, gt_boxes, iou_threshold):
+    """One-to-one greedy matching by IoU only, highest IoU first.
+
+    Args:
+        pred_boxes: Predictions of the frame.
+        gt_boxes: GT boxes of the frame.
+        iou_threshold: Minimum IoU.
+
+    Returns:
+        dict: GT index -> prediction index.
+    """
+    pairs = []
+    for pi, pred in enumerate(pred_boxes):
+        for gi, gt in enumerate(gt_boxes):
+            iou, _ = _overlap(pred.coordinates, gt.bbox)
+            if iou >= iou_threshold:
+                pairs.append((iou, pi, gi))
+    pairs.sort(key=lambda p: -p[0])
+    used_p, used_g, out = set(), set(), {}
+    for _iou, pi, gi in pairs:
+        if pi in used_p or gi in used_g:
+            continue
+        used_p.add(pi)
+        used_g.add(gi)
+        out[gi] = pi
+    return out
+
+
+def protocol_rows(video_id, gt_index, preds_by_ts, timestamp_tolerance_s,
+                  iou_threshold=E2E_IOU_THRESHOLD, frame_width=None):
+    """Assign one score to every GT box and collect unmatched detections.
+
+    The protocol is chosen from the predictions: rows with an ``entity_id`` come from a
+    ``--boxes gt`` run and are joined on it, otherwise detections are matched by IoU.
+
+    Args:
+        video_id: Video id, written into every row.
+        gt_index: ``GroundTruthIndex`` of the video.
+        preds_by_ts: dict timestamp -> list of ``_PredBox`` (``load_predictions_csv``).
+        timestamp_tolerance_s: Max distance between a GT and a prediction timestamp.
+        iou_threshold: IoU needed for a detection to match a GT box.
+        frame_width: Frame width in pixels, for the face-size bins; None if unknown.
+
+    Returns:
+        tuple: ``(protocol, gt_df, fp_scores, n_detections)``. ``protocol`` is 'gt' or
+        'detector'. ``gt_df`` has one row per GT box with the AVA columns plus ``score``,
+        ``has_score``, ``detected`` and ``size_bin``. ``fp_scores`` are the scores of detections
+        in annotated frames that match no GT box. ``n_detections`` counts all detections in
+        annotated frames.
+    """
+    pred_ts = np.array(sorted(preds_by_ts))
+    protocol = 'gt' if any(p.entity_id for boxes in preds_by_ts.values() for p in boxes) \
+        else 'detector'
+
+    rows, fp_scores, n_det = [], [], 0
+    for i, ts in enumerate(gt_index.timestamps):
+        gt_boxes = gt_index._buckets[i]
+        preds = ()
+        if len(pred_ts):
+            j = int(np.clip(np.searchsorted(pred_ts, ts), 1, len(pred_ts) - 1)) \
+                if len(pred_ts) > 1 else 0
+            cand = [k for k in (j - 1, j) if 0 <= k < len(pred_ts)]
+            k = min(cand, key=lambda k: abs(pred_ts[k] - ts))
+            if abs(pred_ts[k] - ts) <= timestamp_tolerance_s:
+                preds = preds_by_ts[pred_ts[k]]
+
+        if protocol == 'gt':
+            by_entity = {p.entity_id: p for p in preds}
+            assigned = {gi: by_entity.get(gt.entity_id) for gi, gt in enumerate(gt_boxes)}
+        else:
+            match = _match_iou(preds, gt_boxes, iou_threshold)
+            assigned = {gi: preds[pi] for gi, pi in match.items()}
+            n_det += len(preds)
+            matched_p = {id(p) for p in assigned.values()}
+            fp_scores.extend(p.score for p in preds
+                             if id(p) not in matched_p and p.score >= 0.0)
+
+        for gi, gt in enumerate(gt_boxes):
+            pred = assigned.get(gi)
+            has_score = pred is not None and pred.score >= 0.0   # -1 = no prediction yet
+            width_px = (gt.bbox[2] - gt.bbox[0]) * frame_width if frame_width else float('nan')
+            rows.append((video_id, gt.timestamp, *gt.bbox, gt.ava_label, gt.entity_id,
+                         pred.score if has_score else _MISSING_SCORE, has_score,
+                         pred is not None, face_size_bin(width_px)))
+
+    gt_df = pd.DataFrame(rows, columns=_AVA_COLUMNS + ['score', 'has_score', 'detected',
+                                                       'size_bin'])
+    return protocol, gt_df, np.asarray(fp_scores, dtype=float), n_det
+
+
+def official_map(gt_df, fp_scores=()):
+    """Compute the mAP with the official AVA scorer's own merge, precision/recall and AP code.
+
+    Every GT row must carry a score. Unmatched detections (``fp_scores``) are appended as
+    NOT_SPEAKING rows, which the official precision/recall code counts as false positives.
+
+    Args:
+        gt_df: GT rows with the AVA columns and ``score``.
+        fp_scores: Scores of detections without a GT box.
+
+    Returns:
+        float: The mAP, NaN if there is no positive GT box.
+    """
+    if gt_df.empty or not (gt_df['label'] == _AVA_POSITIVE).any():
+        return float('nan')
+    ava = _ava_eval()
+    df = gt_df[_AVA_COLUMNS + ['score']].copy()
+    df['uid'] = df['frame_timestamp'].map(str) + ':' + df['entity_id'].map(str) + ':' \
+        + df['video_id'].map(str)
+    df_merged = ava.merge_groundtruth_and_predictions(
+        df.drop(columns='score'), df.assign(label=_AVA_POSITIVE))
+    if len(fp_scores):
+        fp = pd.DataFrame({'uid': [f'fp:{i}' for i in range(len(fp_scores))],
+                           'score': fp_scores, 'label_groundtruth': 'NOT_SPEAKING',
+                           'label_prediction': _AVA_POSITIVE})
+        df_merged = pd.concat([df_merged[['uid', 'score', 'label_groundtruth',
+                                          'label_prediction']], fp])
+        df_merged = df_merged.sort_values(by=['score'], ascending=False).reset_index(drop=True)
+    precision, recall = ava.calculate_precision_recall(df_merged)
+    return float(ava.compute_average_precision(precision, recall))
+
+
+def roc_auc(scores, positives):
+    """Area under the ROC curve (Mann-Whitney U with tie correction).
+
+    Args:
+        scores: Scores.
+        positives: True for positive samples.
+
+    Returns:
+        float: The AUC, NaN if one class is empty.
+    """
+    scores = np.asarray(scores, dtype=float)
+    positives = np.asarray(positives, dtype=bool)
+    n_pos, n_neg = positives.sum(), (~positives).sum()
+    if not n_pos or not n_neg:
+        return float('nan')
+    ranks = pd.Series(scores).rank(method='average').to_numpy()
+    return float((ranks[positives].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
+
+
+def protocol_metrics(gt_df, fp_scores, n_detections, protocol,
+                     decision_threshold=DECISION_THRESHOLD):
+    """Headline metrics of one protocol over the given GT rows and unmatched detections.
+
+    Threshold metrics treat a GT box without a score as predicted not-speaking and every
+    unmatched detection above the threshold as a false positive.
+
+    Returns:
+        dict: ``map``, ``auc``, ``precision``, ``recall``, ``f1``, ``balanced_accuracy``,
+        ``coverage`` (share of GT boxes with a score), detector ``det_recall`` /
+        ``det_precision`` (detector protocol only) and per face-size bin ``map_<bin>``,
+        ``det_recall_<bin>`` and ``n_<bin>``.
+    """
+    fp_scores = np.asarray(fp_scores, dtype=float)
+    pos = (gt_df['label'] == _AVA_POSITIVE).to_numpy()
+    scores = gt_df['score'].to_numpy(dtype=float)
+    pred_pos = scores > decision_threshold
+    fp_pos = fp_scores > decision_threshold
+    tp = int((pred_pos & pos).sum())
+    fp = int((pred_pos & ~pos).sum() + fp_pos.sum())
+    fn = int((~pred_pos & pos).sum())
+    tn = int((~pred_pos & ~pos).sum() + (~fp_pos).sum())
+    precision = tp / max(1, tp + fp)
+    recall = tp / max(1, tp + fn)
+    out = {
+        'protocol':          protocol,
+        'map':               official_map(gt_df, fp_scores),
+        'auc':               roc_auc(np.concatenate([scores, fp_scores]),
+                                     np.concatenate([pos, np.zeros(len(fp_scores), bool)])),
+        'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
+        'precision':         precision,
+        'recall':            recall,
+        'f1':                2 * precision * recall / max(1e-9, precision + recall),
+        'balanced_accuracy': 0.5 * (recall + tn / max(1, tn + fp)),
+        'coverage':          float(gt_df['has_score'].mean()) if len(gt_df) else float('nan'),
+        'gt_boxes':          len(gt_df),
+        'gt_positives':      int(pos.sum()),
+    }
+    if protocol == 'detector':
+        detected = gt_df['detected'].to_numpy(dtype=bool)
+        out['det_recall'] = float(detected.mean()) if len(gt_df) else float('nan')
+        out['det_precision'] = (float(detected.sum() / n_detections) if n_detections
+                                else float('nan'))
+        out['dropped_faces'] = int((~detected).sum())
+    for name, _lo, _hi in FACE_SIZE_BINS:
+        sub = gt_df[gt_df['size_bin'] == name]
+        out[f'n_{name}'] = len(sub)
+        # per-bin mAP ranks the bin's GT boxes only, as in the AVA / LoCoNet face-size tables
+        out[f'map_{name}'] = official_map(sub) if len(sub) else float('nan')
+        if protocol == 'detector':
+            out[f'det_recall_{name}'] = (float(sub['detected'].mean()) if len(sub)
+                                         else float('nan'))
+    return out
 
 
 # ── reporting ─────────────────────────────────────────────────────────────────
@@ -489,7 +910,9 @@ def write_aggregate_csv(result_dir, per_video, times_by_video=None):
         fps_values = []                        # per-video fps, for the average row
 
         for video_id, stats in per_video:
-            timing = times_by_video.get(video_id)
+            # runs without aggregate_time.csv still get scored, with blank timing columns
+            timing = times_by_video.get(video_id) or {
+                'frames_processed': 0, 'elapsed_seconds': 0.0, 'fps': 0.0}
             row = {
                 'video_id':          video_id,
                 'tp': stats.tp, 'tn': stats.tn, 'fp': stats.fp, 'fn': stats.fn,
@@ -532,7 +955,7 @@ def write_aggregate_csv(result_dir, per_video, times_by_video=None):
         micro_recall    = tot_tp / max(1, tot_tp + tot_fn)
         micro_f1        = 2 * micro_precision * micro_recall / max(1e-9, micro_precision + micro_recall)
         micro_accuracy  = tot_correct / max(1, tot_matched)
-        avg_fps = tot_frames / tot_elapsed
+        avg_fps = tot_frames / tot_elapsed if tot_elapsed else 0.0
         pooled_scores    = np.concatenate([s.ap_scores for _vid, s in per_video])
         pooled_positives = np.concatenate([s.ap_positives for _vid, s in per_video])
         writer.writerow({
@@ -561,18 +984,132 @@ def write_aggregate_csv(result_dir, per_video, times_by_video=None):
 
 
 
-def _score_video(vid, predictions_csv, gt_rows, iou_threshold, tol_s, result_dir):
-    """Worker: score one video, write its detail CSV, return (vid, Stats)."""
+def _score_video(vid, predictions_csv, gt_rows, iou_threshold, tol_s, result_dir,
+                 frame_width=None):
+    """Worker: score one video, write its detail CSV.
+
+    Returns:
+        tuple: ``(vid, Stats, protocol, gt_df, fp_scores, n_detections)``; the last four are the
+        comparable-protocol inputs from ``protocol_rows``.
+    """
     stats, detail_rows = compute_stats_from_predictions(
         vid, predictions_csv, gt_rows, iou_threshold, tol_s)
     write_detail_csv(result_dir, vid, detail_rows)
-    return vid, stats
+    protocol, gt_df, fp_scores, n_det = protocol_rows(
+        vid, GroundTruthIndex(gt_rows), load_predictions_csv(predictions_csv), tol_s,
+        E2E_IOU_THRESHOLD, frame_width)
+    return vid, stats, protocol, gt_df, fp_scores, n_det
+
+
+_PROTOCOL_FIELDS = ['video_id', 'protocol', 'map', 'auc', 'precision', 'recall', 'f1',
+                    'balanced_accuracy', 'tp', 'fp', 'fn', 'tn', 'coverage', 'gt_boxes',
+                    'gt_positives', 'det_recall', 'det_precision', 'dropped_faces'] + \
+    [f'{m}_{b}' for b, _lo, _hi in FACE_SIZE_BINS for m in ('n', 'map', 'det_recall')]
+
+
+def _fmt(value):
+    """Format a metric for the CSV.
+
+    Args:
+        value: The metric.
+
+    Returns:
+        The value with 4 decimals for floats, blank for NaN/None, unchanged otherwise.
+    """
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return ''
+    if isinstance(value, float):
+        return f'{value:.4f}'
+    return value
+
+
+def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, run_info=None):
+    """Write ``protocol_results.csv`` (per video + pooled), the AVA CSVs and ``summary.json``.
+
+    The pooled row ranks the GT boxes of all videos together, which is how papers report mAP
+    on a validation set. ``ava_groundtruth.csv`` / ``ava_predictions.csv`` let anyone re-run the
+    official script on a ``gt`` run:
+    ``python src/eval/get_ava_active_speaker_performance.py -g ava_groundtruth.csv -p
+    ava_predictions.csv``.
+
+    Args:
+        result_dir: Output directory.
+        per_video_protocol: List of ``(video_id, protocol, gt_df, fp_scores, n_detections)``.
+        times_by_video: Output of ``load_processing_times``, for the speed numbers.
+        run_info: Extra key/values for ``summary.json`` (dataset, model, hardware, ...).
+
+    Returns:
+        dict: The pooled metrics, as written to ``summary.json``.
+    """
+    import json
+    if not per_video_protocol:
+        return {}
+    os.makedirs(result_dir, exist_ok=True)
+    protocols = {p for _v, p, *_ in per_video_protocol}
+    if len(protocols) > 1:
+        LOGGER.warning('mixed protocols in one predictions_dir: %s', protocols)
+    protocol = sorted(protocols)[0]
+
+    rows = []
+    for vid, prot, gt_df, fp_scores, n_det in sorted(per_video_protocol, key=lambda r: r[0]):
+        rows.append({'video_id': vid, **protocol_metrics(gt_df, fp_scores, n_det, prot)})
+    all_gt = pd.concat([r[2] for r in per_video_protocol], ignore_index=True)
+    all_fp = np.concatenate([r[3] for r in per_video_protocol])
+    n_det = sum(r[4] for r in per_video_protocol)
+    pooled = {'video_id': 'pooled', **protocol_metrics(all_gt, all_fp, n_det, protocol)}
+    rows.append(pooled)
+
+    with open(os.path.join(result_dir, 'protocol_results.csv'), 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=_PROTOCOL_FIELDS, extrasaction='ignore')
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: _fmt(row.get(k)) for k in _PROTOCOL_FIELDS})
+
+    if protocol == 'gt':
+        all_gt[_AVA_COLUMNS].to_csv(os.path.join(result_dir, 'ava_groundtruth.csv'),
+                                    header=False, index=False)
+        all_gt[_AVA_COLUMNS].assign(label=_AVA_POSITIVE, score=all_gt['score']).to_csv(
+            os.path.join(result_dir, 'ava_predictions.csv'), header=False, index=False)
+
+    times = [t for t in (times_by_video or {}).values()]
+    frames = sum(t['frames_processed'] for t in times)
+    elapsed = sum(t['elapsed_seconds'] for t in times)
+    summary = {**(run_info or {}),
+               'videos': len(per_video_protocol),
+               **{k: (None if isinstance(v, float) and np.isnan(v) else v)
+                  for k, v in pooled.items() if k != 'video_id'},
+               'frames_processed': frames,
+               'elapsed_seconds': round(elapsed, 3),
+               'fps': round(frames / elapsed, 3) if elapsed else None}
+    with open(os.path.join(result_dir, 'summary.json'), 'w') as f:
+        json.dump(summary, f, indent=2, default=str)
+    LOGGER.info('protocol=%s pooled mAP=%s', protocol, _fmt(pooled['map']))
+    return summary
 
 
 def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_threshold=0.5,
               timestamp_tolerance_ms=TIMESTAMP_TOLERANCE_MS, workers=None, verbose=False,
-              log_dir='logs_stats'):
-    """Score every prediction CSV in predictions_dir and write detail + aggregate CSVs."""
+              log_dir='logs_stats', run_info=None):
+    """Score every prediction CSV in predictions_dir and write detail + aggregate CSVs.
+
+    Also writes the comparable-protocol results (``protocol_results.csv``, ``summary.json``),
+    see ``write_protocol_results``.
+
+    Args:
+        predictions_dir: Folder with the prediction CSVs and ``aggregate_time.csv``.
+        groundtruth_csv: AVA-format GT CSV.
+        result_dir: Output folder.
+        video: Score only this video id.
+        iou_threshold: Minimum IoU for the matched-box metrics.
+        timestamp_tolerance_ms: Max prediction/GT timestamp offset.
+        workers: Parallel scoring processes (None = all CPUs).
+        verbose: Log INFO to the console.
+        log_dir: Folder for the log file.
+        run_info: Copied into ``summary.json``.
+
+    Returns:
+        dict: The summary (pooled metrics and run info).
+    """
     log_path = setup_logging('unitalk_stats', verbose, log_dir)
     tol_s = timestamp_tolerance_ms / 1000.0
     LOGGER.info('stats run start predictions_dir=%s gt=%s tol_ms=%.1f log=%s',
@@ -604,22 +1141,26 @@ def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_thre
             LOGGER.warning('Skipping video=%s reason=no_ground_truth', vid)
             continue
         tasks.append((vid, predictions_csv, gt_rows, iou_threshold, tol_s,
-                      result_dir))
+                      result_dir, (times_by_video.get(vid) or {}).get('width')))
 
     # Score videos in parallel
     per_video = []
+    per_video_protocol = []
     with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(_score_video, *task): task[0] for task in tasks}
         for future in as_completed(futures):
             vid = futures[future]
             try:
-                vid, stats = future.result()
+                vid, stats, protocol, gt_df, fp_scores, n_det = future.result()
                 per_video.append((vid, stats))
+                per_video_protocol.append((vid, protocol, gt_df, fp_scores, n_det))
             except Exception:
                 LOGGER.exception('Failed scoring video=%s', vid)
 
     write_aggregate_csv(result_dir, per_video, times_by_video)
+    summary = write_protocol_results(result_dir, per_video_protocol, times_by_video, run_info)
     LOGGER.info('stats run complete videos_scored=%d', len(per_video))
+    return summary
 
 
 def main():

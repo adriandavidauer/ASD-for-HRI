@@ -59,6 +59,7 @@ Everything after the image name is forwarded to the entrypoint
 | `--predictions_dir` | Output folder, resolved **relative to `--data_dir`** (default `predictions`) |
 | `--architecture` | Model to use (default `CNN2Plus1D_Light`) |
 | `--stride` | Frames between predictions |
+| `--boxes {detector,gt}` | Classify the detected faces (end-to-end, default) or the ground-truth face boxes (literature protocol); see *Comparable metrics* |
 | `-v` | Also log INFO to the console |
 
 Stats flags:
@@ -83,6 +84,43 @@ The run above writes to the host:
   (frames processed and elapsed time).
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
+
+#### Comparable metrics
+
+Every run is scored with the **official AVA script** (`src/eval/get_ava_active_speaker_performance.py`)
+in the protocol that matches `--boxes`:
+
+| `--boxes` | Protocol | Comparable with |
+| --- | --- | --- |
+| `gt` | The classifier runs on the ground-truth face tracks; the detector is skipped. mAP over all GT boxes. | The mAP that AVA / UniTalk / WASD papers report |
+| `detector` | **End-to-end mAP@0.5**: detections are matched one-to-one to GT boxes at IoU ≥ 0.5; detections without a GT box count as false positives. | Ego4D's mAP@0.5; the whole pipeline (detector + tracking + classifier) |
+
+In both protocols, a GT box without a score (missed by the detector, or no prediction yet while
+a buffer fills) gets score 0, because the official script needs a score for every GT box.
+
+`<stats_dir>/protocol_results.csv` has one row per video and a `pooled` row (all GT boxes of the
+run ranked together, as papers report it):
+
+| Column | Meaning |
+| --- | --- |
+| `map` | Official AVA mAP in the run's protocol |
+| `auc` | Area under the ROC curve |
+| `precision`, `recall`, `f1`, `balanced_accuracy`, `tp`/`fp`/`fn`/`tn` | At the decision threshold 0.5 |
+| `coverage` | Share of GT boxes that got a score |
+| `det_recall`, `dropped_faces`, `det_precision` | Face detector: share of GT faces found at IoU ≥ 0.5, number missed, share of detections that are GT faces (`detector` runs only) |
+| `n_<bin>`, `map_<bin>`, `det_recall_<bin>` | The same per face width: `small` < 64 px, `medium` 64–128 px, `large` > 128 px |
+
+`summary.json` holds the pooled numbers together with the run configuration (dataset,
+architecture, boxes, stride, host, CPU architecture, git commit) and the speed. For `gt` runs,
+`ava_groundtruth.csv` and `ava_predictions.csv` can be re-scored with the official script itself:
+
+```bash
+python src/eval/get_ava_active_speaker_performance.py \
+    -g stats/<run>/ava_groundtruth.csv -p stats/<run>/ava_predictions.csv
+```
+
+`aggregate_results.csv` keeps the older metrics (threshold metrics and AP over *matched* boxes only)
+for comparison with earlier runs.
 <!-- --8<-- [end:evaluation] -->
 
 ## Individual steps
@@ -119,11 +157,6 @@ the block at the top of the file: add the folders produced above to `INPUT_FOLDE
 Results land in `$OUTPUT_BASE/<folder>/`: a `<video_id>_detail.csv` per video (one row per
 ground-truth box) and `aggregate_results.csv` with a summary row per video plus a final
 `micro_average` row. Logs go to `logs_stats/`.
-
-Note:
-
-- `aggregate_time.csv` must exist in the prediction folder; the summary writer reads timing for
-  every video unconditionally.
 
 To calculate stats for a single folder, call
 [`stats.py`](src/experiments/stats.py) using flags:
