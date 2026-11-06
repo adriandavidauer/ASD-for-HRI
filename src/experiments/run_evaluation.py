@@ -14,11 +14,13 @@ LOGGER = logging.getLogger('evaluation')
 _DEFAULT_GROUNDTRUTH = {
     'unitalk': 'csv/val_orig.csv',
     'ava':     'ava/annotations/ava_val_groundtruth.csv',
+    'wasd':    'wasd/csv/val_orig.csv',
+    'easycom': 'easycom/csv/{split}_orig.csv',   # --split val (sessions 4, 12) or test (10, 11)
 }
 
 
 def parse_args():
-    """Parse the prediction and scoring flags; make the output folders relative to --data_dir.
+    """Parse the command-line flags.
 
     Returns:
         argparse.Namespace: The parsed flags.
@@ -74,8 +76,34 @@ def relative_to_data_dir(data_dir, path):
         raise ValueError(f'{path} is not inside --data_dir {data_dir}') from None
 
 
+def run_info(args):
+    """Describe the run for ``summary.json``: config, machine and code version.
+
+    Args:
+        args: Parsed flags.
+
+    Returns:
+        dict: The description.
+    """
+    import platform
+    import subprocess
+    try:
+        commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True,
+                                text=True, cwd=Path(__file__).parent).stdout.strip() or None
+    except OSError:
+        commit = None
+    return {'dataset': args.dataset, 'split': args.split, 'architecture': args.architecture,
+            'boxes': args.boxes, 'stride': int(args.stride), 'host': platform.node(),
+            'machine': platform.machine(), 'git_commit': commit,
+            'started_at': datetime.now().isoformat(timespec='seconds')}
+
+
 def main():
-    """Run the prediction phase, then the stats phase unless --skip_stats."""
+    """Command-line entry point.
+
+    Raises:
+        SystemExit: If a requested video is not found or processing fails.
+    """
     args = parse_args()
     log_path = setup_logging('evaluation', args.verbose)
 
@@ -94,21 +122,31 @@ def main():
             LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
 
+    groundtruth_csv = data_dir / (args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset]
+                                  .format(split=args.split))
     processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir,
                                                     architecture=args.architecture,
-                                                    stride=args.stride)
+                                                    stride=args.stride,
+                                                    groundtruth_csv=groundtruth_csv)
     print_run_summary(video_list, processed, skipped, failed, result_dir)
 
     if args.skip_stats:
         return
 
     stats_dir = data_dir / (args.stats_dir or Path('stats') / args.predictions_dir)
-    groundtruth_csv = args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset]
-    run_stats(str(result_dir), str(data_dir / groundtruth_csv), str(stats_dir),
+    categories_csv = None
+    if args.dataset == 'wasd':
+        from .wasd_dataset import WasdDataset
+        os.makedirs(stats_dir, exist_ok=True)
+        categories_csv = str(stats_dir / 'categories.csv')
+        WasdDataset(str(data_dir / 'wasd'), split=args.split, download=False) \
+            .write_categories_csv(categories_csv)
+    run_stats(str(result_dir), str(groundtruth_csv), str(stats_dir),
+              categories_csv=categories_csv,
               video=args.video, iou_threshold=args.iou_threshold,
               timestamp_tolerance_ms=args.timestamp_tolerance_ms,
               workers=args.workers, verbose=args.verbose,
-              log_dir=str(data_dir / 'logs_stats'))
+              log_dir=str(data_dir / 'logs_stats'), run_info=run_info(args))
     LOGGER.info('Stats files in        : %s', stats_dir)
 
 

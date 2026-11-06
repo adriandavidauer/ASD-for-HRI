@@ -305,6 +305,7 @@ def test_flatten_predictions_with_Nones():
 def test_FaceDetectorYN_output():
     """Test if the output with a test image is correct."""
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)   # detectors take RGB (#77)
     orig_img = image.copy()
     h, w, _ = image.shape
     detector = FaceDetectorYN(input_size=(w, h), draw=False)
@@ -320,6 +321,7 @@ def test_FaceDetectorYN_output():
 def test_FaceDetectorYN_output_no_inpt_size():
     """Test if the output with a test image is correct even if no input_size is given (automatic setting during runtime)."""
     image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)   # detectors take RGB (#77)
     orig_img = image.copy()
     h, w, _ = image.shape
     detector = FaceDetectorYN()
@@ -336,8 +338,8 @@ def test_FaceDetectorYN_output_no_inpt_size():
 def test_PreprocessImages():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
-    w = random.randint(0, 1024)
-    h = random.randint(0, 1024)
+    w = random.randint(1, 1024)  # 0 would make cv2.resize fail
+    h = random.randint(1, 1024)
     preprocess_image = PreprocessImages((w, h), normalize=True)
     output_images = preprocess_image([test_image] * n)
     for output_image in output_images:
@@ -348,8 +350,8 @@ def test_PreprocessImages():
 def test_PreprocessImages_no_normalization():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
-    w = random.randint(0, 1024)
-    h = random.randint(0, 1024)
+    w = random.randint(1, 1024)  # 0 would make cv2.resize fail
+    h = random.randint(1, 1024)
     preprocess_image = PreprocessImages((w, h), normalize=False)
     output_images = preprocess_image([test_image] * n)
     for output_image in output_images:
@@ -360,8 +362,8 @@ def test_PreprocessImages_no_normalization():
 def test_PreprocessImages_with_Nones():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
-    w = random.randint(0, 1024)
-    h = random.randint(0, 1024)
+    w = random.randint(1, 1024)  # 0 would make cv2.resize fail
+    h = random.randint(1, 1024)
     preprocess_image = PreprocessImages((w, h), normalize=True)
     input_images = [None, test_image, None] * n
     output_images = preprocess_image(input_images)
@@ -386,11 +388,12 @@ def test_FaceDetectorRetinaFace_output():
     # show_image(output['image'], 'test', True)
     assert np.all(np.equal(output['image'], orig_img)), 'image forwarding does not work correctly' 
     assert type(output['boxes2D']) == list
-    expected_boxes2D = [Box2D((184, 39, 234, 92), 0.987154483795166, 'Face'), 
-                        Box2D((460, 68, 508, 125), 0.9813412427902222, 'Face'), 
-                        Box2D((85, 72, 135, 132), 0.9796932935714722, 'Face'), 
-                        Box2D((373, 50, 424, 110), 0.9790538549423218, 'Face'), 
-                        Box2D((286, 39, 339, 92), 0.9758303165435791, 'Face')]
+    # BGR model input since #77 (the detector converts the RGB frame)
+    expected_boxes2D = [Box2D((184, 39, 234, 92), 0.9916061162948608, 'Face'),
+                        Box2D((460, 66, 509, 125), 0.9840496778488159, 'Face'),
+                        Box2D((86, 70, 133, 132), 0.9750051498413086, 'Face'),
+                        Box2D((287, 34, 340, 93), 0.9740195274353027, 'Face'),
+                        Box2D((375, 50, 424, 110), 0.9686225056648254, 'Face')]
     for exp_box, box in zip(expected_boxes2D, output['boxes2D']):
         assert exp_box.coordinates == box.coordinates
         assert exp_box.score == box.score
@@ -594,3 +597,51 @@ def test_non_binary_AddClassAndScoreToBoxes():
     """Only two class names are supported."""
     with pytest.raises(AssertionError, match='only supports binary classes'):
         AddClassAndScoreToBoxes(lambda images: [], ['a', 'b', 'c'])
+
+# ── BufferFeatures keyed by entity id (#75) ──────────────────────────────────
+
+def test_buffer_features_keyed_follows_ids_not_positions():
+    """With ids, an entity keeps its buffer when its position in the batch changes."""
+    buffer = BufferFeatures((3,), stride=1, max_consecutive_empty=2)
+    buffer([1, 10], ids=['a', 'b'])
+    buffer([11, 2], ids=['b', 'a'])          # order swapped
+    out = buffer([3, 12], ids=['a', 'b'])
+    assert list(out[0]) == [1, 2, 3]
+    assert list(out[1]) == [10, 11, 12]
+
+
+def test_buffer_features_keyed_missing_entity_is_cleared():
+    """An entity missing for max_consecutive_empty calls loses its buffer."""
+    buffer = BufferFeatures((2,), stride=1, max_consecutive_empty=2)
+    buffer([1], ids=['a'])
+    buffer([], ids=[])
+    assert 'a' in buffer.keyed
+    buffer([], ids=[])
+    assert 'a' not in buffer.keyed
+    out = buffer([5], ids=['a'])
+    assert out == [None]                     # starts again from an empty buffer
+
+
+def test_buffer_features_keyed_new_entity_does_not_inherit():
+    """A new id gets a fresh buffer even at the position of a previous entity."""
+    buffer = BufferFeatures((2,), stride=1, max_consecutive_empty=5, return_incomplete_samples=True)
+    buffer([1], ids=['a'])
+    out = buffer([7], ids=['c'])
+    assert list(out[0]) == [7]
+
+
+def test_buffer_features_keyed_rejects_bad_ids():
+    """Ids must be unique and match the batch length."""
+    buffer = BufferFeatures((2,), stride=1)
+    with pytest.raises(ValueError):
+        buffer([1, 2], ids=['a'])
+    with pytest.raises(ValueError):
+        buffer([1, 2], ids=['a', 'a'])
+
+
+def test_buffer_features_reset_clears_keyed():
+    """reset() also clears the keyed buffers."""
+    buffer = BufferFeatures((2,), stride=1)
+    buffer([1], ids=['a'])
+    buffer.reset()
+    assert buffer.keyed == {}

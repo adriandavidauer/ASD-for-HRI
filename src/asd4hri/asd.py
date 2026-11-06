@@ -43,6 +43,7 @@ from tqdm import tqdm
 
 # local imports
 from .processors import *
+from .timing import StageTimer, NULL_TIMER
 
 # end file header
 __author__      = 'Adrian Auer'
@@ -90,11 +91,12 @@ def load_vvad_classifier(architecture):
         raise ValueError(f"Unsupported architecture: {architecture}. Supported architectures are: {Architecture_Options}")
 
 
-class ClassifyVVAD(SequentialProcessor):
+class ClassifyVVAD(Processor):
     """Visual Voice Activity Detection pipeline for cropped face video clips.
 
     Classifies speaking vs. not speaking. Expects a batch of face images per call, each image
-    representing a different entity (the order must be stable across calls). Images, or the shape
+    representing a different entity. Entities are identified either by their position in the
+    batch (the order must then be stable across calls) or by the optional ``ids``. Images, or the shape
     features extracted from them, are buffered until a full sample for the model is collected.
     Returns a batch of (averaged) predictions, each corresponding to the entity at the same index
     of the input batch, or ``None`` where no prediction is available yet.
@@ -114,62 +116,76 @@ class ClassifyVVAD(SequentialProcessor):
             buffer of an entity is cleared.
     """
     def __init__(self, architecture='CNN2Plus1D_Light',
-                 stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5):
+                 stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5,
+                 timer=None):
         """Load the classifier and assemble the preprocessing, buffering and averaging steps.
 
+        ``timer`` is an optional ``StageTimer`` that records the time of every step (#76).
         Asserts that ``architecture`` is in ``Architecture_Options``.
         """
         super(ClassifyVVAD, self).__init__()
+        self.timer = timer or NULL_TIMER
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
 
-        classifier, input_size = load_vvad_classifier(architecture)
-        # Dummy predict to fully initialize 
-        classifier(np.array([np.empty(input_size)]))
+        self.classifier, input_size = load_vvad_classifier(architecture)
+        # Dummy predict to fully initialize
+        self.classifier(np.array([np.empty(input_size)]))
 
         self.class_names = get_class_names('VVAD_LRS3')
+        self.is_shape = 'Shape' in architecture
 
-        preprocess = SequentialProcessor()
-
-        if 'Shape' in architecture:            
-            preprocess.add(GetShapeFeatures(architecture=architecture)) # works on batch of face images not on batch of samples - needs to be done before buffering into a sample
+        # works on a batch of face images, not on a batch of samples, so it runs before buffering
+        if self.is_shape:
+            self.preprocess = GetShapeFeatures(architecture=architecture)
         else:
-            # PreprocessImage is set to not normalize the image to [0, 1] because the model is trained on images in [0, 255]
-            preprocess.add(PreprocessImages(input_size[1:3], normalize=False)) # works on batch of images not on batch of samples - needs to be done before buffering into a sample 
+            # not normalized to [0, 1] because the model is trained on images in [0, 255]
+            self.preprocess = PreprocessImages(input_size[1:3], normalize=False)
+        # buffers the incoming face images or features into samples
         self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty)
-        # We buffer the incoming face images or features
-        preprocess.add(self.buffer_features)
+        self.normalize = NormalizeShapeSample() if self.is_shape else None
+        self.predict = PredictWithNones(model=self.classifier, postprocess=flatten_predictions)
 
+        # Buffer predictions with stride 1 and return_incomplete_samples, so that something is
+        # returned on every call. max_consecutive_empty = stride, so that a model giving no
+        # prediction for stride steps does not reset the buffer.
+        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=stride, return_incomplete_samples=True)
+        # normalize to [0, 1] so that the output is in [0, 1] independent of averaging_window_size
+        self.avg = AveragePredictions(weighted=weighted, normalize=True)
 
-        if 'Shape' in architecture:            
-            preprocess.add(NormalizeShapeSample()) # works on batch of samples
+    def call(self, images, ids=None):
+        """Classify a batch of face images, one per entity.
 
-        
+        Args:
+            images: Batch of cropped RGB face images.
+            ids: Optional entity ids, one per image. If given, each entity keeps its own
+                temporal buffer regardless of its position in the batch.
 
+        Returns:
+            list: One (averaged) score in [0, 1] per image, or None where no prediction is
+            available yet.
+        """
+        timer, n = self.timer, len(images)
+        with timer.stage('preprocess', n):
+            features = self.preprocess(images)
+        with timer.stage('buffer', n):
+            samples = self.buffer_features(features, ids)
+        n_samples = sum(sample is not None for sample in samples)
+        if self.normalize is not None:
+            with timer.stage('normalize', n_samples):
+                samples = self.normalize(samples)
+        if n_samples:
+            with timer.stage('model', n_samples):
+                predictions = self.predict(samples)
+        else:
+            predictions = None
+        if predictions is None or len(predictions) == 0:
+            predictions = [None] * n
+        with timer.stage('average', n):
+            return self.avg(self.buffer_predictions(list(predictions), ids))
 
-        self.add(PredictWithNones(model=classifier, preprocess=preprocess, postprocess=flatten_predictions))
-
-        #  buffer predictions with stride 1 and return_incomplete_samples so so that it returns each time something comes in and max_consecutive_empty is set to stride so that if the model gives no predictions for a stride steps this will not cause the buffer to be reset
-        self.buffer_predictions = BufferFeatures((averaging_window_size,), stride=1, max_consecutive_empty=stride, return_incomplete_samples=True) 
-        self.add(self.buffer_predictions)
-
-        self.avg = AveragePredictions(weighted=weighted, normalize=True) # normalize to [0, 1] so that the output is always in [0, 1] independent of the averaging_window_size
-        self.add(self.avg)
-        # is controlMap hindering Batch predictions? Looks like it is only taking the first input and mapping it to the first output.
-        # self.add(pr.ControlMap(self.avg, [0], [0]))
-        # why convert nones to 0, makes no sese because the output of the model could be zero as well
-        # self.add(pr.ControlMap(pr.NoneConverter(), [0], [0]))
-        # dont get it
-        # self.add(pr.CopyDomain([0], [1]))
-        # self.add(pr.ControlMap(pr.FloatToBoolean(), [0], [0]))
-        # self.add(pr.ControlMap(pr.BooleanToTextMessage(true_message=self.class_names[0], false_message=self.class_names[1]), [0], [0]))
-        # self.add(pr.WrapOutput(['class_name', 'scores']))
-    
     def reset(self):
         """Clear the temporal state: the feature buffers and the prediction averaging window."""
-        # Clear Buffer
         self.buffer_features.reset()
-
-        # AveragePredictions
         self.buffer_predictions.reset()
 
 
@@ -212,9 +228,12 @@ class ASD(Processor):
             If None, it is set at runtime, which can slow the pipeline down slightly.
         face_tracking_approach: How faces are kept in a stable order across frames. One of
             ``FaceTracking_Options``; see ``FaceTracker``.
+        profile: If True, the time of every stage is recorded in ``self.timer``
+            (a ``StageTimer``); see #76.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
-                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort'):
+                 weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
+                 profile=True):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -222,6 +241,7 @@ class ASD(Processor):
             ValueError: If ``detector`` is unknown.
         """
         super(ASD, self).__init__()
+        self.timer = StageTimer(enabled=profile)
         self.annotate_output = annotate_output
         self.offsets = [0,0]
         self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
@@ -255,7 +275,8 @@ class ASD(Processor):
             stride=stride,
             averaging_window_size=averaging_window_size,
             weighted=weighted,
-            architecture=architecture, max_consecutive_empty=max_consecutive_empty
+            architecture=architecture, max_consecutive_empty=max_consecutive_empty,
+            timer=self.timer
         )
         self.class_names = list(get_class_names('VVAD_LRS3'))
         corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
@@ -267,33 +288,46 @@ class ASD(Processor):
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
-    def call(self, image):
+    def call(self, image, boxes2D=None, ids=None):
         """Detect faces in one frame and classify each of them as speaking or not speaking.
 
         Args:
             image: RGB image as a numpy array of shape ``(height, width, 3)``.
+            boxes2D: Optional face boxes (``paz.abstract.messages.Box2D`` in pixels). If given,
+                the face detector and tracker are skipped and these boxes are classified,
+                e.g. the ground-truth boxes of a dataset (#75).
+            ids: Optional entity ids, one per box in ``boxes2D``. Each id keeps its own temporal
+                buffer. Without ids, faces are identified by their (tracked) position.
 
         Returns:
             dict: ``{'image': image, 'boxes2D': boxes2D}``. ``boxes2D`` is a list of
             ``paz.abstract.messages.Box2D`` whose ``class_name`` and ``score`` hold the prediction.
             The image has the boxes drawn on it if ``annotate_output`` is True.
         """
-        # get the face boxes and crop the faces from the image
-        image_copy = self.copy(image)
-        boxes2D = self.detect(image_copy)['boxes2D']
-        boxes2D = self.face_tracker(boxes2D)
-        boxes2D = self.square(boxes2D)
-        boxes2D = self.clip(image, boxes2D)
-        cropped_images = self.crop(image, boxes2D)
+        timer = self.timer
+        with timer.stage('frame'):
+            if boxes2D is None:
+                # get the face boxes and crop the faces from the image
+                with timer.stage('detect'):
+                    image_copy = self.copy(image)
+                    boxes2D = self.detect(image_copy)['boxes2D']
+                with timer.stage('track', len(boxes2D)):
+                    boxes2D = self.face_tracker(boxes2D)
+                ids = None
+            n = len(boxes2D)
+            with timer.stage('crop', n):
+                boxes2D = self.square(boxes2D)
+                boxes2D = self.clip(image, boxes2D)
+                cropped_images = self.crop(image, boxes2D)
 
+            # call classifyVVAD for the whole batch of faces; it times its own steps
+            boxes2D = self.classifier(cropped_images, boxes2D, ids)
 
-        # call classifyVVAD for the whole batch of faces
-        boxes2D = self.classifier(cropped_images, boxes2D)
-
-        # only if flag is set
-        if self.annotate_output:
-            image = self.draw(image, boxes2D)
-        return self.wrap(image, boxes2D)
+            # only if flag is set
+            if self.annotate_output:
+                with timer.stage('annotate', n):
+                    image = self.draw(image, boxes2D)
+            return self.wrap(image, boxes2D)
 
 class DetectVVAD(ASD):
     """Deprecated version of ``ASD``. Use ``ASD`` instead."""
