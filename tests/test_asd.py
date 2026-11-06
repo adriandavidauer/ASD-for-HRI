@@ -189,3 +189,30 @@ def test_face_detectors_take_rgb(detector_class):
     scores_rgb = sorted(float(b.score) for b in boxes_rgb)
     scores_bgr = sorted(float(b.score) for b in boxes_bgr)
     assert scores_rgb != scores_bgr
+
+
+@pytest.mark.parametrize('architecture', ['LipShapeCausal', 'FaceShapeCausal'])
+@pytest.mark.parametrize('causal_mode', ['streaming', 'window'])
+def test_causal_architectures_predict_from_the_first_frame(architecture, causal_mode):
+    """Causal models give a score for every face from its very first frame (#45)."""
+    vvad = ClassifyVVAD(architecture=architecture, averaging_window_size=1,
+                        causal_mode=causal_mode, window_size=10)
+    rng = np.random.default_rng(0)
+    for i in range(15):
+        ids = ['a', 'b'] if i < 10 else ['b']
+        faces = [rng.integers(0, 255, (80, 80, 3), dtype=np.uint8) for _ in ids]
+        out = vvad(faces, ids=ids)
+        assert all(s is not None and 0.0 <= s <= 1.0 for s in out)
+    assert len(out) == 1
+
+
+def test_causal_streaming_equals_window_while_window_not_full():
+    """Until the window is full, both modes see the same frames and give the same score."""
+    rng = np.random.default_rng(1)
+    faces = [rng.integers(0, 255, (80, 80, 3), dtype=np.uint8) for _ in range(6)]
+    stream = ClassifyVVAD(architecture='LipShapeCausal', averaging_window_size=1)
+    window = ClassifyVVAD(architecture='LipShapeCausal', averaging_window_size=1,
+                          causal_mode='window', window_size=38)
+    for face in faces:
+        s, w = stream([face], ids=['a']), window([face], ids=['a'])
+    assert s[0] == pytest.approx(w[0], abs=1e-4)

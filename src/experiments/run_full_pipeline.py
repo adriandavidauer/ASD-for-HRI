@@ -56,6 +56,11 @@ def build_parser():
                    help='Override the auto-generated log file path')
     p.add_argument('--stride', default=1,
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
+    p.add_argument('--causal_mode', default='streaming', choices=['streaming', 'window'],
+                   help='Only for LipShapeCausal/FaceShapeCausal: one LSTM step per frame '
+                        '(streaming) or the model on the last --window frames (window); see #45')
+    p.add_argument('--window', type=int, default=38,
+                   help='Frames per prediction for --causal_mode window (default: 38)')
     p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
                    help='Face boxes to classify: the face detector (end-to-end protocol) or the '
                         'ground-truth boxes (literature protocol, detector skipped); see #75')
@@ -247,6 +252,8 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture,
                 stride=int(stride),
                 groundtruth=None if gt_boxes is None else gt_boxes.get(vid, []),
+                causal_mode=getattr(args, 'causal_mode', 'streaming'),
+                window=getattr(args, 'window', 38),
                 time_range=annotated_range(all_gt.get(vid)),
                 frame_crop=_frame_crop(args.dataset, video_path)
             )

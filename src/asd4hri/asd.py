@@ -44,13 +44,19 @@ from tqdm import tqdm
 # local imports
 from .processors import *
 from .timing import StageTimer, NULL_TIMER
+from .models import StreamingFeatureLSTM, normalize_shape_frames
 
 # end file header
 __author__      = 'Adrian Auer'
 
 
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
-                        'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
+                        'CNN2Plus1D_Light', 'LipShape', 'FaceShape',
+                        'LipShapeCausal', 'FaceShapeCausal']
+
+# Causal landmark models (#45): one prediction per frame from that frame and the frames before
+Causal_Architectures = ['LipShapeCausal', 'FaceShapeCausal']
+Causal_Modes = ['streaming', 'window']
 
 FaceDetector_Options = ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YOLOv10-Face']
 
@@ -79,6 +85,11 @@ def load_vvad_classifier(architecture):
         return (VVAD_LRS3_LSTM(weights='VVAD_LRS3'), (38, 96, 96, 3))
     elif architecture.startswith('CNN2Plus1D'):
         return (CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture)), (38, 96, 96, 3))
+    elif architecture in Causal_Architectures:
+        filename = f'{architecture}.keras'
+        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        num_landmarks = 20 if architecture.startswith('Lip') else 68
+        return (load_model(str(Path(__file__).absolute().parent.parent / "models" / filename)), (None, num_landmarks, 2))
     elif architecture == 'LipShape':
         filename = 'paz_LipShape_0.8958.keras'
         get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
@@ -117,7 +128,7 @@ class ClassifyVVAD(Processor):
     """
     def __init__(self, architecture='CNN2Plus1D_Light',
                  stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5,
-                 timer=None):
+                 timer=None, causal_mode='streaming', window_size=38):
         """Load the classifier and assemble the preprocessing, buffering and averaging steps.
 
         ``timer`` is an optional ``StageTimer`` that records the time of every step (#76).
@@ -126,23 +137,40 @@ class ClassifyVVAD(Processor):
         super(ClassifyVVAD, self).__init__()
         self.timer = timer or NULL_TIMER
         assert architecture in Architecture_Options, f"'{architecture}' is not in {Architecture_Options}"
+        assert causal_mode in Causal_Modes, f"'{causal_mode}' is not in {Causal_Modes}"
 
         self.classifier, input_size = load_vvad_classifier(architecture)
+        self.causal = architecture in Causal_Architectures
+        self.causal_mode = causal_mode
+        if self.causal:
+            # one prediction per frame: the stride and the fixed sample length don't apply
+            input_size = (window_size,) + tuple(input_size[1:])
+            stride = 1
+            self.stream = StreamingFeatureLSTM(self.classifier) if causal_mode == 'streaming' else None
+            # compiled once for any batch size and length; eager Keras calls cost ~20 ms each
+            num_landmarks = input_size[1]
+            self._window_fn = tf.function(
+                lambda x: self.classifier(x, training=False),
+                input_signature=[tf.TensorSpec([None, None, num_landmarks, 2], tf.float32)])
+            self.missed = {}
+            self.max_consecutive_empty = max_consecutive_empty
         # Dummy predict to fully initialize
-        self.classifier(np.array([np.empty(input_size)]))
+        self.classifier(np.zeros((1,) + tuple(input_size)))
 
         self.class_names = get_class_names('VVAD_LRS3')
         self.is_shape = 'Shape' in architecture
 
         # works on a batch of face images, not on a batch of samples, so it runs before buffering
         if self.is_shape:
-            self.preprocess = GetShapeFeatures(architecture=architecture)
+            self.preprocess = GetShapeFeatures(architecture=architecture.replace('Causal', ''))
         else:
             # not normalized to [0, 1] because the model is trained on images in [0, 255]
             self.preprocess = PreprocessImages(input_size[1:3], normalize=False)
-        # buffers the incoming face images or features into samples
-        self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty)
-        self.normalize = NormalizeShapeSample() if self.is_shape else None
+        # buffers the incoming face images or features into samples; a causal model in 'window'
+        # mode predicts from whatever is buffered so far (1..window_size frames)
+        self.buffer_features = BufferFeatures(input_size, stride=stride, max_consecutive_empty=max_consecutive_empty,
+                                              return_incomplete_samples=self.causal)
+        self.normalize = NormalizeShapeSample() if self.is_shape and not self.causal else None
         self.predict = PredictWithNones(model=self.classifier, postprocess=flatten_predictions)
 
         # Buffer predictions with stride 1 and return_incomplete_samples, so that something is
@@ -167,6 +195,8 @@ class ClassifyVVAD(Processor):
         timer, n = self.timer, len(images)
         with timer.stage('preprocess', n):
             features = self.preprocess(images)
+        if self.causal:
+            return self._call_causal(features, ids)
         with timer.stage('buffer', n):
             samples = self.buffer_features(features, ids)
         n_samples = sum(sample is not None for sample in samples)
@@ -183,10 +213,57 @@ class ClassifyVVAD(Processor):
         with timer.stage('average', n):
             return self.avg(self.buffer_predictions(list(predictions), ids))
 
+    def _call_causal(self, features, ids):
+        """Per-frame prediction with a causal landmark model (#45).
+
+        'streaming' advances one LSTM state per entity by one step; 'window' runs the model on
+        the buffered frames (up to ``window_size``) and takes the output of the newest frame.
+        
+        Args:
+            features: Landmarks per face (output of ``GetShapeFeatures``).
+            ids: Entity ids, or None to use the batch positions.
+
+        Returns:
+            list: One averaged score per face.
+        """
+        timer, n = self.timer, len(features)
+        keys = list(ids) if ids is not None else list(range(n))
+        frames = [normalize_shape_frames(f) for f in features]
+        if self.causal_mode == 'streaming':
+            with timer.stage('model', n):
+                scores = list(self.stream.step(np.stack(frames), keys)) if n else []
+            # forget entities that have been missing for max_consecutive_empty calls
+            for key in keys:
+                self.missed[key] = 0
+            for key in list(self.missed):
+                if key not in keys:
+                    self.missed[key] += 1
+                    if self.missed[key] >= self.max_consecutive_empty:
+                        del self.missed[key]
+                        self.stream.forget([key])
+        else:
+            with timer.stage('buffer', n):
+                samples = self.buffer_features(frames, ids)
+            scores = [None] * n
+            with timer.stage('model', n):
+                by_len = {}
+                for k, sample in enumerate(samples):
+                    by_len.setdefault(len(sample), []).append(k)
+                for length, idx in by_len.items():
+                    batch = np.stack([np.stack(list(samples[k])) for k in idx])
+                    out = self._window_fn(tf.constant(batch, tf.float32)).numpy()[:, -1, 0]
+                    for k, score in zip(idx, out):
+                        scores[k] = float(score)
+        with timer.stage('average', n):
+            return self.avg(self.buffer_predictions([float(s) for s in scores], ids))
+
     def reset(self):
         """Clear the temporal state: the feature buffers and the prediction averaging window."""
         self.buffer_features.reset()
         self.buffer_predictions.reset()
+        if self.causal and self.stream is not None:
+            self.stream.reset()
+            self.missed = {}
 
 
 
@@ -230,10 +307,15 @@ class ASD(Processor):
             ``FaceTracking_Options``; see ``FaceTracker``.
         profile: If True, the time of every stage is recorded in ``self.timer``
             (a ``StageTimer``); see #76.
+        causal_mode: Only for the causal architectures (``Causal_Architectures``): 'streaming'
+            keeps one LSTM state per face and costs one step per frame, 'window' re-runs the
+            model on the last ``window_size`` frames. Both predict every frame with zero
+            look-ahead (#45).
+        window_size: Frames per prediction in the causal 'window' mode.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
-                 profile=True):
+                 profile=True, causal_mode='streaming', window_size=38):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -276,7 +358,7 @@ class ASD(Processor):
             averaging_window_size=averaging_window_size,
             weighted=weighted,
             architecture=architecture, max_consecutive_empty=max_consecutive_empty,
-            timer=self.timer
+            timer=self.timer, causal_mode=causal_mode, window_size=window_size
         )
         self.class_names = list(get_class_names('VVAD_LRS3'))
         corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
