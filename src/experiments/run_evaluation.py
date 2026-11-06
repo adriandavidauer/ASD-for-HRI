@@ -18,7 +18,7 @@ _DEFAULT_GROUNDTRUTH = {
 
 
 def parse_args():
-    """Parse the prediction and scoring flags; make the output folders relative to --data_dir.
+    """Parse the command-line flags.
 
     Returns:
         argparse.Namespace: The parsed flags.
@@ -75,7 +75,14 @@ def relative_to_data_dir(data_dir, path):
 
 
 def run_info(args):
-    """Describe the run for ``summary.json``: config, machine and code version."""
+    """Describe the run for ``summary.json``: config, machine and code version.
+
+    Args:
+        args: Parsed flags.
+
+    Returns:
+        dict: The description.
+    """
     import platform
     import subprocess
     try:
@@ -90,7 +97,11 @@ def run_info(args):
 
 
 def main():
-    """Run the prediction phase, then the stats phase unless --skip_stats."""
+    """Command-line entry point.
+
+    Raises:
+        SystemExit: If a requested video is not found or processing fails.
+    """
     args = parse_args()
     log_path = setup_logging('evaluation', args.verbose)
 
