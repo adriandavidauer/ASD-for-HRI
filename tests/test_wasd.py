@@ -63,3 +63,13 @@ def test_protocol_results_have_category_rows(tmp_path):
     with open(tmp_path / 'protocol_results.csv') as f:
         ids = [r['video_id'] for r in csv.DictReader(f)]
     assert ids == ['a', 'b', 'category:OC', 'category:SS', 'pooled']
+
+
+def test_categories_without_scored_videos_are_skipped(tmp_path):
+    """A category with no video in the run gets no row (the run may cover a few videos only)."""
+    gt = _gt_rows(20, seed=2)
+    protocol, gt_df, fp, n = stats.protocol_rows(
+        'a', stats.GroundTruthIndex(gt), _preds(gt, lambda r: 0.5, True), 0.02)
+    summary = stats.write_protocol_results(str(tmp_path), [('a', protocol, gt_df, fp, n)],
+                                           categories={'a': 'OC', 'zz': 'SS'})
+    assert list(summary['map_by_category']) == ['OC']

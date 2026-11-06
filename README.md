@@ -85,6 +85,20 @@ The run above writes to the host:
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
 
+#### Benchmark: all models x datasets x protocols
+
+```bash
+python -m src.experiments.run_benchmark --data_dir /app/data --no_download --tag gpu \
+    --architectures LipShapeCausal CNN2Plus1D_Light --datasets ava unitalk wasd easycom \
+    --boxes gt detector [-- <extra run_evaluation flags>]
+```
+
+Every combination is one `run_evaluation` run into `<data_dir>/benchmark/<tag>_<dataset>_<arch>_<boxes>/`
+(predictions + stats). Runs that already have a `stats/summary.json` are skipped, so an interrupted
+benchmark resumes, and `--tag` keeps cluster and Pi results apart. At the end all summaries are
+collected into `benchmark/benchmark.csv` and a booktabs `benchmark/benchmark.tex`.
+`--dry_run` prints the commands, `--collect_only` only rebuilds the table.
+
 #### WASD
 
 `--dataset wasd` evaluates on the WASD val split (Roxo et al.; 751 annotated 30-s sub-clips of

@@ -1,4 +1,4 @@
-"""Run the benchmark matrix and collect one comparable table (#83).
+r"""Run the benchmark matrix and collect one comparable table (#83).
 
 Every combination of ``--architectures`` x ``--datasets`` x ``--boxes`` is one run of
 ``run_evaluation``. Its predictions go to ``<data_dir>/benchmark/<run>/predictions`` and its
@@ -42,13 +42,35 @@ TABLE_COLUMNS = [
 
 
 def run_name(tag, dataset, architecture, boxes, extra=()):
-    """Folder name of one run, e.g. ``gpu_ava_AV-LR-ASD_gt``; extra flags are appended."""
+    """Folder name of one run, e.g. ``gpu_ava_AV-LR-ASD_gt``; extra flags are appended.
+
+    Args:
+        tag: Prefix such as 'gpu' or 'pi' (may be empty).
+        dataset: Dataset name.
+        architecture: Architecture name.
+        boxes: 'gt' or 'detector'.
+        extra: Extra flags passed to every run.
+
+    Returns:
+        str: A filesystem-safe name.
+    """
     parts = [tag, dataset, architecture, boxes] + [a.lstrip('-') for a in extra]
     return re.sub(r'[^A-Za-z0-9_.-]+', '-', '_'.join(p for p in parts if p))
 
 
 def build_command(args, dataset, architecture, boxes, run_dir):
-    """The ``run_evaluation`` command line of one run (paths relative to --data_dir)."""
+    """The ``run_evaluation`` command line of one run (paths relative to --data_dir).
+
+    Args:
+        args: Parsed runner flags.
+        dataset: Dataset name.
+        architecture: Architecture name.
+        boxes: 'gt' or 'detector'.
+        run_dir: Output folder of the run.
+
+    Returns:
+        list[str]: The command.
+    """
     rel = os.path.relpath(run_dir, args.data_dir)
     cmd = [sys.executable, '-m', 'src.experiments.run_evaluation',
            '--data_dir', args.data_dir, '--dataset', dataset,
@@ -61,7 +83,14 @@ def build_command(args, dataset, architecture, boxes, run_dir):
 
 
 def collect(benchmark_dir):
-    """Read every ``*/stats/summary.json`` under ``benchmark_dir`` into a list of dicts."""
+    """Read every ``*/stats/summary.json`` under ``benchmark_dir``.
+
+    Args:
+        benchmark_dir: The benchmark folder.
+
+    Returns:
+        list[dict]: One summary per run, with its folder name as ``run``.
+    """
     rows = []
     for path in sorted(Path(benchmark_dir).glob('*/stats/summary.json')):
         with open(path) as f:
@@ -72,7 +101,12 @@ def collect(benchmark_dir):
 
 
 def write_csv(rows, path):
-    """All summary keys as columns (nested dicts as JSON)."""
+    """Write all summaries as CSV; every key is a column, nested values as JSON.
+
+    Args:
+        rows: Summaries from ``collect``.
+        path: Output CSV.
+    """
     keys = []
     for row in rows:
         keys += [k for k in row if k not in keys]
@@ -85,6 +119,15 @@ def write_csv(rows, path):
 
 
 def _cell(value, fmt):
+    """Format one LaTeX table cell.
+
+    Args:
+        value: The value, or None.
+        fmt: ``str.format`` pattern.
+
+    Returns:
+        str: The cell text, '--' for missing values.
+    """
     if value is None or value == '':
         return '--'
     try:
@@ -94,7 +137,12 @@ def _cell(value, fmt):
 
 
 def write_latex(rows, path):
-    """A booktabs table with the headline columns, grouped by dataset."""
+    """Write a booktabs table with the headline columns, grouped by dataset.
+
+    Args:
+        rows: Summaries from ``collect``.
+        path: Output .tex file.
+    """
     rows = sorted(rows, key=lambda r: (r.get('dataset', ''), r.get('boxes', ''),
                                        r.get('architecture', '')))
     lines = [r'\begin{tabular}{' + 'l' * 3 + 'r' * (len(TABLE_COLUMNS) - 3) + '}', r'\toprule',
@@ -112,7 +160,14 @@ def write_latex(rows, path):
 
 
 def main(argv=None):
-    """Run the matrix, then collect the table."""
+    """Run the matrix, then collect the table.
+
+    Args:
+        argv: Command-line arguments (default: ``sys.argv[1:]``).
+
+    Raises:
+        SystemExit: If a run failed.
+    """
     argv = list(sys.argv[1:] if argv is None else argv)
     extra = argv[argv.index('--') + 1:] if '--' in argv else []
     argv = argv[:argv.index('--')] if '--' in argv else argv
