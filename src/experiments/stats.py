@@ -823,6 +823,49 @@ def _fmt(value):
     return value
 
 
+def aggregate_stage_times(predictions_dir, result_dir):
+    """Pool the per-video stage timings (``<predictions_dir>/timing/*.csv``, #76).
+
+    Writes ``stage_times.csv`` with, per stage: calls, total seconds, mean ms per call, ms per
+    processed frame, ms per item (face) and the share of the total frame time.
+
+    Returns:
+        dict: stage -> ms per frame, for ``summary.json``; empty if there are no timing files.
+    """
+    timing_dir = os.path.join(predictions_dir, 'timing')
+    if not os.path.isdir(timing_dir):
+        return {}
+    frames_by_video, totals = {}, {}
+    for name in sorted(os.listdir(timing_dir)):
+        if not name.endswith('.csv'):
+            continue
+        with open(os.path.join(timing_dir, name), newline='') as f:
+            for row in csv.DictReader(f):
+                frames_by_video[row['video_id']] = int(row['frames'])
+                t = totals.setdefault(row['stage'], {'calls': 0, 'total_s': 0.0, 'items': 0})
+                t['calls'] += int(row['calls'])
+                t['total_s'] += float(row['total_s'])
+                t['items'] += int(row['items']) if row['items'] else 0
+    frames = sum(frames_by_video.values())
+    frame_s = totals.get('frame', {}).get('total_s') or float('nan')
+    os.makedirs(result_dir, exist_ok=True)
+    out = {}
+    with open(os.path.join(result_dir, 'stage_times.csv'), 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['stage', 'calls', 'total_s', 'mean_ms', 'ms_per_frame', 'ms_per_item',
+                         'share_of_frame'])
+        for stage, t in totals.items():
+            ms_per_frame = 1000.0 * t['total_s'] / max(1, frames)
+            out[stage] = round(ms_per_frame, 4)
+            writer.writerow([stage, t['calls'], f"{t['total_s']:.3f}",
+                             f"{1000.0 * t['total_s'] / max(1, t['calls']):.4f}",
+                             f'{ms_per_frame:.4f}',
+                             f"{1000.0 * t['total_s'] / t['items']:.4f}" if t['items'] else '',
+                             _fmt(t['total_s'] / frame_s) if stage not in ('frame', 'read')
+                             else ''])
+    return out
+
+
 def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, run_info=None):
     """Write ``protocol_results.csv`` (per video + pooled), the AVA CSVs and ``summary.json``.
 
@@ -944,7 +987,9 @@ def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_thre
                 LOGGER.exception('Failed scoring video=%s', vid)
 
     write_aggregate_csv(result_dir, per_video, times_by_video)
-    summary = write_protocol_results(result_dir, per_video_protocol, times_by_video, run_info)
+    stage_ms = aggregate_stage_times(predictions_dir, result_dir)
+    summary = write_protocol_results(result_dir, per_video_protocol, times_by_video,
+                                     {**(run_info or {}), 'stage_ms_per_frame': stage_ms})
     LOGGER.info('stats run complete videos_scored=%d', len(per_video))
     return summary
 

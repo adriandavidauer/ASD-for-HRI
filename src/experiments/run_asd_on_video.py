@@ -120,6 +120,25 @@ class _GroundTruthFrames:
         return boxes, ids
 
 
+_STAGE_FIELDS = ['video_id', 'stage', 'calls', 'total_s', 'mean_ms', 'median_ms', 'p95_ms',
+                 'max_ms', 'items', 'ms_per_item', 'frames']
+
+
+def write_stage_times(path, video_id, timer, frames):
+    """Write one video's per-stage timing (``StageTimer.summary``) as CSV (#76)."""
+    rows = timer.summary()
+    if not rows:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=_STAGE_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**{k: (f'{v:.4f}' if isinstance(v, float) else v)
+                                for k, v in row.items()},
+                             'video_id': video_id, 'frames': frames})
+
+
 # ── pipeline runner ───────────────────────────────────────────────────────────
 
 def run_asd_on_video(video_path,
@@ -183,7 +202,8 @@ def run_asd_on_video(video_path,
         pred_boxes_list = []
         gt_list = []
         while True:
-            is_frame_received, frame = cap.read()
+            with pipeline.timer.stage('read'):
+                is_frame_received, frame = cap.read()
             if not is_frame_received:
                 LOGGER.warning('Frame not received or End of stream')
                 break
@@ -226,6 +246,9 @@ def run_asd_on_video(video_path,
         for idx, timestamp, pred_boxes, gt in zip(frame_idx_list, timestamp_list,
                                                   pred_boxes_list, gt_list):
             _write_prediction_rows(writer, idx, timestamp, pred_boxes, width, height, gt)
+
+    write_stage_times(os.path.join(os.path.dirname(predictions_csv) or '.', 'timing',
+                                   f'{video_id}.csv'), video_id, pipeline.timer, frame_idx)
 
     if aggregate_time_csv is not None:
         append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,
