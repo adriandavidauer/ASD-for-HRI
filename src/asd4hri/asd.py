@@ -44,6 +44,7 @@ from tqdm import tqdm
 # local imports
 from .processors import *
 from .timing import StageTimer, NULL_TIMER
+from .av import AV_PREFIX, AVClassifier, av_architectures
 
 # end file header
 __author__      = 'Adrian Auer'
@@ -230,10 +231,13 @@ class ASD(Processor):
             ``FaceTracking_Options``; see ``FaceTracker``.
         profile: If True, the time of every stage is recorded in ``self.timer``
             (a ``StageTimer``); see #76.
+        av_window: Frames per prediction for the audio-visual architectures ('AV:<model>').
+        audio_fallback: What the audio-visual models get without audio: 'noise' or
+            'visual' (visual-only back end); see ``asd4hri.av.AVClassifier``.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
-                 profile=True):
+                 profile=True, av_window=25, audio_fallback='noise'):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -242,6 +246,7 @@ class ASD(Processor):
         """
         super(ASD, self).__init__()
         self.timer = StageTimer(enabled=profile)
+        self.av = None
         self.annotate_output = annotate_output
         self.offsets = [0,0]
         self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
@@ -280,7 +285,16 @@ class ASD(Processor):
         )
         self.class_names = list(get_class_names('VVAD_LRS3'))
         corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
-        self.classifier = AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args), class_names=corrected_class_names, decision_threshold=decision_threshold)
+        self.decision_threshold = decision_threshold
+        self.corrected_class_names = corrected_class_names
+        if architecture.startswith(AV_PREFIX):
+            # audio-visual model (#40, #80): crops its own faces from the frame, needs set_audio()
+            self.av = AVClassifier(architecture[len(AV_PREFIX):], window=av_window,
+                                   stride=stride, max_consecutive_empty=max_consecutive_empty,
+                                   audio_fallback=audio_fallback, timer=self.timer)
+            self.classifier = None
+        else:
+            self.classifier = AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args), class_names=corrected_class_names, decision_threshold=decision_threshold)
         
 
         self.class_names.append('No Prediction yet')
@@ -288,7 +302,15 @@ class ASD(Processor):
         self.draw = pr.DrawBoxes2D(self.class_names, self.colors, True)
         self.wrap = pr.WrapOutput(['image', 'boxes2D'])
 
-    def call(self, image, boxes2D=None, ids=None):
+    def set_audio(self, audio, fps):
+        """Give the audio-visual models the audio track (int16, 16 kHz mono) and frame rate.
+
+        Call once per video before the first frame. Ignored by the visual-only models.
+        """
+        if self.av is not None:
+            self.av.set_audio(audio, fps)
+
+    def call(self, image, boxes2D=None, ids=None, timestamp=None):
         """Detect faces in one frame and classify each of them as speaking or not speaking.
 
         Args:
@@ -298,6 +320,8 @@ class ASD(Processor):
                 e.g. the ground-truth boxes of a dataset (#75).
             ids: Optional entity ids, one per box in ``boxes2D``. Each id keeps its own temporal
                 buffer. Without ids, faces are identified by their (tracked) position.
+            timestamp: Time of the frame in seconds; the audio-visual models need it to cut the
+                matching audio.
 
         Returns:
             dict: ``{'image': image, 'boxes2D': boxes2D}``. ``boxes2D`` is a list of
@@ -315,13 +339,25 @@ class ASD(Processor):
                     boxes2D = self.face_tracker(boxes2D)
                 ids = None
             n = len(boxes2D)
-            with timer.stage('crop', n):
-                boxes2D = self.square(boxes2D)
-                boxes2D = self.clip(image, boxes2D)
-                cropped_images = self.crop(image, boxes2D)
+            if self.av is not None:
+                # TalkNet-style models crop the (unsquared) box themselves
+                with timer.stage('crop', n):
+                    boxes2D = self.clip(image, boxes2D)
+                scores = self.av(image, [b.coordinates for b in boxes2D], ids, timestamp)
+                for score, box in zip(scores, boxes2D):
+                    if score is None:
+                        box.score, box.class_name = -1.0, 'No Prediction yet'
+                    else:
+                        box.score = float(score)
+                        box.class_name = self.corrected_class_names[int(score > self.decision_threshold)]
+            else:
+                with timer.stage('crop', n):
+                    boxes2D = self.square(boxes2D)
+                    boxes2D = self.clip(image, boxes2D)
+                    cropped_images = self.crop(image, boxes2D)
 
-            # call classifyVVAD for the whole batch of faces; it times its own steps
-            boxes2D = self.classifier(cropped_images, boxes2D, ids)
+                # call classifyVVAD for the whole batch of faces; it times its own steps
+                boxes2D = self.classifier(cropped_images, boxes2D, ids)
 
             # only if flag is set
             if self.annotate_output:

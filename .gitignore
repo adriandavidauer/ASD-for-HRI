@@ -229,3 +229,6 @@ pretrain_TalkSet.model
 *.avi
 *.mp4
 
+
+# model weights downloaded at runtime (asd4hri.av)
+src/models/*.model

@@ -7,6 +7,7 @@ import os
 import time
 
 from asd4hri.asd import ASD
+from asd4hri.av import load_audio
 
 import cv2
 import numpy as np
@@ -149,7 +150,7 @@ def run_asd_on_video(video_path,
                     decision_threshold: float = 0.5,
                     weighted: bool = True,
                     max_consecutive_empty: int = 2,
-                    groundtruth=None):
+                    groundtruth=None, av_window=25, audio_fallback='noise', use_audio=True):
     """Run ASD on one video and write predictions + timing rows.
 
     Args:
@@ -160,6 +161,9 @@ def run_asd_on_video(video_path,
                             Defaults to results/aggregate_time.csv; pass None to skip.
         video_id:           override video_id used in logs / paths / timing row.
                             Defaults to the video file's basename.
+        av_window, audio_fallback, use_audio: Options of the audio-visual architectures
+                            ('AV:<model>', #80): frames per prediction, what to feed without
+                            audio, and whether to use the video's audio track at all.
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
                             with normalised boxes for this video. The detector is skipped and
                             the GT boxes of the nearest annotated timestamp (within half a frame)
@@ -183,7 +187,12 @@ def run_asd_on_video(video_path,
         raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
 
-    pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty)
+    pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty,
+                   av_window=av_window, audio_fallback=audio_fallback)
+    if pipeline.av is not None:
+        with pipeline.timer.stage('audio_decode'):
+            audio = load_audio(video_path) if use_audio else None
+        pipeline.set_audio(audio, native_fps)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     gt_index = _GroundTruthFrames(groundtruth, native_fps) if groundtruth is not None else None
@@ -212,11 +221,11 @@ def run_asd_on_video(video_path,
             gt_frame = None
             try:
                 if gt_index is None:
-                    output = pipeline(frame)
+                    output = pipeline(frame, timestamp=timestamp)
                 else:
                     gt_ts, gt_frame = gt_index.at(timestamp)
                     boxes, ids = gt_index.boxes2D(gt_frame, width, height)
-                    output = pipeline(frame, boxes, ids)
+                    output = pipeline(frame, boxes, ids, timestamp=timestamp)
                     timestamp = gt_ts if gt_frame else timestamp
                 if output is None:
                     frame_idx += 1

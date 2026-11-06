@@ -52,6 +52,12 @@ def build_parser():
                    help='Override the auto-generated log file path')
     p.add_argument('--stride', default=1,
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
+    p.add_argument('--av_window', type=int, default=25,
+                   help="Frames per prediction for the audio-visual models 'AV:<model>' (#80)")
+    p.add_argument('--audio_fallback', default='noise', choices=['noise', 'visual'],
+                   help='What the audio-visual models get without audio (#40)')
+    p.add_argument('--no_audio', action='store_true',
+                   help='Ignore the audio track (tests the audio fallback)')
     p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
                    help='Face boxes to classify: the face detector (end-to-end protocol) or the '
                         'ground-truth boxes (literature protocol, detector skipped); see #75')
@@ -173,7 +179,10 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 str(video_path), str(predictions_csv),
                 aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture,
                 stride=int(stride),
-                groundtruth=None if gt_boxes is None else gt_boxes.get(vid, [])
+                groundtruth=None if gt_boxes is None else gt_boxes.get(vid, []),
+                av_window=getattr(args, 'av_window', 25),
+                audio_fallback=getattr(args, 'audio_fallback', 'noise'),
+                use_audio=not getattr(args, 'no_audio', False)
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)

@@ -30,6 +30,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# audio-visual baselines (TalkNet, LR-ASD, ...; #40, #80). Their code comes from the git
+# submodules in src/, the weights are downloaded on first use.
+av = [
+    "torch",
+    "python_speech_features",
+    "gdown",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",  # For generating test coverage reports
