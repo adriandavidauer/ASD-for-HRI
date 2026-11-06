@@ -52,9 +52,28 @@ def build_parser():
                    help='Override the auto-generated log file path')
     p.add_argument('--stride', default=1,
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
+    p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
+                   help='Face boxes to classify: the face detector (end-to-end protocol) or the '
+                        'ground-truth boxes (literature protocol, detector skipped); see #75')
     p.add_argument('--verbose', '-v', action='store_true',
                    help='Also emit INFO-level messages on the console')
     return p
+
+
+def load_groundtruth_boxes(groundtruth_csv):
+    """Read an AVA-format GT CSV -> dict video_id -> [(timestamp, entity_id, (x1, y1, x2, y2))].
+
+    Works with and without a header row (AVA's own files have none).
+    """
+    import csv
+    by_video = {}
+    with open(groundtruth_csv, newline='') as f:
+        for row in csv.reader(f):
+            if not row or row[0] == 'video_id':
+                continue
+            by_video.setdefault(row[0], []).append(
+                (float(row[1]), row[7], tuple(float(v) for v in row[2:6])))
+    return by_video
 
 
 def load_video_list(args, data_dir: Path):
@@ -101,8 +120,11 @@ def load_video_list(args, data_dir: Path):
 
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
-def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
+def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groundtruth_csv=None):
     """Download data on demand, run ASD on every video, write predictions.
+
+    With ``args.boxes == 'gt'`` the GT boxes from ``groundtruth_csv`` are classified instead of
+    detected faces.
 
     Returns:
         tuple[list[str], list[tuple], list[tuple]]:
@@ -119,6 +141,12 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
     processed = []
     skipped = []
     failed = []
+
+    gt_boxes = None
+    if getattr(args, 'boxes', 'detector') == 'gt':
+        if groundtruth_csv is None:
+            raise ValueError('--boxes gt needs the ground-truth CSV')
+        gt_boxes = load_groundtruth_boxes(groundtruth_csv)
 
     for i, (vid, video_path, url) in enumerate(video_list, 1):
         predictions_csv = result_dir / f'{vid}.csv'
@@ -143,7 +171,9 @@ def run_pipeline_phase(args, video_list, result_dir,architecture, stride):
         try:
             run_asd_on_video(
                 str(video_path), str(predictions_csv),
-                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture, stride=stride
+                aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture,
+                stride=int(stride),
+                groundtruth=None if gt_boxes is None else gt_boxes.get(vid, [])
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)

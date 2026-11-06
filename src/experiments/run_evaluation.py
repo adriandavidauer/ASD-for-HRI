@@ -37,6 +37,21 @@ def parse_args():
     return p.parse_args()
 
 
+def run_info(args):
+    """Describe the run for ``summary.json``: config, machine and code version."""
+    import platform
+    import subprocess
+    try:
+        commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True,
+                                text=True, cwd=Path(__file__).parent).stdout.strip() or None
+    except OSError:
+        commit = None
+    return {'dataset': args.dataset, 'split': args.split, 'architecture': args.architecture,
+            'boxes': args.boxes, 'stride': int(args.stride), 'host': platform.node(),
+            'machine': platform.machine(), 'git_commit': commit,
+            'started_at': datetime.now().isoformat(timespec='seconds')}
+
+
 def main():
     """Run the prediction phase, then the stats phase unless --skip_stats."""
     args = parse_args()
@@ -57,21 +72,22 @@ def main():
             LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
 
+    groundtruth_csv = data_dir / (args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset])
     processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir,
                                                     architecture=args.architecture,
-                                                    stride=args.stride)
+                                                    stride=args.stride,
+                                                    groundtruth_csv=groundtruth_csv)
     print_run_summary(video_list, processed, skipped, failed, result_dir)
 
     if args.skip_stats:
         return
 
     stats_dir = data_dir / (args.stats_dir or Path('stats') / args.predictions_dir)
-    groundtruth_csv = args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset]
-    run_stats(str(result_dir), str(data_dir / groundtruth_csv), str(stats_dir),
+    run_stats(str(result_dir), str(groundtruth_csv), str(stats_dir),
               video=args.video, iou_threshold=args.iou_threshold,
               timestamp_tolerance_ms=args.timestamp_tolerance_ms,
               workers=args.workers, verbose=args.verbose,
-              log_dir=str(data_dir / 'logs_stats'))
+              log_dir=str(data_dir / 'logs_stats'), run_info=run_info(args))
     LOGGER.info('Stats files in        : %s', stats_dir)
 
 

@@ -594,3 +594,51 @@ def test_non_binary_AddClassAndScoreToBoxes():
     """Only two class names are supported."""
     with pytest.raises(AssertionError, match='only supports binary classes'):
         AddClassAndScoreToBoxes(lambda images: [], ['a', 'b', 'c'])
+
+# ── BufferFeatures keyed by entity id (#75) ──────────────────────────────────
+
+def test_buffer_features_keyed_follows_ids_not_positions():
+    """With ids, an entity keeps its buffer when its position in the batch changes."""
+    buffer = BufferFeatures((3,), stride=1, max_consecutive_empty=2)
+    buffer([1, 10], ids=['a', 'b'])
+    buffer([11, 2], ids=['b', 'a'])          # order swapped
+    out = buffer([3, 12], ids=['a', 'b'])
+    assert list(out[0]) == [1, 2, 3]
+    assert list(out[1]) == [10, 11, 12]
+
+
+def test_buffer_features_keyed_missing_entity_is_cleared():
+    """An entity missing for max_consecutive_empty calls loses its buffer."""
+    buffer = BufferFeatures((2,), stride=1, max_consecutive_empty=2)
+    buffer([1], ids=['a'])
+    buffer([], ids=[])
+    assert 'a' in buffer.keyed
+    buffer([], ids=[])
+    assert 'a' not in buffer.keyed
+    out = buffer([5], ids=['a'])
+    assert out == [None]                     # starts again from an empty buffer
+
+
+def test_buffer_features_keyed_new_entity_does_not_inherit():
+    """A new id gets a fresh buffer even at the position of a previous entity."""
+    buffer = BufferFeatures((2,), stride=1, max_consecutive_empty=5, return_incomplete_samples=True)
+    buffer([1], ids=['a'])
+    out = buffer([7], ids=['c'])
+    assert list(out[0]) == [7]
+
+
+def test_buffer_features_keyed_rejects_bad_ids():
+    """Ids must be unique and match the batch length."""
+    buffer = BufferFeatures((2,), stride=1)
+    with pytest.raises(ValueError):
+        buffer([1, 2], ids=['a'])
+    with pytest.raises(ValueError):
+        buffer([1, 2], ids=['a', 'a'])
+
+
+def test_buffer_features_reset_clears_keyed():
+    """reset() also clears the keyed buffers."""
+    buffer = BufferFeatures((2,), stride=1)
+    buffer([1], ids=['a'])
+    buffer.reset()
+    assert buffer.keyed == {}
