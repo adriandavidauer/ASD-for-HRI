@@ -363,6 +363,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Full evaluation - src/experiments/run_evaluation.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#comparable-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparable metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -601,6 +618,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Full evaluation - src/experiments/run_evaluation.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#comparable-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparable metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -700,6 +734,10 @@ mounted directory must be writable by that user.</p>
 <td>Frames between predictions</td>
 </tr>
 <tr>
+<td><code>--boxes {detector,gt}</code></td>
+<td>Classify the detected faces (end-to-end, default) or the ground-truth face boxes (literature protocol); see <em>Comparable metrics</em></td>
+</tr>
+<tr>
 <td><code>-v</code></td>
 <td>Also log INFO to the console</td>
 </tr>
@@ -750,6 +788,76 @@ mounted directory must be writable by that user.</p>
 <li><code>/Data/data/stats/predictions_cnn1d_scores/</code>: the stats output described below.</li>
 <li><code>/Data/data/logs_stats/</code>: stats log files.</li>
 </ul>
+<h4 id="comparable-metrics">Comparable metrics</h4>
+<p>Every run is scored with the <strong>official AVA script</strong> (<code>src/eval/get_ava_active_speaker_performance.py</code>)
+in the protocol that matches <code>--boxes</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>--boxes</code></th>
+<th>Protocol</th>
+<th>Comparable with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt</code></td>
+<td>The classifier runs on the ground-truth face tracks; the detector is skipped. mAP over all GT boxes.</td>
+<td>The mAP that AVA / UniTalk / WASD papers report</td>
+</tr>
+<tr>
+<td><code>detector</code></td>
+<td><strong>End-to-end mAP@0.5</strong>: detections are matched one-to-one to GT boxes at IoU ≥ 0.5; detections without a GT box count as false positives.</td>
+<td>Ego4D's mAP@0.5; the whole pipeline (detector + tracking + classifier)</td>
+</tr>
+</tbody>
+</table>
+<p>In both protocols, a GT box without a score (missed by the detector, or no prediction yet while
+a buffer fills) gets score 0, because the official script needs a score for every GT box.</p>
+<p><code>&lt;stats_dir&gt;/protocol_results.csv</code> has one row per video and a <code>pooled</code> row (all GT boxes of the
+run ranked together, as papers report it):</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map</code></td>
+<td>Official AVA mAP in the run's protocol</td>
+</tr>
+<tr>
+<td><code>auc</code></td>
+<td>Area under the ROC curve</td>
+</tr>
+<tr>
+<td><code>precision</code>, <code>recall</code>, <code>f1</code>, <code>balanced_accuracy</code>, <code>tp</code>/<code>fp</code>/<code>fn</code>/<code>tn</code></td>
+<td>At the decision threshold 0.5</td>
+</tr>
+<tr>
+<td><code>coverage</code></td>
+<td>Share of GT boxes that got a score</td>
+</tr>
+<tr>
+<td><code>det_recall</code>, <code>dropped_faces</code>, <code>det_precision</code></td>
+<td>Face detector: share of GT faces found at IoU ≥ 0.5, number missed, share of detections that are GT faces (<code>detector</code> runs only)</td>
+</tr>
+<tr>
+<td><code>n_&lt;bin&gt;</code>, <code>map_&lt;bin&gt;</code>, <code>det_recall_&lt;bin&gt;</code></td>
+<td>The same per face width: <code>small</code> &lt; 64 px, <code>medium</code> 64–128 px, <code>large</code> &gt; 128 px</td>
+</tr>
+</tbody>
+</table>
+<p><code>summary.json</code> holds the pooled numbers together with the run configuration (dataset,
+architecture, boxes, stride, host, CPU architecture, git commit) and the speed. For <code>gt</code> runs,
+<code>ava_groundtruth.csv</code> and <code>ava_predictions.csv</code> can be re-scored with the official script itself:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>src/eval/get_ava_active_speaker_performance.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-g<span class="w"> </span>stats/&lt;run&gt;/ava_groundtruth.csv<span class="w"> </span>-p<span class="w"> </span>stats/&lt;run&gt;/ava_predictions.csv
+</code></pre></div>
+<p><code>aggregate_results.csv</code> keeps the older metrics (threshold metrics and AP over <em>matched</em> boxes only)
+for comparison with earlier runs.</p>
 <h2 id="individual-steps">Individual steps</h2>
 <p>The prediction and the stats phase can also be run on their own, and the stats phase can run
 outside the Docker image. Both, and the files the stats phase writes, are described in the
