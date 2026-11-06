@@ -8,3 +8,4 @@ pandas
 wget
 yt-dlp
 keras==3.6.0
+opencv-python<5 # pypaz uses cv2.SOLVEPNP_UPNP, which OpenCV 5 removed
