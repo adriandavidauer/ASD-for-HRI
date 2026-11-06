@@ -608,7 +608,8 @@ class FaceDetectorYN(Processor):
         # set input size if necessary
         if (image.shape[1], image.shape[0]) != self.input_size:
             self.detector.setInputSize((image.shape[1], image.shape[0]))
-        retval, faces = self.detector.detect(image)
+        # the ASD pipeline passes RGB frames, OpenCV's YuNet expects BGR (#77)
+        retval, faces = self.detector.detect(cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
         # create boxes2D with the corresponding points and the score and the label
         boxes2D = []
         if faces is not None: 
@@ -675,7 +676,8 @@ class FaceDetectorRetinaFace(Processor):
         """
         orig_height, orig_width, _ = image.shape
 
-        img = cv2.resize(image, (640, 640)).astype(np.float32)
+        # RGB in (as everywhere in the ASD pipeline); the model expects BGR with BGR means (#77)
+        img = cv2.resize(cv2.cvtColor(image, cv2.COLOR_RGB2BGR), (640, 640)).astype(np.float32)
         im_height, im_width, _ = img.shape
         # scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
         img -= (104, 117, 123)

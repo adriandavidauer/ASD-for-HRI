@@ -124,6 +124,7 @@ def run_asd_on_video(video_path,
                 LOGGER.warning('Frame not received or End of stream')
                 break
             height, width = frame.shape[:2]
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # ASD expects RGB (#77)
             try:
                 output= pipeline(frame)
                 if output is None:
