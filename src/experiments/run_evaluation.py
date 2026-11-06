@@ -1,6 +1,7 @@
 """End-to-end ASD evaluation: run predictions over a dataset, then calculates stats."""
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -13,11 +14,17 @@ LOGGER = logging.getLogger('evaluation')
 _DEFAULT_GROUNDTRUTH = {
     'unitalk': 'csv/val_orig.csv',
     'ava':     'ava/annotations/ava_val_groundtruth.csv',
+    'wasd':    'wasd/csv/val_orig.csv',
+    'easycom': 'easycom/csv/{split}_orig.csv',   # --split val (sessions 4, 12) or test (10, 11)
 }
 
 
 def parse_args():
-    """Parse the prediction flags plus the scoring flags."""
+    """Parse the command-line flags.
+
+    Returns:
+        argparse.Namespace: The parsed flags.
+    """
     p = build_parser()
     p.description = 'Run ASD over every video of a dataset, then score the predictions.'
     p.add_argument('--groundtruth_csv', default=None,
@@ -34,11 +41,50 @@ def parse_args():
                    help='Parallel worker processes for scoring (default: all CPUs)')
     p.add_argument('--skip_stats', action='store_true',
                    help='Only write predictions; do not score them')
-    return p.parse_args()
+    args = p.parse_args()
+    for flag in ('predictions_dir', 'stats_dir'):
+        if getattr(args, flag) is not None:
+            try:
+                setattr(args, flag, relative_to_data_dir(args.data_dir, getattr(args, flag)))
+            except ValueError as exc:
+                p.error(f'--{flag}: {exc}')
+    return args
+
+
+def relative_to_data_dir(data_dir, path):
+    """Make an output folder relative to ``data_dir``.
+
+    An absolute folder would make ``stats/<predictions_dir>`` collapse onto the predictions
+    folder itself, so the stats CSVs would land among the predictions.
+
+    Args:
+        data_dir: Root data directory.
+        path: Folder, either relative to ``data_dir`` or absolute and inside it.
+
+    Returns:
+        pathlib.Path: ``path`` relative to ``data_dir``.
+
+    Raises:
+        ValueError: If ``path`` is absolute and outside ``data_dir``.
+    """
+    path = Path(path)
+    if not path.is_absolute():
+        return path
+    try:
+        return Path(os.path.abspath(path)).relative_to(os.path.abspath(data_dir))
+    except ValueError:
+        raise ValueError(f'{path} is not inside --data_dir {data_dir}') from None
 
 
 def run_info(args):
-    """Describe the run for ``summary.json``: config, machine and code version."""
+    """Describe the run for ``summary.json``: config, machine and code version.
+
+    Args:
+        args: Parsed flags.
+
+    Returns:
+        dict: The description.
+    """
     import platform
     import subprocess
     try:
@@ -54,7 +100,11 @@ def run_info(args):
 
 
 def main():
-    """Run the prediction phase, then the stats phase unless --skip_stats."""
+    """Command-line entry point.
+
+    Raises:
+        SystemExit: If a requested video is not found or processing fails.
+    """
     args = parse_args()
     log_path = setup_logging('evaluation', args.verbose)
 
@@ -73,7 +123,8 @@ def main():
             LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
 
-    groundtruth_csv = data_dir / (args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset])
+    groundtruth_csv = data_dir / (args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset]
+                                  .format(split=args.split))
     processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir,
                                                     architecture=args.architecture,
                                                     stride=args.stride,
@@ -84,7 +135,15 @@ def main():
         return
 
     stats_dir = data_dir / (args.stats_dir or Path('stats') / args.predictions_dir)
+    categories_csv = None
+    if args.dataset == 'wasd':
+        from .wasd_dataset import WasdDataset
+        os.makedirs(stats_dir, exist_ok=True)
+        categories_csv = str(stats_dir / 'categories.csv')
+        WasdDataset(str(data_dir / 'wasd'), split=args.split, download=False) \
+            .write_categories_csv(categories_csv)
     run_stats(str(result_dir), str(groundtruth_csv), str(stats_dir),
+              categories_csv=categories_csv,
               video=args.video, iou_threshold=args.iou_threshold,
               timestamp_tolerance_ms=args.timestamp_tolerance_ms,
               workers=args.workers, verbose=args.verbose,
