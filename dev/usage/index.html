@@ -628,7 +628,7 @@ available. The model weights are downloaded on first use. To download all of the
 <p>For development there is a devcontainer based on <code>docker/Dockerfile_GPU</code>; see the
 <a href="https://github.com/adriandavidauer/ASD-for-HRI#devcontainer">README</a>.</p>
 <h2 id="usage">Usage</h2>
-<p><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38)" href="../api/asd/#asd4hri.asd.ASD"><code>ASD</code></a> processes one frame per call and returns the image and the face boxes
+<p><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38, av_window=25, audio_fallback='noise')" href="../api/asd/#asd4hri.asd.ASD"><code>ASD</code></a> processes one frame per call and returns the image and the face boxes
 with their predictions:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">asd4hri.asd</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASD</span>

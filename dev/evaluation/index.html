@@ -873,6 +873,12 @@ before it</strong> (zero look-ahead), from the first frame of a face on. <code>-
 (default) keeps one LSTM state per face and costs one step per frame; <code>--causal_mode window</code>
 re-runs the model on the last <code>--window</code> frames (default 38). Retrain them with
 <code>python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/</code>.</p>
+<p>Audio-visual baselines (#40, #80; <code>pip install -e '.[av]'</code>, needs the git submodules):
+<code>AV:LR-ASD</code> (0.84 M parameters) and <code>AV:TalkNet</code> (15.7 M), both with their AVA weights. They
+use the video's own audio track; every face is scored for its newest frame from the last
+<code>--av_window</code> frames (default 25) and the audio of the same span. Without audio,
+<code>--audio_fallback noise</code> (default) feeds low-level noise and <code>visual</code> uses the model's
+visual-only head; <code>--no_audio</code> forces the fallback.</p>
 <p>UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With <code>--no_download</code>, nothing is downloaded and videos missing from <code>--data_dir</code> are skipped with a warning.</p>
 <p>The run above writes to the host:</p>
 <ul>

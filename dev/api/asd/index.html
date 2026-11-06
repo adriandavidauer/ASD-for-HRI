@@ -487,6 +487,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#asd4hri.asd.ASD.set_audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        set_audio
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#asd4hri.asd.ASD.call" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -713,6 +724,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#asd4hri.asd.ASD.set_audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        set_audio
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#asd4hri.asd.ASD.call" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -936,8 +958,7 @@ Asserts that <code>architecture</code> is in <code>Architecture_Options</code>.<
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">129</span>
-<span class="normal">130</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">130</span>
 <span class="normal">131</span>
 <span class="normal">132</span>
 <span class="normal">133</span>
@@ -988,7 +1009,8 @@ Asserts that <code>architecture</code> is in <code>Architecture_Options</code>.<
 <span class="normal">178</span>
 <span class="normal">179</span>
 <span class="normal">180</span>
-<span class="normal">181</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span>
+<span class="normal">181</span>
+<span class="normal">182</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span>
              <span class="n">stride</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
              <span class="n">timer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Load the classifier and assemble the preprocessing, buffering and averaging steps.</span>
@@ -1142,8 +1164,7 @@ available yet.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">183</span>
-<span class="normal">184</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">184</span>
 <span class="normal">185</span>
 <span class="normal">186</span>
 <span class="normal">187</span>
@@ -1173,7 +1194,8 @@ available yet.</p>
 <span class="normal">211</span>
 <span class="normal">212</span>
 <span class="normal">213</span>
-<span class="normal">214</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">214</span>
+<span class="normal">215</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Classify a batch of face images, one per entity.</span>
 
 <span class="sd">    Args:</span>
@@ -1227,13 +1249,13 @@ available yet.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">260</span>
-<span class="normal">261</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">261</span>
 <span class="normal">262</span>
 <span class="normal">263</span>
 <span class="normal">264</span>
 <span class="normal">265</span>
-<span class="normal">266</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="normal">266</span>
+<span class="normal">267</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Clear the temporal state: the feature buffers and the prediction averaging window."""</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">buffer_features</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">buffer_predictions</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
@@ -1259,7 +1281,7 @@ available yet.</p>
 
 
 <h2 id="asd4hri.asd.ASD" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">ASD</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">annotate_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">detector</span><span class="o">=</span><span class="s1">'YuNet'</span><span class="p">,</span> <span class="n">input_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">face_tracking_approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">ASD</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">annotate_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">detector</span><span class="o">=</span><span class="s1">'YuNet'</span><span class="p">,</span> <span class="n">input_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">face_tracking_approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">av_window</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">audio_fallback</span><span class="o">=</span><span class="s1">'noise'</span><span class="p">)</span></code>
 
 </h2>
 
@@ -1475,6 +1497,37 @@ If None, it is set at runtime, which can slow the pipeline down slightly.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
+                <code>av_window</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Frames per prediction for the audio-visual architectures ('AV:<model>').</p>
+              </div>
+            </td>
+            <td>
+                  <code>25</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>audio_fallback</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>What the audio-visual models get without audio: 'noise' or
+'visual' (visual-only back end); see <code>asd4hri.av.AVClassifier</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;noise&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>causal_mode</code>
             </td>
             <td>
@@ -1553,11 +1606,7 @@ look-ahead (#45).</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">316</span>
-<span class="normal">317</span>
-<span class="normal">318</span>
-<span class="normal">319</span>
-<span class="normal">320</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">320</span>
 <span class="normal">321</span>
 <span class="normal">322</span>
 <span class="normal">323</span>
@@ -1608,9 +1657,25 @@ look-ahead (#45).</p>
 <span class="normal">368</span>
 <span class="normal">369</span>
 <span class="normal">370</span>
-<span class="normal">371</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span>
+<span class="normal">377</span>
+<span class="normal">378</span>
+<span class="normal">379</span>
+<span class="normal">380</span>
+<span class="normal">381</span>
+<span class="normal">382</span>
+<span class="normal">383</span>
+<span class="normal">384</span>
+<span class="normal">385</span>
+<span class="normal">386</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
              <span class="n">weighted</span><span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">annotate_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">detector</span><span class="o">=</span><span class="s1">'YuNet'</span><span class="p">,</span> <span class="n">input_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">face_tracking_approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">,</span>
-             <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">):</span>
+             <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">av_window</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+             <span class="n">audio_fallback</span><span class="o">=</span><span class="s1">'noise'</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Build the face detection, cropping and classification steps.</span>
 
 <span class="sd">    Raises:</span>
@@ -1619,6 +1684,7 @@ look-ahead (#45).</p>
 <span class="sd">    """</span>
     <span class="nb">super</span><span class="p">(</span><span class="n">ASD</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">timer</span> <span class="o">=</span> <span class="n">StageTimer</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">av</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">annotate_output</span> <span class="o">=</span> <span class="n">annotate_output</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">offsets</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">colors</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]]</span>
@@ -1657,7 +1723,16 @@ look-ahead (#45).</p>
     <span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">get_class_names</span><span class="p">(</span><span class="s1">'VVAD_LRS3'</span><span class="p">))</span>
     <span class="n">corrected_class_names</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="c1"># in PAZ the order is speaking, not-speaking but we need it the other way around.</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">AddClassAndScoreToBoxes</span><span class="p">(</span><span class="n">ClassifyVVAD</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">vvad_args</span><span class="p">),</span> <span class="n">class_names</span><span class="o">=</span><span class="n">corrected_class_names</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="n">decision_threshold</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">decision_threshold</span> <span class="o">=</span> <span class="n">decision_threshold</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">corrected_class_names</span> <span class="o">=</span> <span class="n">corrected_class_names</span>
+    <span class="k">if</span> <span class="n">architecture</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">AV_PREFIX</span><span class="p">):</span>
+        <span class="c1"># audio-visual model (#40, #80): crops its own faces from the frame, needs set_audio()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">av</span> <span class="o">=</span> <span class="n">AVClassifier</span><span class="p">(</span><span class="n">architecture</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">AV_PREFIX</span><span class="p">):],</span> <span class="n">window</span><span class="o">=</span><span class="n">av_window</span><span class="p">,</span>
+                               <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="n">max_consecutive_empty</span><span class="p">,</span>
+                               <span class="n">audio_fallback</span><span class="o">=</span><span class="n">audio_fallback</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span> <span class="o">=</span> <span class="n">AddClassAndScoreToBoxes</span><span class="p">(</span><span class="n">ClassifyVVAD</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">vvad_args</span><span class="p">),</span> <span class="n">class_names</span><span class="o">=</span><span class="n">corrected_class_names</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="n">decision_threshold</span><span class="p">)</span>
 
 
     <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">'No Prediction yet'</span><span class="p">)</span>
@@ -1683,8 +1758,44 @@ look-ahead (#45).</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="asd4hri.asd.ASD.set_audio" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">set_audio</span><span class="p">(</span><span class="n">audio</span><span class="p">,</span> <span class="n">fps</span><span class="p">)</span></code>
+
+</h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Give the audio-visual models the audio track (int16, 16 kHz mono) and frame rate.</p>
+<p>Call once per video before the first frame. Ignored by the visual-only models.</p>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span>
+<span class="normal">392</span>
+<span class="normal">393</span>
+<span class="normal">394</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio</span><span class="p">,</span> <span class="n">fps</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Give the audio-visual models the audio track (int16, 16 kHz mono) and frame rate.</span>
+
+<span class="sd">    Call once per video before the first frame. Ignored by the visual-only models.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">av</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">av</span><span class="o">.</span><span class="n">set_audio</span><span class="p">(</span><span class="n">audio</span><span class="p">,</span> <span class="n">fps</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="asd4hri.asd.ASD.call" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">call</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">call</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h3>
 
@@ -1753,6 +1864,22 @@ buffer. Without ids, faces are identified by their (tracked) position.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>timestamp</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Time of the frame in seconds; the audio-visual models need it to cut the
+matching audio.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1783,30 +1910,7 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">373</span>
-<span class="normal">374</span>
-<span class="normal">375</span>
-<span class="normal">376</span>
-<span class="normal">377</span>
-<span class="normal">378</span>
-<span class="normal">379</span>
-<span class="normal">380</span>
-<span class="normal">381</span>
-<span class="normal">382</span>
-<span class="normal">383</span>
-<span class="normal">384</span>
-<span class="normal">385</span>
-<span class="normal">386</span>
-<span class="normal">387</span>
-<span class="normal">388</span>
-<span class="normal">389</span>
-<span class="normal">390</span>
-<span class="normal">391</span>
-<span class="normal">392</span>
-<span class="normal">393</span>
-<span class="normal">394</span>
-<span class="normal">395</span>
-<span class="normal">396</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">396</span>
 <span class="normal">397</span>
 <span class="normal">398</span>
 <span class="normal">399</span>
@@ -1822,7 +1926,44 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 <span class="normal">409</span>
 <span class="normal">410</span>
 <span class="normal">411</span>
-<span class="normal">412</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">412</span>
+<span class="normal">413</span>
+<span class="normal">414</span>
+<span class="normal">415</span>
+<span class="normal">416</span>
+<span class="normal">417</span>
+<span class="normal">418</span>
+<span class="normal">419</span>
+<span class="normal">420</span>
+<span class="normal">421</span>
+<span class="normal">422</span>
+<span class="normal">423</span>
+<span class="normal">424</span>
+<span class="normal">425</span>
+<span class="normal">426</span>
+<span class="normal">427</span>
+<span class="normal">428</span>
+<span class="normal">429</span>
+<span class="normal">430</span>
+<span class="normal">431</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span>
+<span class="normal">438</span>
+<span class="normal">439</span>
+<span class="normal">440</span>
+<span class="normal">441</span>
+<span class="normal">442</span>
+<span class="normal">443</span>
+<span class="normal">444</span>
+<span class="normal">445</span>
+<span class="normal">446</span>
+<span class="normal">447</span>
+<span class="normal">448</span>
+<span class="normal">449</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Detect faces in one frame and classify each of them as speaking or not speaking.</span>
 
 <span class="sd">    Args:</span>
@@ -1832,6 +1973,8 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 <span class="sd">            e.g. the ground-truth boxes of a dataset (#75).</span>
 <span class="sd">        ids: Optional entity ids, one per box in ``boxes2D``. Each id keeps its own temporal</span>
 <span class="sd">            buffer. Without ids, faces are identified by their (tracked) position.</span>
+<span class="sd">        timestamp: Time of the frame in seconds; the audio-visual models need it to cut the</span>
+<span class="sd">            matching audio.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        dict: ``{'image': image, 'boxes2D': boxes2D}``. ``boxes2D`` is a list of</span>
@@ -1849,13 +1992,25 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
                 <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">face_tracker</span><span class="p">(</span><span class="n">boxes2D</span><span class="p">)</span>
             <span class="n">ids</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes2D</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">timer</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s1">'crop'</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
-            <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">boxes2D</span><span class="p">)</span>
-            <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">)</span>
-            <span class="n">cropped_images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">crop</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">av</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># TalkNet-style models crop the (unsquared) box themselves</span>
+            <span class="k">with</span> <span class="n">timer</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s1">'crop'</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+                <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">)</span>
+            <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">av</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes2D</span><span class="p">],</span> <span class="n">ids</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">score</span><span class="p">,</span> <span class="n">box</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">score</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">box</span><span class="o">.</span><span class="n">score</span><span class="p">,</span> <span class="n">box</span><span class="o">.</span><span class="n">class_name</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="s1">'No Prediction yet'</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">box</span><span class="o">.</span><span class="n">score</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">score</span><span class="p">)</span>
+                    <span class="n">box</span><span class="o">.</span><span class="n">class_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">corrected_class_names</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">score</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">decision_threshold</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">timer</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s1">'crop'</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+                <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">boxes2D</span><span class="p">)</span>
+                <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">)</span>
+                <span class="n">cropped_images</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">crop</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">)</span>
 
-        <span class="c1"># call classifyVVAD for the whole batch of faces; it times its own steps</span>
-        <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="p">(</span><span class="n">cropped_images</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
+            <span class="c1"># call classifyVVAD for the whole batch of faces; it times its own steps</span>
+            <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier</span><span class="p">(</span><span class="n">cropped_images</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
 
         <span class="c1"># only if flag is set</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotate_output</span><span class="p">:</span>
@@ -1888,7 +2043,7 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38) (asd4hri.asd.ASD)" href="#asd4hri.asd.ASD">ASD</a></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38, av_window=25, audio_fallback='noise') (asd4hri.asd.ASD)" href="#asd4hri.asd.ASD">ASD</a></code></p>
 
 
 
@@ -1928,18 +2083,18 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">416</span>
-<span class="normal">417</span>
-<span class="normal">418</span>
-<span class="normal">419</span>
-<span class="normal">420</span>
-<span class="normal">421</span>
-<span class="normal">422</span>
-<span class="normal">423</span>
-<span class="normal">424</span>
-<span class="normal">425</span>
-<span class="normal">426</span>
-<span class="normal">427</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">453</span>
+<span class="normal">454</span>
+<span class="normal">455</span>
+<span class="normal">456</span>
+<span class="normal">457</span>
+<span class="normal">458</span>
+<span class="normal">459</span>
+<span class="normal">460</span>
+<span class="normal">461</span>
+<span class="normal">462</span>
+<span class="normal">463</span>
+<span class="normal">464</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
              <span class="n">average_type</span><span class="o">=</span><span class="s1">'weighted'</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">colors</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">min_frames</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">patience</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Fail on construction because the class is deprecated.</span>
 
@@ -2072,8 +2227,7 @@ shape of one sample expected by the model, e.g. <code>(38, 96, 96, 3)</code> for
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 66</span>
-<span class="normal"> 67</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 67</span>
 <span class="normal"> 68</span>
 <span class="normal"> 69</span>
 <span class="normal"> 70</span>
@@ -2108,7 +2262,8 @@ shape of one sample expected by the model, e.g. <code>(38, 96, 96, 3)</code> for
 <span class="normal"> 99</span>
 <span class="normal">100</span>
 <span class="normal">101</span>
-<span class="normal">102</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_vvad_classifier</span><span class="p">(</span><span class="n">architecture</span><span class="p">):</span>
+<span class="normal">102</span>
+<span class="normal">103</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_vvad_classifier</span><span class="p">(</span><span class="n">architecture</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Load the Keras classifier model for the given architecture.</span>
 
 <span class="sd">    The ``LipShape`` and ``FaceShape`` weights are downloaded to ``src/models`` on first use.</span>
