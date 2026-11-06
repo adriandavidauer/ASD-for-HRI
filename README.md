@@ -15,6 +15,27 @@ In your Env run
 ```bash
 pip install -r requirements.txt
 ```
+## Docker image (cluster and Raspberry Pi)
+
+One multi-arch image is built by CI (`.github/workflows/docker.yml`) from `docker/Dockerfile`:
+`linux/amd64` with CUDA (TensorFlow, ONNX Runtime and PyTorch from pip wheels; the host only
+needs the NVIDIA driver and container toolkit) and `linux/arm64` on CPU (Raspberry Pi 4/5 with
+a 64-bit OS). `docker pull` picks the right one:
+
+```bash
+docker pull ghcr.io/adriandavidauer/asd-for-hri:main
+# cluster (GPU)
+docker run --rm --gpus all --user $(id -u):$(id -g) -v /Data/data:/app/data \
+    ghcr.io/adriandavidauer/asd-for-hri:main --data_dir /app/data --no_download
+# Raspberry Pi: the same without --gpus all
+```
+
+`--user $(id -u):$(id -g)` makes the results on the data mount yours; the model weights live
+outside `$HOME`, so any uid works. Build locally with
+`git submodule update --init && docker build -f docker/Dockerfile -t asd4hri .`
+(targets: `base` = asd4hri only, `experiments` = default, adds the evaluation and PyTorch deps).
+`docker/Dockerfile_GPU` (also the devcontainer) and `docker/Dockerfile_PI` are kept for now.
+
 ## Running Experiments
 
 <!-- --8<-- [start:evaluation] -->
