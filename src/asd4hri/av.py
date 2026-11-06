@@ -45,7 +45,11 @@ AV_PREFIX = 'AV:'
 
 
 def av_architectures():
-    """Architecture names of the AV models for ``--architecture``, e.g. 'AV:LR-ASD'."""
+    """Architecture names of the AV models for ``--architecture``, e.g. 'AV:LR-ASD'.
+
+    Returns:
+        list[str]: The names.
+    """
     return [AV_PREFIX + name for name in AV_MODELS]
 
 
@@ -96,6 +100,9 @@ def face_crop(image, box):
     Args:
         image: RGB frame.
         box: ``(x1, y1, x2, y2)`` in pixels.
+
+    Returns:
+        numpy.ndarray: ``(112, 112)`` uint8; zeros if the box is outside the image.
     """
     h, w = image.shape[:2]
     x1, y1, x2, y2 = (int(v) for v in box)
@@ -109,7 +116,16 @@ def face_crop(image, box):
 # ── models ───────────────────────────────────────────────────────────────────
 
 def _import_from_repo(repo_dir, module, attr):
-    """Import ``module.attr`` from a model repo whose modules have generic names (model, loss)."""
+    """Import ``module.attr`` from a model repo whose modules have generic names (model, loss).
+
+    Args:
+        repo_dir: The repo (submodule) directory.
+        module: Module with the network class, e.g. 'model.Model'.
+        attr: Class name.
+
+    Returns:
+        tuple: ``(network class, lossAV class, lossV class)``.
+    """
     repo_dir = str(repo_dir)
     clashing = [m for m in list(sys.modules) if m in ('model', 'loss') or m.startswith('model.')]
     saved = {m: sys.modules.pop(m) for m in clashing}
@@ -126,7 +142,14 @@ def _import_from_repo(repo_dir, module, attr):
 
 
 def weights_path(name):
-    """Local path of a model's AVA weights, downloading them if needed."""
+    """Local path of a model's AVA weights, downloading them if needed.
+
+    Args:
+        name: Key of ``AV_MODELS``.
+
+    Returns:
+        pathlib.Path: The weights file.
+    """
     spec = AV_MODELS[name]['weights']
     if spec[0] == 'file':
         return _SRC / AV_MODELS[name]['repo'] / spec[1]
@@ -147,7 +170,11 @@ class AVModel:
     """
 
     def __init__(self, name, device=None):
-        """Build the network and load its AVA weights."""
+        """Build the network and load its AVA weights.
+
+        Raises:
+            RuntimeError: If less than 95 % of the weights match the network.
+        """
         import torch
         self.torch = torch
         spec = AV_MODELS[name]
@@ -224,7 +251,11 @@ class AVClassifier(Processor):
 
     def __init__(self, name, window=25, stride=1, max_consecutive_empty=5,
                  audio_fallback='noise', timer=None, device=None):
-        """Load the model."""
+        """Load the model.
+
+        Raises:
+            ValueError: If ``audio_fallback`` is not 'noise' or 'visual'.
+        """
         super().__init__()
         if audio_fallback not in ('noise', 'visual'):
             raise ValueError(f"audio_fallback must be 'noise' or 'visual', not {audio_fallback}")

@@ -76,6 +76,13 @@ Stats flags:
 Architectures: `VVAD-LRS3-LSTM`, `CNN2Plus1D`, `CNN2Plus1D_Filters`, `CNN2Plus1D_Layers`,
 `CNN2Plus1D_Light`, `LipShape`, `FaceShape`.
 
+Audio-visual baselines (#40, #80; `pip install -e '.[av]'`, needs the git submodules):
+`AV:LR-ASD` (0.84 M parameters) and `AV:TalkNet` (15.7 M), both with their AVA weights. They
+use the video's own audio track; every face is scored for its newest frame from the last
+`--av_window` frames (default 25) and the audio of the same span. Without audio,
+`--audio_fallback noise` (default) feeds low-level noise and `visual` uses the model's
+visual-only head; `--no_audio` forces the fallback.
+
 UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With `--no_download`, nothing is downloaded and videos missing from `--data_dir` are skipped with a warning.
 
 The run above writes to the host:

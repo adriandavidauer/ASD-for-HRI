@@ -14,6 +14,7 @@ VIDEO = Path(__file__).parent / '001.avi'
 
 
 def test_mfcc_window_has_four_rows_per_frame():
+    """MFCC windows have 4 rows per video frame at any fps, also past the end of the audio."""
     audio = (np.random.default_rng(0).normal(0, 1000, 16000 * 3)).astype(np.int16)
     for fps in (25.0, 30.0):
         assert mfcc_window(audio, 0.5, 20, fps).shape == (80, 13)
@@ -22,18 +23,21 @@ def test_mfcc_window_has_four_rows_per_frame():
 
 
 def test_face_crop_is_grey_112_and_clips_to_the_image():
+    """Face crops are grey 112x112, also for boxes outside the image."""
     image = np.zeros((100, 200, 3), dtype=np.uint8)
     assert face_crop(image, (150, 50, 260, 160)).shape == (112, 112)
     assert face_crop(image, (300, 300, 310, 310)).shape == (112, 112)
 
 
 def test_load_audio_from_test_video():
+    """The audio track of a video decodes to int16."""
     audio = load_audio(VIDEO)
     assert audio.dtype == np.int16
 
 
 @pytest.mark.parametrize('fallback', ['noise', 'visual'])
 def test_av_classifier_scores_every_face_and_frame(fallback):
+    """Every face gets a score in every frame; the window caps the buffer."""
     clf = AVClassifier('LR-ASD', window=10, audio_fallback=fallback, device='cpu')
     clf.set_audio(None, 25.0)                      # no audio -> fallback path
     rng = np.random.default_rng(0)
@@ -49,6 +53,7 @@ def test_av_classifier_scores_every_face_and_frame(fallback):
 
 
 def test_av_classifier_with_real_audio_uses_av_backend():
+    """With audio, every frame of a face gets a score from the audio-visual back end."""
     clf = AVClassifier('LR-ASD', window=5, device='cpu')
     audio = (np.random.default_rng(1).normal(0, 3000, 16000)).astype(np.int16)
     clf.set_audio(audio, 25.0)
