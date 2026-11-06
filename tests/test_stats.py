@@ -160,3 +160,11 @@ def test_old_prediction_files_without_score_column(tmp_path):
                     '0,0.0,No Prediction yet,0,0,1,1\n')
     scores = [b.score for b in stats.load_predictions_csv(str(path))[0.0]]
     assert scores == [1.0, 0.0, -1.0]
+
+
+def test_annotated_range_covers_the_annotations_plus_warmup():
+    from src.experiments.run_full_pipeline import annotated_range
+    rows = [(902.0, 'a', (0, 0, 1, 1)), (900.5, 'b', (0, 0, 1, 1)), (1799.9, 'a', (0, 0, 1, 1))]
+    assert annotated_range(rows) == pytest.approx((899.5, 1800.4))
+    assert annotated_range([(0.2, 'a', (0, 0, 1, 1))])[0] == 0.0
+    assert annotated_range([]) is None
