@@ -10,6 +10,11 @@ from tests.test_stats import stats, _gt_rows, _preds, POS
 
 
 def _fixture(tmp_path):
+    """Write a tiny WASD layout (3 clips, metadata for 2 of them).
+
+    Returns:
+        WasdDataset: The dataset on it.
+    """
     (tmp_path / 'csv').mkdir()
     with open(tmp_path / 'csv' / 'val_orig.csv', 'w', newline='') as f:
         w = csv.writer(f)
@@ -27,11 +32,13 @@ def _fixture(tmp_path):
 
 
 def test_parse_video_id_keeps_underscores_in_youtube_id():
+    """Only the last underscore separates the time range."""
     assert WasdDataset.parse_video_id('x_y_0-30') == ('x_y', 0, 30)
     assert WasdDataset.parse_video_id('0BRxm7G1acw_1419-1449') == ('0BRxm7G1acw', 1419, 1449)
 
 
 def test_categories_from_metadata_with_source_fallback(tmp_path):
+    """Categories come from the metadata, missing clips from their source video."""
     ds = _fixture(tmp_path)
     assert ds.video_ids == ['abc_10-40', 'abc_50-80', 'x_y_0-30']
     # abc_50-80 is not in the metadata -> category of its source video's other clips
@@ -41,6 +48,7 @@ def test_categories_from_metadata_with_source_fallback(tmp_path):
 
 
 def test_protocol_results_have_category_rows(tmp_path):
+    """Category rows pool their videos and appear in the summary."""
     per_video = []
     for vid, good in (('a', True), ('b', False)):
         gt = _gt_rows(40, seed=1)
