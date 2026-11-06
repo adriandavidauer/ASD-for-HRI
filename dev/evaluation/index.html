@@ -377,6 +377,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#where-the-time-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the time goes
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -632,6 +643,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#where-the-time-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the time goes
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -856,6 +878,57 @@ architecture, boxes, stride, host, CPU architecture, git commit) and the speed. 
 <div class="highlight"><pre><span></span><code>python<span class="w"> </span>src/eval/get_ava_active_speaker_performance.py<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>-g<span class="w"> </span>stats/&lt;run&gt;/ava_groundtruth.csv<span class="w"> </span>-p<span class="w"> </span>stats/&lt;run&gt;/ava_predictions.csv
 </code></pre></div>
+<h4 id="where-the-time-goes">Where the time goes</h4>
+<p><code>ASD</code> records the time of every pipeline stage (switch off with <code>ASD(profile=False)</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read</code></td>
+<td>Decoding the next video frame</td>
+</tr>
+<tr>
+<td><code>detect</code>, <code>track</code></td>
+<td>Face detector, ordering/tracking of the boxes</td>
+</tr>
+<tr>
+<td><code>crop</code></td>
+<td>Squaring, clipping and cropping the faces</td>
+</tr>
+<tr>
+<td><code>preprocess</code></td>
+<td>Resize (image models) or dlib landmarks (<code>*Shape</code> models)</td>
+</tr>
+<tr>
+<td><code>buffer</code>, <code>normalize</code></td>
+<td>Per-face temporal buffers, landmark normalisation</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>The classifier's forward pass, including the GPU sync</td>
+</tr>
+<tr>
+<td><code>average</code></td>
+<td>Smoothing the scores over the last predictions</td>
+</tr>
+<tr>
+<td><code>audio_decode</code>, <code>audio</code></td>
+<td>Audio-visual models: decoding the track, MFCCs per window</td>
+</tr>
+<tr>
+<td><code>frame</code></td>
+<td>Everything per frame, from <code>detect</code> to <code>average</code></td>
+</tr>
+</tbody>
+</table>
+<p>Per video, <code>&lt;predictions_dir&gt;/timing/&lt;video_id&gt;.csv</code> has calls, total, mean/median/p95/max ms and
+ms per face for each stage. Over the run, <code>&lt;stats_dir&gt;/stage_times.csv</code> gives ms per frame and
+the share of the frame time, and <code>summary.json</code> has <code>stage_ms_per_frame</code>.</p>
 <p><code>aggregate_results.csv</code> keeps the older metrics (threshold metrics and AP over <em>matched</em> boxes only)
 for comparison with earlier runs.</p>
 <h2 id="individual-steps">Individual steps</h2>
