@@ -1,6 +1,7 @@
 """End-to-end ASD evaluation: run predictions over a dataset, then calculates stats."""
 
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ LOGGER = logging.getLogger('evaluation')
 _DEFAULT_GROUNDTRUTH = {
     'unitalk': 'csv/val_orig.csv',
     'ava':     'ava/annotations/ava_val_groundtruth.csv',
+    'wasd':    'wasd/csv/val_orig.csv',
 }
 
 
@@ -83,7 +85,15 @@ def main():
         return
 
     stats_dir = data_dir / (args.stats_dir or Path('stats') / args.predictions_dir)
+    categories_csv = None
+    if args.dataset == 'wasd':
+        from .wasd_dataset import WasdDataset
+        os.makedirs(stats_dir, exist_ok=True)
+        categories_csv = str(stats_dir / 'categories.csv')
+        WasdDataset(str(data_dir / 'wasd'), split=args.split, download=False) \
+            .write_categories_csv(categories_csv)
     run_stats(str(result_dir), str(groundtruth_csv), str(stats_dir),
+              categories_csv=categories_csv,
               video=args.video, iou_threshold=args.iou_threshold,
               timestamp_tolerance_ms=args.timestamp_tolerance_ms,
               workers=args.workers, verbose=args.verbose,
