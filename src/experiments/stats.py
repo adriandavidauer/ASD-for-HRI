@@ -1124,6 +1124,8 @@ def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, 
     category_map = {}
     for cat in sorted({c for c in (categories or {}).values() if c}):
         members = [r for r in per_video_protocol if (categories or {}).get(r[0]) == cat]
+        if not members:                    # e.g. a run over a few videos only
+            continue
         cat_metrics = protocol_metrics(
             pd.concat([r[2] for r in members], ignore_index=True),
             np.concatenate([r[3] for r in members]), sum(r[4] for r in members), protocol)

@@ -1,9 +1,9 @@
 # ASD-for-HRI
 [![Quality](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml/badge.svg)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
 <!-- badges:start -->
-[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-42%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42241575668)
-[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-92.2%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42241575668)
-[![Test coverage](https://img.shields.io/badge/Test%20coverage-95%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42241575463)
+[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-42%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42245927052)
+[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-92.5%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42245927052)
+[![Test coverage](https://img.shields.io/badge/Test%20coverage-95%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42245927113)
 <!-- badges:end -->
 
 A scalable Active Speaker Detection for Human-Robot Interaction
@@ -15,6 +15,27 @@ In your Env run
 ```bash
 pip install -r requirements.txt
 ```
+## Docker image (cluster and Raspberry Pi)
+
+One multi-arch image is built by CI (`.github/workflows/docker.yml`) from `docker/Dockerfile`:
+`linux/amd64` with CUDA (TensorFlow, ONNX Runtime and PyTorch from pip wheels; the host only
+needs the NVIDIA driver and container toolkit) and `linux/arm64` on CPU (Raspberry Pi 4/5 with
+a 64-bit OS). `docker pull` picks the right one:
+
+```bash
+docker pull ghcr.io/adriandavidauer/asd-for-hri:main
+# cluster (GPU)
+docker run --rm --gpus all --user $(id -u):$(id -g) -v /Data/data:/app/data \
+    ghcr.io/adriandavidauer/asd-for-hri:main --data_dir /app/data --no_download
+# Raspberry Pi: the same without --gpus all
+```
+
+`--user $(id -u):$(id -g)` makes the results on the data mount yours; the model weights live
+outside `$HOME`, so any uid works. Build locally with
+`git submodule update --init && docker build -f docker/Dockerfile -t asd4hri .`
+(targets: `base` = asd4hri only, `experiments` = default, adds the evaluation and PyTorch deps).
+`docker/Dockerfile_GPU` (also the devcontainer) and `docker/Dockerfile_PI` are kept for now.
+
 ## Running Experiments
 
 <!-- --8<-- [start:evaluation] -->
@@ -90,6 +111,20 @@ The run above writes to the host:
   (frames processed and elapsed time).
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
+
+#### Benchmark: all models x datasets x protocols
+
+```bash
+python -m src.experiments.run_benchmark --data_dir /app/data --no_download --tag gpu \
+    --architectures LipShapeCausal CNN2Plus1D_Light --datasets ava unitalk wasd easycom \
+    --boxes gt detector [-- <extra run_evaluation flags>]
+```
+
+Every combination is one `run_evaluation` run into `<data_dir>/benchmark/<tag>_<dataset>_<arch>_<boxes>/`
+(predictions + stats). Runs that already have a `stats/summary.json` are skipped, so an interrupted
+benchmark resumes, and `--tag` keeps cluster and Pi results apart. At the end all summaries are
+collected into `benchmark/benchmark.csv` and a booktabs `benchmark/benchmark.tex`.
+`--dry_run` prints the commands, `--collect_only` only rebuilds the table.
 
 #### WASD
 
