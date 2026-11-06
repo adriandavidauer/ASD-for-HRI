@@ -141,6 +141,8 @@ def run_asd_on_video(video_path,
                             Defaults to results/aggregate_time.csv; pass None to skip.
         video_id:           override video_id used in logs / paths / timing row.
                             Defaults to the video file's basename.
+        frame_crop:         Optional ``(x0, y0, x1, y1)`` in pixels: every frame is cropped to
+                            this region first (EasyCom's banner); boxes refer to the crop.
         time_range:         Optional ``(start_s, end_s)``: only frames in this range are
                             processed (e.g. AVA's annotated 15 minutes of a movie).
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
@@ -200,6 +202,9 @@ def run_asd_on_video(video_path,
             if not is_frame_received:
                 LOGGER.warning('Frame not received or End of stream')
                 break
+            if frame_crop is not None:
+                x0, y0, x1, y1 = frame_crop
+                frame = frame[y0:y1, x0:x1]
             height, width = frame.shape[:2]
             timestamp = frame_idx / native_fps
             gt_frame = None
