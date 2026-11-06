@@ -149,7 +149,7 @@ def run_asd_on_video(video_path,
                     decision_threshold: float = 0.5,
                     weighted: bool = True,
                     max_consecutive_empty: int = 2,
-                    groundtruth=None):
+                    groundtruth=None, causal_mode='streaming', window=38):
     """Run ASD on one video and write predictions + timing rows.
 
     Args:
@@ -160,6 +160,8 @@ def run_asd_on_video(video_path,
                             Defaults to results/aggregate_time.csv; pass None to skip.
         video_id:           override video_id used in logs / paths / timing row.
                             Defaults to the video file's basename.
+        causal_mode, window: Inference mode and window length of the causal landmark
+                            models (#45); ignored by the other architectures.
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
                             with normalised boxes for this video. The detector is skipped and
                             the GT boxes of the nearest annotated timestamp (within half a frame)
@@ -183,7 +185,8 @@ def run_asd_on_video(video_path,
         raise RuntimeError(f'Cannot read FPS from video: {video_path}')
 
 
-    pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty)
+    pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty,
+                   causal_mode=causal_mode, window_size=window)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     gt_index = _GroundTruthFrames(groundtruth, native_fps) if groundtruth is not None else None

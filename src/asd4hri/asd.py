@@ -297,11 +297,13 @@ class ASD(Processor):
             (a ``StageTimer``); see #76.
         causal_mode: Only for the causal architectures (``Causal_Architectures``): 'streaming'
             keeps one LSTM state per face and costs one step per frame, 'window' re-runs the
-            model on the last frames. Both predict every frame with zero look-ahead (#45).
+            model on the last ``window_size`` frames. Both predict every frame with zero
+            look-ahead (#45).
+        window_size: Frames per prediction in the causal 'window' mode.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
-                 profile=True, causal_mode='streaming'):
+                 profile=True, causal_mode='streaming', window_size=38):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -344,7 +346,7 @@ class ASD(Processor):
             averaging_window_size=averaging_window_size,
             weighted=weighted,
             architecture=architecture, max_consecutive_empty=max_consecutive_empty,
-            timer=self.timer, causal_mode=causal_mode
+            timer=self.timer, causal_mode=causal_mode, window_size=window_size
         )
         self.class_names = list(get_class_names('VVAD_LRS3'))
         corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.

@@ -47,7 +47,8 @@ def run_info(args):
     except OSError:
         commit = None
     return {'dataset': args.dataset, 'split': args.split, 'architecture': args.architecture,
-            'boxes': args.boxes, 'stride': int(args.stride), 'host': platform.node(),
+            'boxes': args.boxes, 'stride': int(args.stride),
+            'causal_mode': args.causal_mode, 'window': args.window, 'host': platform.node(),
             'machine': platform.machine(), 'git_commit': commit,
             'started_at': datetime.now().isoformat(timespec='seconds')}
 
