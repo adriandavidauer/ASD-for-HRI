@@ -1,3 +1,4 @@
+"""Download every model's weights once, e.g. when building the Docker image."""
 from asd4hri.asd import Architecture_Options, ASD
 from asd4hri.processors import SHAPE_PREDICTOR_68_FACE_LANDMARKS, FaceDetectorRetinaFace, FaceDetectorYN
 # initialize all the models for DetectVVAD once so they will be automatically downloaded. 

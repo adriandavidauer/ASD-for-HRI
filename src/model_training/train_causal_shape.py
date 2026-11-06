@@ -38,6 +38,7 @@ class RandomLengthBatches(keras.utils.PyDataset):
     """
 
     def __init__(self, x, y, batch_size=64, min_len=1, seed=0, **kwargs):
+        """Shuffle the samples once; batches are cut on access."""
         super().__init__(**kwargs)
         self.x, self.y = x, y.astype(np.float32)
         self.batch_size, self.min_len = batch_size, min_len
@@ -45,9 +46,22 @@ class RandomLengthBatches(keras.utils.PyDataset):
         self.order = self.rng.permutation(len(x))
 
     def __len__(self):
+        """Number of batches per epoch.
+
+        Returns:
+            int: The number of batches.
+        """
         return math.ceil(len(self.x) / self.batch_size)
 
     def __getitem__(self, idx):
+        """One batch, cut to a random length at a random offset.
+
+        Args:
+            idx: Batch index.
+
+        Returns:
+            tuple: ``(x, y)`` of shapes ``(B, L, landmarks, 2)`` and ``(B, L, 1)``.
+        """
         ids = self.order[idx * self.batch_size:(idx + 1) * self.batch_size]
         full = self.x.shape[1]
         length = int(self.rng.integers(self.min_len, full + 1))
@@ -57,11 +71,22 @@ class RandomLengthBatches(keras.utils.PyDataset):
         return xb, yb
 
     def on_epoch_end(self):
+        """Reshuffle the samples."""
         self.order = self.rng.permutation(len(self.x))
 
 
 def accuracy_by_length(model, x, y, lengths=LENGTHS):
-    """Accuracy of the prediction at the last frame of the first ``n`` frames, per length n."""
+    """Accuracy of the prediction at the last frame of the first ``n`` frames, per length n.
+
+    Args:
+        model: Trained causal model.
+        x: Normalised samples ``(N, T, landmarks, 2)``.
+        y: Clip labels.
+        lengths: Lengths to evaluate.
+
+    Returns:
+        dict: length -> accuracy.
+    """
     out = {}
     for n in lengths:
         pred = model.predict(x[:, :n], batch_size=512, verbose=0)[:, -1, 0]
@@ -70,12 +95,22 @@ def accuracy_by_length(model, x, y, lengths=LENGTHS):
 
 
 def per_frame_accuracy(model, x, y):
-    """Accuracy over all frames of full-length samples (each frame scored causally)."""
+    """Accuracy over all frames of full-length samples, each frame scored causally.
+
+    Args:
+        model: Trained causal model.
+        x: Normalised samples ``(N, T, landmarks, 2)``.
+        y: Clip labels.
+
+    Returns:
+        float: The accuracy.
+    """
     pred = model.predict(x, batch_size=512, verbose=0)[..., 0]
     return float(((pred > 0.5) == (y[:, None] > 0.5)).mean())
 
 
 def main():
+    """Train, keep the best model by last-frame validation accuracy, write a JSON report."""
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('path', help='hdf5 file with x_train/y_train (and x_test/y_test)')
     p.add_argument('-f', '--feature_type', choices=['LipShape', 'FaceShape'], default='LipShape')
@@ -105,6 +140,7 @@ def main():
     # validate on full-length clips, scoring the last frame (= the old clip-level protocol)
     class LastFrameAccuracy(keras.callbacks.Callback):
         def on_epoch_end(self, epoch, logs=None):
+            """Log the validation accuracy of the last frame of full-length clips."""
             pred = self.model.predict(x_val, batch_size=1024, verbose=0)[:, -1, 0]
             logs['val_last_accuracy'] = float(((pred > 0.5) == (y_val > 0.5)).mean())
 

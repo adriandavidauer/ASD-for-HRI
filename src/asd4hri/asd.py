@@ -218,6 +218,13 @@ class ClassifyVVAD(Processor):
 
         'streaming' advances one LSTM state per entity by one step; 'window' runs the model on
         the buffered frames (up to ``window_size``) and takes the output of the newest frame.
+        
+        Args:
+            features: Landmarks per face (output of ``GetShapeFeatures``).
+            ids: Entity ids, or None to use the batch positions.
+
+        Returns:
+            list: One averaged score per face.
         """
         timer, n = self.timer, len(features)
         keys = list(ids) if ids is not None else list(range(n))

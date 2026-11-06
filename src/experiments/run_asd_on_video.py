@@ -211,8 +211,9 @@ def run_asd_on_video(video_path,
         max_consecutive_empty: frames a face may be missing before its buffer is cleared.
         frame_crop:         Optional ``(x0, y0, x1, y1)`` in pixels: every frame is cropped to
                             this region first (EasyCom's banner); boxes refer to the crop.
-        causal_mode, window: Inference mode and window length of the causal landmark
-                            models (#45); ignored by the other architectures.
+        causal_mode:        'streaming' or 'window', for the causal landmark models (#45);
+                            ignored by the other architectures.
+        window:             frames per prediction in the causal 'window' mode.
         time_range:         Optional ``(start_s, end_s)``: only frames in this range are
                             processed (e.g. AVA's annotated 15 minutes of a movie).
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``

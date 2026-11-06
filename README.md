@@ -74,7 +74,13 @@ Stats flags:
 | `--skip_stats` | Stop after predictions |
 
 Architectures: `VVAD-LRS3-LSTM`, `CNN2Plus1D`, `CNN2Plus1D_Filters`, `CNN2Plus1D_Layers`,
-`CNN2Plus1D_Light`, `LipShape`, `FaceShape`.
+`CNN2Plus1D_Light`, `LipShape`, `FaceShape`, `LipShapeCausal`, `FaceShapeCausal`.
+
+`LipShapeCausal` / `FaceShapeCausal` (#45) predict **every frame from that frame and the frames
+before it** (zero look-ahead), from the first frame of a face on. `--causal_mode streaming`
+(default) keeps one LSTM state per face and costs one step per frame; `--causal_mode window`
+re-runs the model on the last `--window` frames (default 38). Retrain them with
+`python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/`.
 
 UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With `--no_download`, nothing is downloaded and videos missing from `--data_dir` are skipped with a warning.
 

@@ -58,6 +58,7 @@ def test_streaming_matches_keras_model():
 
 
 def test_normalize_shape_frames_is_per_frame():
+    """Each frame is normalised on its own: centred and scaled to [-1, 1]."""
     from asd4hri.models import normalize_shape_frames
     x = np.random.default_rng(2).integers(0, 255, (5, 20, 2))
     out = normalize_shape_frames(x)
