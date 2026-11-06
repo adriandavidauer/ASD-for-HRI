@@ -149,7 +149,8 @@ def run_asd_on_video(video_path,
                     decision_threshold: float = 0.5,
                     weighted: bool = True,
                     max_consecutive_empty: int = 2,
-                    groundtruth=None, causal_mode='streaming', window=38):
+                    groundtruth=None, causal_mode='streaming', window=38,
+                    time_range=None):
     """Run ASD on one video and write predictions + timing rows.
 
     Args:
@@ -162,6 +163,8 @@ def run_asd_on_video(video_path,
                             Defaults to the video file's basename.
         causal_mode, window: Inference mode and window length of the causal landmark
                             models (#45); ignored by the other architectures.
+        time_range:         Optional ``(start_s, end_s)``: only frames in this range are
+                            processed (e.g. AVA's annotated 15 minutes of a movie).
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
                             with normalised boxes for this video. The detector is skipped and
                             the GT boxes of the nearest annotated timestamp (within half a frame)
@@ -193,6 +196,15 @@ def run_asd_on_video(video_path,
 
     t0 = time.time()
     frame_idx = 0
+    end_s = None
+    if time_range is not None:
+        start_s, end_s = time_range
+        frame_idx = max(0, int(start_s * native_fps))
+        if frame_idx:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            # the backend may land elsewhere; timestamps follow where it actually is
+            frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+    start_frame = frame_idx
     width = height = 0
 
     try:
@@ -205,6 +217,8 @@ def run_asd_on_video(video_path,
         pred_boxes_list = []
         gt_list = []
         while True:
+            if end_s is not None and frame_idx / native_fps > end_s:
+                break
             with pipeline.timer.stage('read'):
                 is_frame_received, frame = cap.read()
             if not is_frame_received:
@@ -251,13 +265,14 @@ def run_asd_on_video(video_path,
             _write_prediction_rows(writer, idx, timestamp, pred_boxes, width, height, gt)
 
     write_stage_times(os.path.join(os.path.dirname(predictions_csv) or '.', 'timing',
-                                   f'{video_id}.csv'), video_id, pipeline.timer, frame_idx)
+                                   f'{video_id}.csv'), video_id, pipeline.timer, frame_idx - start_frame)
 
     if aggregate_time_csv is not None:
-        append_aggregate_time(aggregate_time_csv, video_id, elapsed, frame_idx,
-                              frame_idx / elapsed if elapsed > 0 else 0.0, width, height)
+        processed = frame_idx - start_frame
+        append_aggregate_time(aggregate_time_csv, video_id, elapsed, processed,
+                              processed / elapsed if elapsed > 0 else 0.0, width, height)
 
-    return frame_idx, elapsed
+    return frame_idx - start_frame, elapsed
 
 
 

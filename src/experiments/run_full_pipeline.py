@@ -125,6 +125,18 @@ def load_video_list(args, data_dir: Path):
 
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
+def annotated_range(gt_rows, warmup_s=1.0, tail_s=0.5):
+    """Time span of a video's annotations, widened by ``warmup_s`` for the temporal buffers.
+
+    Only this span is processed, e.g. the annotated 15 minutes of an AVA movie. Returns None
+    (= whole video) without annotations.
+    """
+    if not gt_rows:
+        return None
+    times = [row[0] for row in gt_rows]
+    return max(0.0, min(times) - warmup_s), max(times) + tail_s
+
+
 def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groundtruth_csv=None):
     """Download data on demand, run ASD on every video, write predictions.
 
@@ -148,10 +160,12 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
     failed = []
 
     gt_boxes = None
+    all_gt = load_groundtruth_boxes(groundtruth_csv) \
+        if groundtruth_csv is not None and Path(groundtruth_csv).is_file() else {}
     if getattr(args, 'boxes', 'detector') == 'gt':
-        if groundtruth_csv is None:
+        if not all_gt:
             raise ValueError('--boxes gt needs the ground-truth CSV')
-        gt_boxes = load_groundtruth_boxes(groundtruth_csv)
+        gt_boxes = all_gt
 
     for i, (vid, video_path, url) in enumerate(video_list, 1):
         predictions_csv = result_dir / f'{vid}.csv'
@@ -180,7 +194,8 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 stride=int(stride),
                 groundtruth=None if gt_boxes is None else gt_boxes.get(vid, []),
                 causal_mode=getattr(args, 'causal_mode', 'streaming'),
-                window=getattr(args, 'window', 38)
+                window=getattr(args, 'window', 38),
+                time_range=annotated_range(all_gt.get(vid))
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)
