@@ -203,6 +203,7 @@ def run_asd_on_video(video_path,
             height, width = frame.shape[:2]
             timestamp = frame_idx / native_fps
             gt_frame = None
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # ASD expects RGB (#77)
             try:
                 if gt_index is None:
                     output = pipeline(frame)

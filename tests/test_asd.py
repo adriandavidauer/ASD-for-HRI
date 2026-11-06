@@ -92,7 +92,7 @@ def test_full_asd_pipeline():
         ret, frame = video.read()
         if not ret:
             break
-        ret_val = asd_pipeline(frame)
+        ret_val = asd_pipeline(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         i += 1
         predictions = 0
         if i < IMAGE_INPUT_SHAPE[0]-1:
@@ -171,3 +171,21 @@ def test_ASD_with_given_boxes_skips_detector():
         out = asd(image, boxes, ['e1'])
     assert len(out['boxes2D']) == 1
     assert 0.0 <= out['boxes2D'][0].score <= 1.0
+
+@pytest.mark.parametrize('detector_class', [FaceDetectorYN, FaceDetectorRetinaFace])
+def test_face_detectors_take_rgb(detector_class):
+    """Detectors take RGB (the ASD convention) and still find the faces (#77).
+
+    The test image is read with OpenCV (BGR) and converted to RGB like ``run_asd_on_video``.
+    Feeding the detector the BGR image instead must not give the identical result, which shows
+    that the channel order reaches the model.
+    """
+    bgr = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    detector = detector_class()
+    boxes_rgb = detector(rgb)['boxes2D']
+    boxes_bgr = detector(bgr)['boxes2D']
+    assert len(boxes_rgb) > 0
+    scores_rgb = sorted(float(b.score) for b in boxes_rgb)
+    scores_bgr = sorted(float(b.score) for b in boxes_bgr)
+    assert scores_rgb != scores_bgr
