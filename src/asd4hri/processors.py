@@ -206,7 +206,18 @@ class BufferFeatures(Processor):
         return batch_return
 
     def _call_keyed(self, batch_of_features, ids):
-        """``call`` with buffers keyed by entity id; see ``call``."""
+        """``call`` with buffers keyed by entity id; see ``call``.
+
+        Args:
+            batch_of_features: Features, one per entity; entries may be None.
+            ids: Unique entity ids, one per feature.
+
+        Returns:
+            list: Per entity its buffer if it is due, otherwise None.
+
+        Raises:
+            ValueError: If the ids are not unique or don't match the batch length.
+        """
         if len(ids) != len(batch_of_features):
             raise ValueError(f'Got {len(ids)} ids for {len(batch_of_features)} features')
         if len(set(ids)) != len(ids):

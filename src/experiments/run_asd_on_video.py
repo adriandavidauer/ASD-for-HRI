@@ -160,7 +160,14 @@ _STAGE_FIELDS = ['video_id', 'stage', 'calls', 'total_s', 'mean_ms', 'median_ms'
 
 
 def write_stage_times(path, video_id, timer, frames):
-    """Write one video's per-stage timing (``StageTimer.summary``) as CSV (#76)."""
+    """Write one video's per-stage timing (``StageTimer.summary``) as CSV (#76).
+
+    Args:
+        path: Output CSV.
+        video_id: Video id, written into every row.
+        timer: The pipeline's ``StageTimer``.
+        frames: Number of processed frames.
+    """
     rows = timer.summary()
     if not rows:
         return
