@@ -52,7 +52,7 @@ Everything after the image name is forwarded to the entrypoint
 | Flag | Meaning |
 | --- | --- |
 | `--data_dir` | Root data directory, i.e. the mount point (default `data`) |
-| `--dataset {unitalk,ava}` | Dataset to run over (default `unitalk`) |
+| `--dataset {unitalk,ava,wasd}` | Dataset to run over (default `unitalk`) |
 | `--split` | Dataset split, UniTalk only (default `val`) |
 | `--no_download` | Never fetch videos; skip the ones missing on disk |
 | `--video <id>` | Run a single video only |
@@ -84,6 +84,16 @@ The run above writes to the host:
   (frames processed and elapsed time).
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
+
+#### WASD
+
+`--dataset wasd` evaluates on the WASD val split (Roxo et al.; 751 annotated 30-s sub-clips of
+164 YouTube videos, CC-BY-SA-4.0). Without `--no_download`, the CSVs (0.3 GB) and the source
+videos (28.9 GB) are fetched with gdown from the official repository's Google Drive links into
+`<data_dir>/wasd`, and the sub-clips are cut exactly like WASD's own `prepare_setup.py` does.
+`protocol_results.csv` then also has one `category:<code>` row per WASD category: OC (optimal
+conditions), SI (speech impairment), FO (face occlusion), HVN (human voice noise) and SS
+(surveillance settings), taken from WASD's `wasd_metadata.csv`.
 
 #### Comparable metrics
 

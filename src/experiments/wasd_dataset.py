@@ -60,10 +60,17 @@ class WasdDataset:
 
     # ── download ──────────────────────────────────────────────────────────────
     def _gdown(self, file_id, target):
+        """Download a Google Drive file with gdown (official WASD file ids).
+
+        Args:
+            file_id: Drive file id.
+            target: Local file path.
+        """
         LOGGER.info('downloading %s -> %s', file_id, target)
         subprocess.run(['gdown', '--id', file_id, '-O', target], check=True)
 
     def _download(self):
+        """Fetch the CSVs, the category metadata and the source videos that are missing."""
         os.makedirs(self.csv_dir, exist_ok=True)
         if not os.path.isfile(self.groundtruth_csv):
             archive = os.path.join(self.root, 'WASD_csv.zip')
@@ -84,16 +91,35 @@ class WasdDataset:
 
     # ── clips ─────────────────────────────────────────────────────────────────
     def _read_video_ids(self):
+        """Read the video ids of the split from its GT CSV.
+
+        Returns:
+            list[str]: Sorted sub-clip ids.
+        """
         with open(self.groundtruth_csv, newline='') as f:
             return sorted({row['video_id'] for row in csv.DictReader(f)})
 
     def clip_path(self, video_id):
-        """Path of the sub-clip video for a WASD ``video_id``."""
+        """Path of the sub-clip video for a WASD ``video_id``.
+
+        Args:
+            video_id: Sub-clip id.
+
+        Returns:
+            str: The path under ``clips/``.
+        """
         return os.path.join(self.clip_dir, f'{video_id}.mp4')
 
     @staticmethod
     def parse_video_id(video_id):
-        """Split ``<youtube id>_<start>-<end>`` into ``(youtube id, start s, end s)``."""
+        """Split ``<youtube id>_<start>-<end>`` into its parts.
+
+        Args:
+            video_id: Sub-clip id; the YouTube id may itself contain underscores.
+
+        Returns:
+            tuple: ``(youtube id, start s, end s)``.
+        """
         source, times = video_id.rsplit('_', 1)
         start, end = times.split('-')
         return source, int(start), int(end)
@@ -119,7 +145,11 @@ class WasdDataset:
                             '-vcodec', 'copy', '-acodec', 'copy', target], check=True)
 
     def video_list(self):
-        """``[(video_id, clip path, None)]`` in the format of ``load_video_list``."""
+        """List the split's videos in the format of ``load_video_list``.
+
+        Returns:
+            list[tuple]: ``(video_id, clip path, None)``.
+        """
         return [(vid, self.clip_path(vid), None) for vid in self.video_ids]
 
     # ── categories ────────────────────────────────────────────────────────────
@@ -127,8 +157,11 @@ class WasdDataset:
         """Map every ``video_id`` of the split to its category code (OC, SI, FO, HVN, SS).
 
         Uses the numeric ``Category`` column of ``wasd_metadata.csv``. A few val sub-clips are
-        missing there; they get the most common category of the other sub-clips of the same
-        source video.
+        missing there; they get the most common category of the other sub-clips of the same source
+        video.
+
+        Returns:
+            dict: video_id -> category code ('' if unknown).
         """
         with open(self.metadata_csv, newline='') as f:
             meta = {row['Video']: CATEGORIES[int(row['Category'])] for row in csv.DictReader(f)}
@@ -145,7 +178,11 @@ class WasdDataset:
         return out
 
     def write_categories_csv(self, path):
-        """Write ``video_id,category`` for ``stats.py --categories_csv``."""
+        """Write ``video_id,category`` for ``stats.py --categories_csv``.
+
+        Args:
+            path: Output CSV.
+        """
         with open(path, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(['video_id', 'category'])
