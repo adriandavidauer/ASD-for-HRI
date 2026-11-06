@@ -119,6 +119,26 @@ python src/eval/get_ava_active_speaker_performance.py \
     -g stats/<run>/ava_groundtruth.csv -p stats/<run>/ava_predictions.csv
 ```
 
+#### Where the time goes
+
+`ASD` records the time of every pipeline stage (switch off with `ASD(profile=False)`):
+
+| Stage | What it covers |
+| --- | --- |
+| `read` | Decoding the next video frame |
+| `detect`, `track` | Face detector, ordering/tracking of the boxes |
+| `crop` | Squaring, clipping and cropping the faces |
+| `preprocess` | Resize (image models) or dlib landmarks (`*Shape` models) |
+| `buffer`, `normalize` | Per-face temporal buffers, landmark normalisation |
+| `model` | The classifier's forward pass, including the GPU sync |
+| `average` | Smoothing the scores over the last predictions |
+| `audio_decode`, `audio` | Audio-visual models: decoding the track, MFCCs per window |
+| `frame` | Everything per frame, from `detect` to `average` |
+
+Per video, `<predictions_dir>/timing/<video_id>.csv` has calls, total, mean/median/p95/max ms and
+ms per face for each stage. Over the run, `<stats_dir>/stage_times.csv` gives ms per frame and
+the share of the frame time, and `summary.json` has `stage_ms_per_frame`.
+
 `aggregate_results.csv` keeps the older metrics (threshold metrics and AP over *matched* boxes only)
 for comparison with earlier runs.
 <!-- --8<-- [end:evaluation] -->
