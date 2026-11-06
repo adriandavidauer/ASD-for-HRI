@@ -191,7 +191,7 @@ def run_asd_on_video(video_path,
                     decision_threshold: float = 0.5,
                     weighted: bool = True,
                     max_consecutive_empty: int = 2,
-                    groundtruth=None, time_range=None):
+                    groundtruth=None, time_range=None, frame_crop=None):
     """Run ASD on one video and write predictions + timing rows.
 
     Args:

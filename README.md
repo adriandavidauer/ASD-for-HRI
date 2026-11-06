@@ -52,7 +52,7 @@ Everything after the image name is forwarded to the entrypoint
 | Flag | Meaning |
 | --- | --- |
 | `--data_dir` | Root data directory, i.e. the mount point (default `data`) |
-| `--dataset {unitalk,ava,wasd}` | Dataset to run over (default `unitalk`) |
+| `--dataset {unitalk,ava,wasd,easycom}` | Dataset to run over (default `unitalk`) |
 | `--split` | Dataset split, UniTalk only (default `val`) |
 | `--no_download` | Never fetch videos; skip the ones missing on disk |
 | `--video <id>` | Run a single video only |
@@ -94,6 +94,17 @@ videos (28.9 GB) are fetched with gdown from the official repository's Google Dr
 `protocol_results.csv` then also has one `category:<code>` row per WASD category: OC (optimal
 conditions), SI (speech impairment), FO (face occlusion), HVN (human voice noise) and SS
 (surveillance settings), taken from WASD's `wasd_metadata.csv`.
+
+#### EasyCom
+
+`--dataset easycom --split test` (sessions 10, 11; `val` = 4, 12) evaluates on EasyCom
+(Donley et al. 2021; AR glasses at a table, 20 fps, CC-BY-NC-4.0), the dataset closest to a
+stationary social robot. EasyCom has no official ASD protocol; `easycom_dataset.py` defines one:
+a face counts as speaking in the frames covered by that participant's speech transcription
+segments, and the face boxes become AVA-style rows (`video_id` = `Session_<s>_<file>`). The
+videos carry a participant-photo banner on the left; it is cropped away before detection and
+the boxes are converted to the cropped image. Download (~36 GB of the 70 GB release, only the
+needed folders) with the command in the module docstring into `<data_dir>/easycom`.
 
 #### Comparable metrics
 

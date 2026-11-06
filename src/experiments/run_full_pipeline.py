@@ -147,7 +147,15 @@ def load_video_list(args, data_dir: Path):
 # ── pipeline pass ─────────────────────────────────────────────────────────────
 
 def _frame_crop(dataset, video_path):
-    """Region of the frame to use: EasyCom videos carry a participant banner on the left."""
+    """Region of the frame to use: EasyCom videos carry a participant banner on the left.
+
+    Args:
+        dataset: Dataset name.
+        video_path: The video.
+
+    Returns:
+        tuple or None: ``(x0, y0, x1, y1)``, or None to use the whole frame.
+    """
     if dataset == 'easycom':
         from .easycom_dataset import EasyComDataset
         return EasyComDataset.frame_crop(video_path)

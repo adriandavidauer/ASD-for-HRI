@@ -9,6 +9,7 @@ from src.experiments.easycom_dataset import EasyComDataset, convert_file
 
 
 def test_convert_file_labels_frames_inside_speech_segments():
+    """Frames inside a speech segment are speaking; boxes are normalised by 1920x1080."""
     boxes = [{'Frame_Number': n, 'Participants': [
         {'Participant_ID': 3, 'x1': 960, 'y1': 540, 'x2': 1152, 'y2': 756},
         {'Participant_ID': 4, 'x1': 0, 'y1': 0, 'x2': 96, 'y2': 108}]} for n in (1, 2, 3, 21)]
@@ -25,13 +26,19 @@ def test_convert_file_labels_frames_inside_speech_segments():
     assert by[(0.05, 'Session_9_00-00-000:4')][6] == 'NOT_SPEAKING'
     # normalised by the 1920x1080 camera image
     assert by[(0.0, 'Session_9_00-00-000:3')][2:6] == [0.5, 0.5, 0.6, 0.7]
+    # the banner width is subtracted from x
+    shifted = convert_file('v', boxes[:1], [], x_offset=192)
+    assert shifted[0][2:6] == [0.4, 0.5, 0.5, 0.7]
+    assert len(shifted) == 1                          # a box inside the banner is dropped
 
 
-def test_dataset_writes_groundtruth_for_the_split(tmp_path):
+def test_dataset_writes_groundtruth_for_the_split(tmp_path, monkeypatch):
+    """The split's GT CSV is written, Latin-1 transcriptions included."""
     main = tmp_path / 'Main'
     for sub in ('Video_Compressed', 'Face_Bounding_Boxes', 'Speech_Transcriptions'):
         (main / sub / 'Session_10').mkdir(parents=True)
     (main / 'Video_Compressed' / 'Session_10' / '00-00-000.mp4').write_bytes(b'')
+    monkeypatch.setattr(EasyComDataset, 'frame_crop', staticmethod(lambda path: (0, 0, 1920, 1080)))
     (main / 'Face_Bounding_Boxes' / 'Session_10' / '00-00-000.json').write_text(json.dumps(
         [{'Frame_Number': 1, 'Participants': [
             {'Participant_ID': 1, 'x1': 10, 'y1': 10, 'x2': 50, 'y2': 50}]}]))
