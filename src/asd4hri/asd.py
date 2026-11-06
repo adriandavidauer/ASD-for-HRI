@@ -147,6 +147,11 @@ class ClassifyVVAD(Processor):
             input_size = (window_size,) + tuple(input_size[1:])
             stride = 1
             self.stream = StreamingFeatureLSTM(self.classifier) if causal_mode == 'streaming' else None
+            # compiled once for any batch size and length; eager Keras calls cost ~20 ms each
+            num_landmarks = input_size[1]
+            self._window_fn = tf.function(
+                lambda x: self.classifier(x, training=False),
+                input_signature=[tf.TensorSpec([None, None, num_landmarks, 2], tf.float32)])
             self.missed = {}
             self.max_consecutive_empty = max_consecutive_empty
         # Dummy predict to fully initialize
@@ -239,7 +244,7 @@ class ClassifyVVAD(Processor):
                     by_len.setdefault(len(sample), []).append(k)
                 for length, idx in by_len.items():
                     batch = np.stack([np.stack(list(samples[k])) for k in idx])
-                    out = np.asarray(self.classifier(batch))[:, -1, 0]
+                    out = self._window_fn(tf.constant(batch, tf.float32)).numpy()[:, -1, 0]
                     for k, score in zip(idx, out):
                         scores[k] = float(score)
         with timer.stage('average', n):
