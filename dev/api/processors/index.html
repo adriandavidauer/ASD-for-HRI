@@ -3716,7 +3716,8 @@ class name 'Face'. The image has the boxes drawn on it if <code>draw</code> is T
 <span class="normal">617</span>
 <span class="normal">618</span>
 <span class="normal">619</span>
-<span class="normal">620</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
+<span class="normal">620</span>
+<span class="normal">621</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Detect faces in an image.</span>
 
 <span class="sd">    Args:</span>
@@ -3730,7 +3731,8 @@ class name 'Face'. The image has the boxes drawn on it if <code>draw</code> is T
     <span class="c1"># set input size if necessary</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_size</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">detector</span><span class="o">.</span><span class="n">setInputSize</span><span class="p">((</span><span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-    <span class="n">retval</span><span class="p">,</span> <span class="n">faces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+    <span class="c1"># the ASD pipeline passes RGB frames, OpenCV's YuNet expects BGR (#77)</span>
+    <span class="n">retval</span><span class="p">,</span> <span class="n">faces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">detector</span><span class="o">.</span><span class="n">detect</span><span class="p">(</span><span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGB2BGR</span><span class="p">))</span>
     <span class="c1"># create boxes2D with the corresponding points and the score and the label</span>
     <span class="n">boxes2D</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">faces</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span> 
@@ -3965,8 +3967,7 @@ downloaded on first use.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/processors.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">644</span>
-<span class="normal">645</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">645</span>
 <span class="normal">646</span>
 <span class="normal">647</span>
 <span class="normal">648</span>
@@ -3984,7 +3985,8 @@ downloaded on first use.</p>
 <span class="normal">660</span>
 <span class="normal">661</span>
 <span class="normal">662</span>
-<span class="normal">663</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_name</span><span class="o">=</span><span class="s1">'Face'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">draw</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">model_path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="o">/</span> <span class="s1">'retinaface_resnet50.onnx'</span><span class="p">),</span> <span class="n">conf_threshold</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">nms_threshold</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">pre_nms_top_k</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">topK</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">backendId</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">targetId</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'FaceDetectorRetinaFace'</span><span class="p">):</span>
+<span class="normal">663</span>
+<span class="normal">664</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_name</span><span class="o">=</span><span class="s1">'Face'</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">draw</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">model_path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="o">/</span> <span class="s1">'retinaface_resnet50.onnx'</span><span class="p">),</span> <span class="n">conf_threshold</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">nms_threshold</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">pre_nms_top_k</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">topK</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">backendId</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">targetId</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'FaceDetectorRetinaFace'</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Create the ONNX Runtime session, downloading the default model if needed."""</span>
     <span class="nb">super</span><span class="p">(</span><span class="n">FaceDetectorRetinaFace</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">model_path</span> <span class="o">==</span> <span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="o">/</span> <span class="s1">'retinaface_resnet50.onnx'</span><span class="p">):</span>
@@ -4090,8 +4092,7 @@ class name 'Face'. The image has the boxes drawn on it if <code>draw</code> is T
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/processors.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">665</span>
-<span class="normal">666</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">666</span>
 <span class="normal">667</span>
 <span class="normal">668</span>
 <span class="normal">669</span>
@@ -4166,7 +4167,9 @@ class name 'Face'. The image has the boxes drawn on it if <code>draw</code> is T
 <span class="normal">738</span>
 <span class="normal">739</span>
 <span class="normal">740</span>
-<span class="normal">741</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
+<span class="normal">741</span>
+<span class="normal">742</span>
+<span class="normal">743</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Detect faces in an image.</span>
 
 <span class="sd">    Args:</span>
@@ -4179,7 +4182,8 @@ class name 'Face'. The image has the boxes drawn on it if <code>draw</code> is T
 <span class="sd">    """</span>
     <span class="n">orig_height</span><span class="p">,</span> <span class="n">orig_width</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span>
 
-    <span class="n">img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="p">(</span><span class="mi">640</span><span class="p">,</span> <span class="mi">640</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="c1"># RGB in (as everywhere in the ASD pipeline); the model expects BGR with BGR means (#77)</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGB2BGR</span><span class="p">),</span> <span class="p">(</span><span class="mi">640</span><span class="p">,</span> <span class="mi">640</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
     <span class="n">im_height</span><span class="p">,</span> <span class="n">im_width</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span>
     <span class="c1"># scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])</span>
     <span class="n">img</span> <span class="o">-=</span> <span class="p">(</span><span class="mi">104</span><span class="p">,</span> <span class="mi">117</span><span class="p">,</span> <span class="mi">123</span><span class="p">)</span>
@@ -4343,16 +4347,16 @@ recognition model to track the same face over time.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/processors.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">754</span>
-<span class="normal">755</span>
-<span class="normal">756</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">756</span>
 <span class="normal">757</span>
 <span class="normal">758</span>
 <span class="normal">759</span>
 <span class="normal">760</span>
 <span class="normal">761</span>
 <span class="normal">762</span>
-<span class="normal">763</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">):</span>
+<span class="normal">763</span>
+<span class="normal">764</span>
+<span class="normal">765</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Validate and store the tracking approach.</span>
 
 <span class="sd">    Raises:</span>
@@ -4469,9 +4473,7 @@ recognition model to track the same face over time.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/processors.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">765</span>
-<span class="normal">766</span>
-<span class="normal">767</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">767</span>
 <span class="normal">768</span>
 <span class="normal">769</span>
 <span class="normal">770</span>
@@ -4486,7 +4488,9 @@ recognition model to track the same face over time.</p>
 <span class="normal">779</span>
 <span class="normal">780</span>
 <span class="normal">781</span>
-<span class="normal">782</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">):</span>
+<span class="normal">782</span>
+<span class="normal">783</span>
+<span class="normal">784</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Return the boxes in tracking order.</span>
 
 <span class="sd">    Args:</span>
