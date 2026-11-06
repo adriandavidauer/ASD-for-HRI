@@ -1,11 +1,14 @@
 # ASD-for-HRI
 [![Quality](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml/badge.svg)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
 <!-- badges:start -->
-[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-268%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/36408642233)
-[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-75.2%25-green)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/36408642233)
+[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-71%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42218861183)
+[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-84.9%25-green)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42218861183)
+[![Test coverage](https://img.shields.io/badge/Test%20coverage-96%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42218861176)
 <!-- badges:end -->
 
 A scalable Active Speaker Detection for Human-Robot Interaction
+
+Documentation, including the API reference: [adriandavidauer.github.io/ASD-for-HRI](https://adriandavidauer.github.io/ASD-for-HRI/)
 
 ## Install
 In your Env run 
@@ -14,6 +17,7 @@ pip install -r requirements.txt
 ```
 ## Running Experiments
 
+<!-- --8<-- [start:evaluation] -->
 Evaluation script runs inside the GPU Docker image, which runs Predictions and stats calculation. The individual steps can also be run on their own (see *Individual steps* below). All
 commands are issued from the repository root.
 
@@ -22,8 +26,13 @@ commands are issued from the repository root.
 Build relative to the build context that is provided in the build command, in this case it is '.' (repository root) — the Dockerfile lives in `docker/` but its `COPY` paths are relative:
 
 ```bash
-docker build -f docker/Dockerfile_GPU -t unitalk-gpu_buffer .
+docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) \
+    -t unitalk-gpu_buffer .
 ```
+
+The container runs as a non-root user with the uid/gid given at build time, so the results it
+writes to the mounted data directory belong to you. Without the build args it uses 1000:1000. The
+mounted directory must be writable by that user.
 
 ### Full evaluation - `src/experiments/run_evaluation.py`
 
@@ -74,6 +83,7 @@ The run above writes to the host:
   (frames processed and elapsed time).
 - `/Data/data/stats/predictions_cnn1d_scores/`: the stats output described below.
 - `/Data/data/logs_stats/`: stats log files.
+<!-- --8<-- [end:evaluation] -->
 
 ## Individual steps
 

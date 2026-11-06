@@ -163,7 +163,6 @@ class BufferFeatures(Processor):
             holding up to ``timesteps`` features) if it is ready to be returned, otherwise None.
         """
         batch_return = []
-        i = 0
         for i, features in enumerate(batch_of_features):
             if i == len(self.buffers):
                 self.buffers.append(deque(maxlen=self.buffer_size))
@@ -184,15 +183,18 @@ class BufferFeatures(Processor):
             if self.missed_consecutive_timesteps[i] >= self.max_consecutive_empty:
                 self.reset(index=i)
         # update missed_consecutive_timesteps for buffers in the end of the list if input list is shorter than self.buffers
-        if i < len(self.buffers)-1:
-            # need to go backwards to pop
-            for j in range(len(self.buffers) -1, i, -1):
-                self.missed_consecutive_timesteps[j] += 1
-                # remove dangeling
-                if self.missed_consecutive_timesteps[j] >= self.max_consecutive_empty:
+        # need to go backwards to pop
+        for j in range(len(self.buffers) - 1, len(batch_of_features) - 1, -1):
+            self.missed_consecutive_timesteps[j] += 1
+            if self.missed_consecutive_timesteps[j] >= self.max_consecutive_empty:
+                if j == len(self.buffers) - 1:
+                    # remove dangeling
                     self.buffers.pop()
                     self.timesteps_since_last_return.pop()
                     self.missed_consecutive_timesteps.pop()
+                else:
+                    # a later buffer is still alive, so this one keeps its index
+                    self.reset(index=j)
         return batch_return
 
     def reset(self, index=None):

@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: quality-${{ github.head_ref }}
+  group: quality-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,9 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.head_ref }}
 
       - uses: actions/setup-python@v7
         with:
@@ -66,6 +63,8 @@ jobs:
           fi
           exit $FAIL
 
+      # Runs even when the ratchet failed (but not when cancelled): the badges show the real
+      # numbers, and the failed ratchet step still fails the job afterwards.
       - name: Update README badges
         id: badges
         if: ${{ !cancelled() }}
@@ -74,14 +73,10 @@ jobs:
           DOCS: ${{ steps.docs.outputs.pct }}
         run: python .github/scripts/update_badges.py
 
-      - name: Commit badges to PR branch
-        # Fork PRs get a read-only token, so they only see the badges in the job log.
-        if: ${{ !cancelled() && steps.badges.outcome == 'success' && github.event.pull_request.head.repo.full_name == github.repository }}
-        run: |
-          if git diff --quiet README.md; then
-            echo "Badges unchanged"; exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
-          git commit README.md -m "Update README badges"
-          git push || echo "::warning::Branch moved during the run; the next run will refresh the badges."
+      - name: Commit badges to main
+        # Other branches only see the badges in the job log.
+        if: ${{ !cancelled() && steps.badges.outcome == 'success' && github.ref == 'refs/heads/main' }}
+        env:
+          LINT: ${{ steps.ruff.outputs.count }}
+          DOCS: ${{ steps.docs.outputs.pct }}
+        run: bash .github/scripts/commit_badges.sh

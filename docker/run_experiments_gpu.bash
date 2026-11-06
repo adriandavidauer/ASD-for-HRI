@@ -1,4 +1,8 @@
 #!/bin/bash
+# Run from the repository root. The image is built with your uid/gid, so the results written to
+# the data mount belong to you (the build is cached after the first run).
+docker build -f docker/Dockerfile_GPU --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) -t asd4hri .
+
 ## ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers', 'CNN2Plus1D_Light', 'LipShape', 'FaceShape']
 
 
