@@ -367,6 +367,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#wasd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WASD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#comparable-metrics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -633,6 +644,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#wasd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WASD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#comparable-metrics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -728,7 +750,7 @@ mounted directory must be writable by that user.</p>
 <td>Root data directory, i.e. the mount point (default <code>data</code>)</td>
 </tr>
 <tr>
-<td><code>--dataset {unitalk,ava}</code></td>
+<td><code>--dataset {unitalk,ava,wasd}</code></td>
 <td>Dataset to run over (default <code>unitalk</code>)</td>
 </tr>
 <tr>
@@ -810,6 +832,14 @@ mounted directory must be writable by that user.</p>
 <li><code>/Data/data/stats/predictions_cnn1d_scores/</code>: the stats output described below.</li>
 <li><code>/Data/data/logs_stats/</code>: stats log files.</li>
 </ul>
+<h4 id="wasd">WASD</h4>
+<p><code>--dataset wasd</code> evaluates on the WASD val split (Roxo et al.; 751 annotated 30-s sub-clips of
+164 YouTube videos, CC-BY-SA-4.0). Without <code>--no_download</code>, the CSVs (0.3 GB) and the source
+videos (28.9 GB) are fetched with gdown from the official repository's Google Drive links into
+<code>&lt;data_dir&gt;/wasd</code>, and the sub-clips are cut exactly like WASD's own <code>prepare_setup.py</code> does.
+<code>protocol_results.csv</code> then also has one <code>category:&lt;code&gt;</code> row per WASD category: OC (optimal
+conditions), SI (speech impairment), FO (face occlusion), HVN (human voice noise) and SS
+(surveillance settings), taken from WASD's <code>wasd_metadata.csv</code>.</p>
 <h4 id="comparable-metrics">Comparable metrics</h4>
 <p>Every run is scored with the <strong>official AVA script</strong> (<code>src/eval/get_ava_active_speaker_performance.py</code>)
 in the protocol that matches <code>--boxes</code>:</p>
