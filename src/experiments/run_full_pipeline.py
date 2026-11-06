@@ -41,7 +41,7 @@ def build_parser():
     )
     p.add_argument('--data_dir', default='data',
                    help='Root data directory (default: data/)')
-    p.add_argument('--dataset', default='unitalk', choices=['unitalk', 'ava'],
+    p.add_argument('--dataset', default='unitalk', choices=['unitalk', 'ava', 'wasd'],
                    help='Which dataset to run over (default: unitalk)')
     p.add_argument('--split', default='val',
                    help='Dataset split; UniTalk only (default: val)')
@@ -99,6 +99,12 @@ def load_video_list(args, data_dir: Path):
     Returns:
         list[tuple]: ``(video_id, video_path, url)`` per video.
     """
+    if args.dataset == 'wasd':
+        from .wasd_dataset import WasdDataset
+        dataset = WasdDataset(str(data_dir / 'wasd'), split=args.split,
+                              download=not args.no_download)
+        return [(vid, Path(path), url) for vid, path, url in dataset.video_list()]
+
     if args.dataset == 'ava':
         from .ava_dataset import AvaDataset
         root = data_dir / 'ava'

@@ -66,6 +66,9 @@ def parse_args():
                    help='Max |pred.ts- gt.ts| (ms) to align a prediction to a GT frame')
     p.add_argument('--workers',         type=int, default=None,
                    help='Parallel worker processes for scoring (default: all CPUs)')
+    p.add_argument('--categories_csv',  default=None,
+                   help='CSV with video_id,category; adds one pooled row per category '
+                        '(e.g. the WASD categories)')
     p.add_argument('--verbose', '-v',   action='store_true')
     return p.parse_args()
 
@@ -1023,6 +1026,21 @@ def _fmt(value):
     return value
 
 
+def load_categories(path):
+    """Read a ``video_id,category`` CSV.
+
+    Args:
+        path: The CSV, or None.
+
+    Returns:
+        dict: video_id -> category; empty if ``path`` is None.
+    """
+    if not path:
+        return {}
+    with open(path, newline='') as f:
+        return {row['video_id']: row['category'] for row in csv.DictReader(f)}
+
+
 def aggregate_stage_times(predictions_dir, result_dir):
     """Pool the per-video stage timings (``<predictions_dir>/timing/*.csv``, #76).
 
@@ -1066,7 +1084,8 @@ def aggregate_stage_times(predictions_dir, result_dir):
     return out
 
 
-def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, run_info=None):
+def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, run_info=None,
+                           categories=None):
     """Write ``protocol_results.csv`` (per video + pooled), the AVA CSVs and ``summary.json``.
 
     The pooled row ranks the GT boxes of all videos together, which is how papers report mAP
@@ -1080,6 +1099,8 @@ def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, 
         per_video_protocol: List of ``(video_id, protocol, gt_df, fp_scores, n_detections)``.
         times_by_video: Output of ``load_processing_times``, for the speed numbers.
         run_info: Extra key/values for ``summary.json`` (dataset, model, hardware, ...).
+        categories: Optional dict video_id -> category. Adds one pooled row per category
+            (``video_id`` = ``category:<name>``) and the per-category mAPs to the summary.
 
     Returns:
         dict: The pooled metrics, as written to ``summary.json``.
@@ -1100,6 +1121,14 @@ def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, 
     all_fp = np.concatenate([r[3] for r in per_video_protocol])
     n_det = sum(r[4] for r in per_video_protocol)
     pooled = {'video_id': 'pooled', **protocol_metrics(all_gt, all_fp, n_det, protocol)}
+    category_map = {}
+    for cat in sorted({c for c in (categories or {}).values() if c}):
+        members = [r for r in per_video_protocol if (categories or {}).get(r[0]) == cat]
+        cat_metrics = protocol_metrics(
+            pd.concat([r[2] for r in members], ignore_index=True),
+            np.concatenate([r[3] for r in members]), sum(r[4] for r in members), protocol)
+        rows.append({'video_id': f'category:{cat}', **cat_metrics})
+        category_map[cat] = cat_metrics['map']
     rows.append(pooled)
 
     with open(os.path.join(result_dir, 'protocol_results.csv'), 'w', newline='') as f:
@@ -1121,6 +1150,9 @@ def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, 
                'videos': len(per_video_protocol),
                **{k: (None if isinstance(v, float) and np.isnan(v) else v)
                   for k, v in pooled.items() if k != 'video_id'},
+               **({'map_by_category': {k: (None if np.isnan(v) else v)
+                                       for k, v in category_map.items()}}
+                  if category_map else {}),
                'frames_processed': frames,
                'elapsed_seconds': round(elapsed, 3),
                'fps': round(frames / elapsed, 3) if elapsed else None}
@@ -1132,7 +1164,7 @@ def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, 
 
 def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_threshold=0.5,
               timestamp_tolerance_ms=TIMESTAMP_TOLERANCE_MS, workers=None, verbose=False,
-              log_dir='logs_stats', run_info=None):
+              log_dir='logs_stats', run_info=None, categories_csv=None):
     """Score every prediction CSV in predictions_dir and write detail + aggregate CSVs.
 
     Also writes the comparable-protocol results (``protocol_results.csv``, ``summary.json``),
@@ -1149,6 +1181,7 @@ def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_thre
         verbose: Log INFO to the console.
         log_dir: Folder for the log file.
         run_info: Copied into ``summary.json``.
+        categories_csv: Optional ``video_id,category`` CSV for per-category rows.
 
     Returns:
         dict: The summary (pooled metrics and run info).
@@ -1203,7 +1236,8 @@ def run_stats(predictions_dir, groundtruth_csv, result_dir, video=None, iou_thre
     write_aggregate_csv(result_dir, per_video, times_by_video)
     stage_ms = aggregate_stage_times(predictions_dir, result_dir)
     summary = write_protocol_results(result_dir, per_video_protocol, times_by_video,
-                                     {**(run_info or {}), 'stage_ms_per_frame': stage_ms})
+                                     {**(run_info or {}), 'stage_ms_per_frame': stage_ms},
+                                     load_categories(categories_csv))
     LOGGER.info('stats run complete videos_scored=%d', len(per_video))
     return summary
 
@@ -1214,7 +1248,8 @@ def main():
     run_stats(args.predictions_dir, args.groundtruth_csv, args.result_dir,
               video=args.video, iou_threshold=args.iou_threshold,
               timestamp_tolerance_ms=args.timestamp_tolerance_ms,
-              workers=args.workers, verbose=args.verbose)
+              workers=args.workers, verbose=args.verbose,
+              categories_csv=args.categories_csv)
 
 
 if __name__ == '__main__':
