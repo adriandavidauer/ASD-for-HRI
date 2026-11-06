@@ -19,7 +19,11 @@ _DEFAULT_GROUNDTRUTH = {
 
 
 def parse_args():
-    """Parse the prediction flags plus the scoring flags."""
+    """Parse the command-line flags.
+
+    Returns:
+        argparse.Namespace: The parsed flags.
+    """
     p = build_parser()
     p.description = 'Run ASD over every video of a dataset, then score the predictions.'
     p.add_argument('--groundtruth_csv', default=None,
@@ -36,11 +40,50 @@ def parse_args():
                    help='Parallel worker processes for scoring (default: all CPUs)')
     p.add_argument('--skip_stats', action='store_true',
                    help='Only write predictions; do not score them')
-    return p.parse_args()
+    args = p.parse_args()
+    for flag in ('predictions_dir', 'stats_dir'):
+        if getattr(args, flag) is not None:
+            try:
+                setattr(args, flag, relative_to_data_dir(args.data_dir, getattr(args, flag)))
+            except ValueError as exc:
+                p.error(f'--{flag}: {exc}')
+    return args
+
+
+def relative_to_data_dir(data_dir, path):
+    """Make an output folder relative to ``data_dir``.
+
+    An absolute folder would make ``stats/<predictions_dir>`` collapse onto the predictions
+    folder itself, so the stats CSVs would land among the predictions.
+
+    Args:
+        data_dir: Root data directory.
+        path: Folder, either relative to ``data_dir`` or absolute and inside it.
+
+    Returns:
+        pathlib.Path: ``path`` relative to ``data_dir``.
+
+    Raises:
+        ValueError: If ``path`` is absolute and outside ``data_dir``.
+    """
+    path = Path(path)
+    if not path.is_absolute():
+        return path
+    try:
+        return Path(os.path.abspath(path)).relative_to(os.path.abspath(data_dir))
+    except ValueError:
+        raise ValueError(f'{path} is not inside --data_dir {data_dir}') from None
 
 
 def run_info(args):
-    """Describe the run for ``summary.json``: config, machine and code version."""
+    """Describe the run for ``summary.json``: config, machine and code version.
+
+    Args:
+        args: Parsed flags.
+
+    Returns:
+        dict: The description.
+    """
     import platform
     import subprocess
     try:
@@ -55,7 +98,11 @@ def run_info(args):
 
 
 def main():
-    """Run the prediction phase, then the stats phase unless --skip_stats."""
+    """Command-line entry point.
+
+    Raises:
+        SystemExit: If a requested video is not found or processing fails.
+    """
     args = parse_args()
     log_path = setup_logging('evaluation', args.verbose)
 

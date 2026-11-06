@@ -17,6 +17,11 @@ from .helpers import setup_logging
 LOGGER = logging.getLogger('uniTalk_ASD')
 
 def parse_args():
+    """Parse the command-line flags.
+
+    Returns:
+        argparse.Namespace: The parsed flags.
+    """
     p = argparse.ArgumentParser(
         description='Run ASD on a single video and write a predictions CSV')
     p.add_argument('--video',          required=True,
@@ -52,6 +57,15 @@ def _write_prediction_rows(writer, frame_idx, timestamp, pred_boxes, width, heig
     With ``gt`` (a list of ``(entity_id, (x1, y1, x2, y2))`` parallel to ``pred_boxes``, from a
     ``--boxes gt`` run) the row keeps the GT entity id and the GT coordinates unchanged, so the
     scoring can join it to the ground truth exactly.
+
+    Args:
+        writer: ``csv.writer`` of the prediction CSV.
+        frame_idx: Frame index.
+        timestamp: Frame (or GT) timestamp in seconds.
+        pred_boxes: Boxes with ``class_name`` and ``score``.
+        width: Frame width in pixels.
+        height: Frame height in pixels.
+        gt: Optional GT ids and boxes, see above.
     """
     if gt is not None:
         for pred, (entity_id, box) in zip(pred_boxes, gt):
@@ -72,7 +86,14 @@ def append_aggregate_time(aggregate_time_csv, video_id, elapsed, frames_processe
                           width=None, height=None):
     """Append one timing row, writing the header only when the file is new.
 
-    ``width``/``height`` are the frame size in pixels, needed for the face-size bins (#75).
+    Args:
+        aggregate_time_csv: The timing CSV.
+        video_id: Video id.
+        elapsed: Seconds for the whole video.
+        frames_processed: Number of processed frames.
+        fps: Processed frames per second.
+        width: Frame width in pixels (for the face-size bins, #75).
+        height: Frame height in pixels.
     """
     os.makedirs(os.path.dirname(aggregate_time_csv) or '.', exist_ok=True)
     new_file = not os.path.isfile(aggregate_time_csv)
@@ -96,9 +117,14 @@ class _GroundTruthFrames:
         self.tolerance = 0.5 / fps
 
     def at(self, timestamp):
-        """Return ``(gt_timestamp, [(entity_id, box), ...])`` nearest to ``timestamp``.
+        """Return the GT boxes nearest to a frame timestamp.
 
-        Returns ``(None, [])`` if no annotated timestamp is within half a frame.
+        Args:
+            timestamp: Frame timestamp in seconds.
+
+        Returns:
+            tuple: ``(gt_timestamp, [(entity_id, box), ...])``, or ``(None, [])`` if no annotated
+            timestamp is within half a frame.
         """
         if not len(self.timestamps):
             return None, []
@@ -111,13 +137,48 @@ class _GroundTruthFrames:
 
     @staticmethod
     def boxes2D(gt_frame, width, height):
-        """Convert normalised GT boxes to pixel ``Box2D`` objects and their entity ids."""
+        """Convert normalised GT boxes to pixel ``Box2D`` objects and their entity ids.
+
+        Args:
+            gt_frame: ``[(entity_id, (x1, y1, x2, y2)), ...]`` normalised.
+            width: Frame width in pixels.
+            height: Frame height in pixels.
+
+        Returns:
+            tuple: ``(boxes, ids)``.
+        """
         boxes, ids = [], []
         for entity_id, (x1, y1, x2, y2) in gt_frame:
             boxes.append(Box2D((int(round(x1 * width)), int(round(y1 * height)),
                                 int(round(x2 * width)), int(round(y2 * height))), 1.0, 'Face'))
             ids.append(entity_id)
         return boxes, ids
+
+
+_STAGE_FIELDS = ['video_id', 'stage', 'calls', 'total_s', 'mean_ms', 'median_ms', 'p95_ms',
+                 'max_ms', 'items', 'ms_per_item', 'frames']
+
+
+def write_stage_times(path, video_id, timer, frames):
+    """Write one video's per-stage timing (``StageTimer.summary``) as CSV (#76).
+
+    Args:
+        path: Output CSV.
+        video_id: Video id, written into every row.
+        timer: The pipeline's ``StageTimer``.
+        frames: Number of processed frames.
+    """
+    rows = timer.summary()
+    if not rows:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=_STAGE_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**{k: (f'{v:.4f}' if isinstance(v, float) else v)
+                                for k, v in row.items()},
+                             'video_id': video_id, 'frames': frames})
 
 
 # ── pipeline runner ───────────────────────────────────────────────────────────
@@ -141,6 +202,12 @@ def run_asd_on_video(video_path,
                             Defaults to results/aggregate_time.csv; pass None to skip.
         video_id:           override video_id used in logs / paths / timing row.
                             Defaults to the video file's basename.
+        architecture:       classifier architecture, see ``asd4hri.asd.Architecture_Options``.
+        stride:             frames between two predictions of a face.
+        averaging_window_size: number of predictions averaged per face.
+        decision_threshold: score above which a face is labelled speaking.
+        weighted:           weight newer predictions more when averaging.
+        max_consecutive_empty: frames a face may be missing before its buffer is cleared.
         time_range:         Optional ``(start_s, end_s)``: only frames in this range are
                             processed (e.g. AVA's annotated 15 minutes of a movie).
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
@@ -151,6 +218,9 @@ def run_asd_on_video(video_path,
 
     Returns:
         tuple[int, float]: (frames_processed, elapsed_seconds)
+
+    Raises:
+        RuntimeError: If the video cannot be opened or has no frame rate.
     """
     video_id = video_id or os.path.splitext(os.path.basename(video_path))[0]
     if predictions_csv is None:
@@ -196,13 +266,15 @@ def run_asd_on_video(video_path,
         while True:
             if end_s is not None and frame_idx / native_fps > end_s:
                 break
-            is_frame_received, frame = cap.read()
+            with pipeline.timer.stage('read'):
+                is_frame_received, frame = cap.read()
             if not is_frame_received:
                 LOGGER.warning('Frame not received or End of stream')
                 break
             height, width = frame.shape[:2]
             timestamp = frame_idx / native_fps
             gt_frame = None
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # ASD expects RGB (#77)
             try:
                 if gt_index is None:
                     output = pipeline(frame)
@@ -240,6 +312,9 @@ def run_asd_on_video(video_path,
                                                   pred_boxes_list, gt_list):
             _write_prediction_rows(writer, idx, timestamp, pred_boxes, width, height, gt)
 
+    write_stage_times(os.path.join(os.path.dirname(predictions_csv) or '.', 'timing',
+                                   f'{video_id}.csv'), video_id, pipeline.timer, frame_idx - start_frame)
+
     if aggregate_time_csv is not None:
         processed = frame_idx - start_frame
         append_aggregate_time(aggregate_time_csv, video_id, elapsed, processed,
@@ -250,6 +325,11 @@ def run_asd_on_video(video_path,
 
 
 def main():
+    """Command-line entry point.
+
+    Raises:
+        SystemExit: If a requested video is not found or processing fails.
+    """
     args = parse_args()
     log_path = setup_logging('uniTalk_ASD', args.verbose, args.log_file)
 

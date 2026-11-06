@@ -17,7 +17,11 @@ POS, NEG = 'SPEAKING_AUDIBLE', 'NOT_SPEAKING'
 
 
 def _gt_rows(n_frames=50, seed=0):
-    """Two entities per frame, entity 'v:1' speaks in every other frame."""
+    """Two entities per frame, entity 'v:1' speaks in every other frame.
+
+    Returns:
+        list[dict]: GT rows in random order.
+    """
     rng = np.random.default_rng(seed)
     rows = []
     for f in range(n_frames):
@@ -33,7 +37,11 @@ def _gt_rows(n_frames=50, seed=0):
 
 
 def _preds(gt_rows, score_fn, with_entity, drop=lambda r: False, extra=()):
-    """Prediction boxes per timestamp built from the GT rows."""
+    """Prediction boxes per timestamp built from the GT rows.
+
+    Returns:
+        dict: timestamp -> list of ``_PredBox``.
+    """
     by_ts = {}
     for r in gt_rows:
         if drop(r):
@@ -54,6 +62,7 @@ def _metrics(gt_rows, preds, width=None):
 
 
 def test_gt_protocol_perfect_scores_give_map_1():
+    """Perfect scores on GT boxes give mAP 1."""
     gt = _gt_rows()
     protocol, m = _metrics(gt, _preds(gt, lambda r: float(r['ava_label'] == POS), True))
     assert protocol == 'gt'
@@ -63,6 +72,7 @@ def test_gt_protocol_perfect_scores_give_map_1():
 
 
 def test_gt_protocol_constant_scores_give_positive_rate():
+    """Constant scores give the positive rate as mAP and AUC 0.5."""
     gt = _gt_rows(400)
     _, m = _metrics(gt, _preds(gt, lambda r: 0.3, True))
     pos_rate = m['gt_positives'] / m['gt_boxes']
@@ -71,6 +81,7 @@ def test_gt_protocol_constant_scores_give_positive_rate():
 
 
 def test_gt_protocol_missing_predictions_get_score_zero():
+    """GT boxes without a prediction count with score 0."""
     gt = _gt_rows()
     _, m = _metrics(gt, _preds(gt, lambda r: float(r['ava_label'] == POS), True,
                                drop=lambda r: r['frame_timestamp'] < 0.5))
@@ -79,6 +90,7 @@ def test_gt_protocol_missing_predictions_get_score_zero():
 
 
 def test_detector_protocol_perfect_detector_equals_gt_protocol():
+    """A perfect detector gives the same result as the GT protocol."""
     gt = _gt_rows()
     score = lambda r: 0.9 if r['ava_label'] == POS else 0.2  # noqa: E731
     protocol, m = _metrics(gt, _preds(gt, score, False))
@@ -90,6 +102,7 @@ def test_detector_protocol_perfect_detector_equals_gt_protocol():
 
 
 def test_detector_protocol_dropped_faces_lower_map_and_recall():
+    """Missed faces lower the detector recall and the mAP."""
     gt = _gt_rows()
     score = lambda r: 0.9 if r['ava_label'] == POS else 0.2  # noqa: E731
     dropped = lambda r: r['entity_id'] == 'v:1' and r['frame_timestamp'] < 1.0  # noqa: E731
@@ -101,6 +114,7 @@ def test_detector_protocol_dropped_faces_lower_map_and_recall():
 
 
 def test_detector_protocol_false_detections_count_as_false_positives():
+    """Detections without a GT box are false positives."""
     gt = _gt_rows()
     score = lambda r: 0.9 if r['ava_label'] == POS else 0.2  # noqa: E731
     extra = [(round(f * 0.04, 2), (0.85, 0.5, 0.95, 0.7), 0.95) for f in range(50)]
@@ -111,6 +125,7 @@ def test_detector_protocol_false_detections_count_as_false_positives():
 
 
 def test_low_iou_detection_does_not_match():
+    """A detection below IoU 0.5 does not match."""
     gt = _gt_rows(10)
     preds = {}
     for r in gt:
@@ -123,6 +138,7 @@ def test_low_iou_detection_does_not_match():
 
 
 def test_face_size_bins():
+    """Face widths map to the AVA size bins."""
     assert stats.face_size_bin(10) == 'small'
     assert stats.face_size_bin(64) == 'medium'
     assert stats.face_size_bin(200) == 'large'
@@ -154,6 +170,7 @@ def test_official_script_agrees_on_written_ava_csvs(tmp_path):
 
 
 def test_old_prediction_files_without_score_column(tmp_path):
+    """Prediction files without a score column get scores from their labels."""
     path = tmp_path / 'p.csv'
     path.write_text('frame_idx,timestamp,label,x1,y1,x2,y2\n'
                     '0,0.0,speaking,0,0,1,1\n0,0.0,not-speaking,0,0,1,1\n'
@@ -163,6 +180,7 @@ def test_old_prediction_files_without_score_column(tmp_path):
 
 
 def test_annotated_range_covers_the_annotations_plus_warmup():
+    """The processed span covers the annotations plus the warm-up."""
     from src.experiments.run_full_pipeline import annotated_range
     rows = [(902.0, 'a', (0, 0, 1, 1)), (900.5, 'b', (0, 0, 1, 1)), (1799.9, 'a', (0, 0, 1, 1))]
     assert annotated_range(rows) == pytest.approx((899.5, 1800.4))
