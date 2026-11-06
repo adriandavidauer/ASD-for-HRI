@@ -338,8 +338,8 @@ def test_FaceDetectorYN_output_no_inpt_size():
 def test_PreprocessImages():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
-    w = random.randint(0, 1024)
-    h = random.randint(0, 1024)
+    w = random.randint(1, 1024)  # 0 would make cv2.resize fail
+    h = random.randint(1, 1024)
     preprocess_image = PreprocessImages((w, h), normalize=True)
     output_images = preprocess_image([test_image] * n)
     for output_image in output_images:
@@ -350,8 +350,8 @@ def test_PreprocessImages():
 def test_PreprocessImages_no_normalization():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
-    w = random.randint(0, 1024)
-    h = random.randint(0, 1024)
+    w = random.randint(1, 1024)  # 0 would make cv2.resize fail
+    h = random.randint(1, 1024)
     preprocess_image = PreprocessImages((w, h), normalize=False)
     output_images = preprocess_image([test_image] * n)
     for output_image in output_images:
@@ -362,8 +362,8 @@ def test_PreprocessImages_no_normalization():
 def test_PreprocessImages_with_Nones():
     """Test if the processor returns the correct output shape and range for values."""
     n = random.randint(1,10) # number of images
-    w = random.randint(0, 1024)
-    h = random.randint(0, 1024)
+    w = random.randint(1, 1024)  # 0 would make cv2.resize fail
+    h = random.randint(1, 1024)
     preprocess_image = PreprocessImages((w, h), normalize=True)
     input_images = [None, test_image, None] * n
     output_images = preprocess_image(input_images)
