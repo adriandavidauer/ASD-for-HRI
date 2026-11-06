@@ -1,18 +1,20 @@
-"""EasyCom dataset adapter (#82): AR-glasses conversations, converted to AVA-style ASD labels.
+r"""EasyCom dataset adapter (#82): AR-glasses conversations, converted to AVA-style ASD labels.
 
 EasyCom (Donley et al. 2021, https://github.com/facebookresearch/EasyComDataset, CC-BY-NC-4.0)
 has no official ASD protocol, so this module defines one:
 
 * ``video_id`` = ``Session_<s>_<file>`` (one-minute files, 20 fps, frames numbered 1..1200),
   ``entity_id`` = ``<video_id>:<participant id>``.
-* Boxes: the face boxes of ``Main/Face_Bounding_Boxes`` (pixels of the 1920x1080 camera image),
-  normalised by 1920x1080. ``frame_timestamp`` = (frame - 1) / 20.
+* Boxes: the face boxes of ``Main/Face_Bounding_Boxes`` are in pixels of the full video frame,
+  which has a participant banner on the left; the banner width (video width - 1920) is
+  subtracted and the boxes are normalised by the 1920x1080 camera image.
+  ``frame_timestamp`` = (frame - 1) / 20.
 * Label: SPEAKING_AUDIBLE if the frame lies inside one of the participant's
   ``Speech_Transcriptions`` segments [Start_Frame, End_Frame], else NOT_SPEAKING. The camera
   wearer has no face box and does not appear.
 * Splits from the EasyCom README: train 1,2,3,5-9; val 4,12; test 10,11; plus 'all'.
 * The videos have a participant-photo banner on the left (width 2123-2203 px), so the pipeline
-  crops every frame to the rightmost 1920 px (``frame_crop``); the boxes refer to that image.
+  crops every frame to the rightmost 1920 px (``frame_crop``), the image the boxes refer to.
 
 Download (only the needed folders, ~36 GB, streamed so the 70 GB archive is never stored)::
 
@@ -41,7 +43,14 @@ _COLUMNS = ['video_id', 'frame_timestamp', 'entity_box_x1', 'entity_box_y1', 'en
 
 
 def _load_json(path):
-    """Read an EasyCom JSON file; a few transcription files are Latin-1, not UTF-8."""
+    """Read an EasyCom JSON file; a few transcription files are Latin-1, not UTF-8.
+
+    Args:
+        path: The JSON file.
+
+    Returns:
+        The parsed content.
+    """
     raw = open(path, 'rb').read()
     try:
         return json.loads(raw.decode('utf-8'))
@@ -49,13 +58,15 @@ def _load_json(path):
         return json.loads(raw.decode('latin-1'))
 
 
-def convert_file(video_id, boxes_json, speech_json):
+def convert_file(video_id, boxes_json, speech_json, x_offset=0):
     """AVA-style GT rows for one one-minute file.
 
     Args:
         video_id: Id written into the rows.
         boxes_json: Parsed ``Face_Bounding_Boxes`` file (list of frames).
         speech_json: Parsed ``Speech_Transcriptions`` file (list of segments), or [].
+        x_offset: Width of the video's banner in pixels. The face boxes are in pixels of the
+            full video frame (banner included), so it is subtracted before normalising.
 
     Returns:
         list[list]: Rows in ``_COLUMNS`` order.
@@ -70,8 +81,9 @@ def convert_file(video_id, boxes_json, speech_json):
         ts = round((number - 1) / FPS, 3)
         for p in frame.get('Participants', []):
             pid = int(p['Participant_ID'])
-            x1, y1 = max(0.0, p['x1'] / WIDTH), max(0.0, p['y1'] / HEIGHT)
-            x2, y2 = min(1.0, p['x2'] / WIDTH), min(1.0, p['y2'] / HEIGHT)
+            x1 = max(0.0, (p['x1'] - x_offset) / WIDTH)
+            x2 = min(1.0, (p['x2'] - x_offset) / WIDTH)
+            y1, y2 = max(0.0, p['y1'] / HEIGHT), min(1.0, p['y2'] / HEIGHT)
             if x2 <= x1 or y2 <= y1:
                 continue
             talking = any(s <= number <= e for s, e in speaking.get(pid, ()))
@@ -86,10 +98,17 @@ class EasyComDataset:
     Args:
         root: Directory that contains ``Main/`` (e.g. ``data/easycom``).
         split: 'train', 'val', 'test' (default) or 'all'.
+
+    Raises:
+        ValueError: If ``split`` is unknown.
     """
 
     def __init__(self, root, split='test'):
-        """Index the videos of the split and write the GT CSV if missing."""
+        """Index the videos of the split and write the GT CSV if missing.
+
+        Raises:
+            ValueError: If ``split`` is unknown.
+        """
         if split not in SPLITS:
             raise ValueError(f'split must be one of {list(SPLITS)}, not {split}')
         self.root, self.split = root, split
@@ -111,7 +130,7 @@ class EasyComDataset:
         with open(tmp, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(_COLUMNS)
-            for video_id, (session, stem, _path) in self.videos.items():
+            for video_id, (session, stem, path) in self.videos.items():
                 boxes = os.path.join(self.main, 'Face_Bounding_Boxes', f'Session_{session}',
                                      f'{stem}.json')
                 speech = os.path.join(self.main, 'Speech_Transcriptions', f'Session_{session}',
@@ -120,16 +139,27 @@ class EasyComDataset:
                     continue
                 writer.writerows(convert_file(video_id, _load_json(boxes),
                                               _load_json(speech) if os.path.isfile(speech)
-                                              else []))
+                                              else [], x_offset=self.frame_crop(path)[0]))
         os.replace(tmp, self.groundtruth_csv)
 
     def video_list(self):
-        """``[(video_id, path, None)]`` in the format of ``load_video_list``."""
+        """List the split's videos in the format of ``load_video_list``.
+
+        Returns:
+            list[tuple]: ``(video_id, path, None)``.
+        """
         return [(vid, path, None) for vid, (_s, _f, path) in self.videos.items()]
 
     @staticmethod
     def frame_crop(video_path):
-        """``(x0, y0, x1, y1)`` of the camera image inside a video frame (banner removed)."""
+        """Region of the camera image inside a video frame (the banner removed).
+
+        Args:
+            video_path: The video.
+
+        Returns:
+            tuple: ``(x0, y0, x1, y1)`` in pixels.
+        """
         out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
                               '-show_entries', 'stream=width,height', '-of', 'csv=p=0',
                               str(video_path)], capture_output=True, text=True, check=True)

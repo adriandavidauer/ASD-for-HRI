@@ -206,7 +206,18 @@ class BufferFeatures(Processor):
         return batch_return
 
     def _call_keyed(self, batch_of_features, ids):
-        """``call`` with buffers keyed by entity id; see ``call``."""
+        """``call`` with buffers keyed by entity id; see ``call``.
+
+        Args:
+            batch_of_features: Features, one per entity; entries may be None.
+            ids: Unique entity ids, one per feature.
+
+        Returns:
+            list: Per entity its buffer if it is due, otherwise None.
+
+        Raises:
+            ValueError: If the ids are not unique or don't match the batch length.
+        """
         if len(ids) != len(batch_of_features):
             raise ValueError(f'Got {len(ids)} ids for {len(batch_of_features)} features')
         if len(set(ids)) != len(ids):
@@ -650,7 +661,8 @@ class FaceDetectorYN(Processor):
         # set input size if necessary
         if (image.shape[1], image.shape[0]) != self.input_size:
             self.detector.setInputSize((image.shape[1], image.shape[0]))
-        retval, faces = self.detector.detect(image)
+        # the ASD pipeline passes RGB frames, OpenCV's YuNet expects BGR (#77)
+        retval, faces = self.detector.detect(cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
         # create boxes2D with the corresponding points and the score and the label
         boxes2D = []
         if faces is not None: 
@@ -717,7 +729,8 @@ class FaceDetectorRetinaFace(Processor):
         """
         orig_height, orig_width, _ = image.shape
 
-        img = cv2.resize(image, (640, 640)).astype(np.float32)
+        # RGB in (as everywhere in the ASD pipeline); the model expects BGR with BGR means (#77)
+        img = cv2.resize(cv2.cvtColor(image, cv2.COLOR_RGB2BGR), (640, 640)).astype(np.float32)
         im_height, im_width, _ = img.shape
         # scale = np.array([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
         img -= (104, 117, 123)
