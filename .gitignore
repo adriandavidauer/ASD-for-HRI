@@ -38,6 +38,7 @@ share/python-wheels/
 MANIFEST
 data/
 logs/
+release_assets/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

@@ -9,6 +9,7 @@ from asd4hri.timing import StageTimer
 
 
 def test_stage_timer_records_calls_and_items():
+    """Calls, items and the per-stage statistics are recorded."""
     timer = StageTimer()
     for n in (1, 2, 3):
         with timer.stage('model', n):
@@ -26,6 +27,7 @@ def test_stage_timer_records_calls_and_items():
 
 
 def test_stage_timer_disabled_records_nothing():
+    """A disabled timer records nothing."""
     timer = StageTimer(enabled=False)
     with timer.stage('model', 1):
         pass
@@ -33,6 +35,7 @@ def test_stage_timer_disabled_records_nothing():
 
 
 def test_stage_timer_records_on_exception():
+    """A stage that raises is still recorded."""
     timer = StageTimer()
     with pytest.raises(RuntimeError):
         with timer.stage('model'):
