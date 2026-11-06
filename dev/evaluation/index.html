@@ -378,6 +378,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#easycom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EasyCom
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#comparable-metrics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -655,6 +666,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#easycom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EasyCom
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#comparable-metrics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -750,7 +772,7 @@ mounted directory must be writable by that user.</p>
 <td>Root data directory, i.e. the mount point (default <code>data</code>)</td>
 </tr>
 <tr>
-<td><code>--dataset {unitalk,ava,wasd}</code></td>
+<td><code>--dataset {unitalk,ava,wasd,easycom}</code></td>
 <td>Dataset to run over (default <code>unitalk</code>)</td>
 </tr>
 <tr>
@@ -840,6 +862,15 @@ videos (28.9 GB) are fetched with gdown from the official repository's Google Dr
 <code>protocol_results.csv</code> then also has one <code>category:&lt;code&gt;</code> row per WASD category: OC (optimal
 conditions), SI (speech impairment), FO (face occlusion), HVN (human voice noise) and SS
 (surveillance settings), taken from WASD's <code>wasd_metadata.csv</code>.</p>
+<h4 id="easycom">EasyCom</h4>
+<p><code>--dataset easycom --split test</code> (sessions 10, 11; <code>val</code> = 4, 12) evaluates on EasyCom
+(Donley et al. 2021; AR glasses at a table, 20 fps, CC-BY-NC-4.0), the dataset closest to a
+stationary social robot. EasyCom has no official ASD protocol; <code>easycom_dataset.py</code> defines one:
+a face counts as speaking in the frames covered by that participant's speech transcription
+segments, and the face boxes become AVA-style rows (<code>video_id</code> = <code>Session_&lt;s&gt;_&lt;file&gt;</code>). The
+videos carry a participant-photo banner on the left; it is cropped away before detection and
+the boxes are converted to the cropped image. Download (~36 GB of the 70 GB release, only the
+needed folders) with the command in the module docstring into <code>&lt;data_dir&gt;/easycom</code>.</p>
 <h4 id="comparable-metrics">Comparable metrics</h4>
 <p>Every run is scored with the <strong>official AVA script</strong> (<code>src/eval/get_ava_active_speaker_performance.py</code>)
 in the protocol that matches <code>--boxes</code>:</p>
