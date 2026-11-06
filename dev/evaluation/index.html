@@ -867,7 +867,12 @@ mounted directory must be writable by that user.</p>
 </tbody>
 </table>
 <p>Architectures: <code>VVAD-LRS3-LSTM</code>, <code>CNN2Plus1D</code>, <code>CNN2Plus1D_Filters</code>, <code>CNN2Plus1D_Layers</code>,
-<code>CNN2Plus1D_Light</code>, <code>LipShape</code>, <code>FaceShape</code>.</p>
+<code>CNN2Plus1D_Light</code>, <code>LipShape</code>, <code>FaceShape</code>, <code>LipShapeCausal</code>, <code>FaceShapeCausal</code>.</p>
+<p><code>LipShapeCausal</code> / <code>FaceShapeCausal</code> (#45) predict <strong>every frame from that frame and the frames
+before it</strong> (zero look-ahead), from the first frame of a face on. <code>--causal_mode streaming</code>
+(default) keeps one LSTM state per face and costs one step per frame; <code>--causal_mode window</code>
+re-runs the model on the last <code>--window</code> frames (default 38). Retrain them with
+<code>python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/</code>.</p>
 <p>UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With <code>--no_download</code>, nothing is downloaded and videos missing from <code>--data_dir</code> are skipped with a warning.</p>
 <p>The run above writes to the host:</p>
 <ul>
