@@ -41,7 +41,7 @@ def build_parser():
     )
     p.add_argument('--data_dir', default='data',
                    help='Root data directory (default: data/)')
-    p.add_argument('--dataset', default='unitalk', choices=['unitalk', 'ava', 'wasd'],
+    p.add_argument('--dataset', default='unitalk', choices=['unitalk', 'ava', 'wasd', 'easycom'],
                    help='Which dataset to run over (default: unitalk)')
     p.add_argument('--split', default='val',
                    help='Dataset split; UniTalk only (default: val)')
@@ -99,6 +99,11 @@ def load_video_list(args, data_dir: Path):
     Returns:
         list[tuple]: ``(video_id, video_path, url)`` per video.
     """
+    if args.dataset == 'easycom':
+        from .easycom_dataset import EasyComDataset
+        dataset = EasyComDataset(str(data_dir / 'easycom'), split=args.split)
+        return [(vid, Path(path), url) for vid, path, url in dataset.video_list()]
+
     if args.dataset == 'wasd':
         from .wasd_dataset import WasdDataset
         dataset = WasdDataset(str(data_dir / 'wasd'), split=args.split,
@@ -140,6 +145,22 @@ def load_video_list(args, data_dir: Path):
 
 
 # ── pipeline pass ─────────────────────────────────────────────────────────────
+
+def _frame_crop(dataset, video_path):
+    """Region of the frame to use: EasyCom videos carry a participant banner on the left.
+
+    Args:
+        dataset: Dataset name.
+        video_path: The video.
+
+    Returns:
+        tuple or None: ``(x0, y0, x1, y1)``, or None to use the whole frame.
+    """
+    if dataset == 'easycom':
+        from .easycom_dataset import EasyComDataset
+        return EasyComDataset.frame_crop(video_path)
+    return None
+
 
 def annotated_range(gt_rows, warmup_s=1.0, tail_s=0.5):
     """Time span of a video's annotations, widened by ``warmup_s`` for the temporal buffers.
@@ -226,7 +247,8 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture,
                 stride=int(stride),
                 groundtruth=None if gt_boxes is None else gt_boxes.get(vid, []),
-                time_range=annotated_range(all_gt.get(vid))
+                time_range=annotated_range(all_gt.get(vid)),
+                frame_crop=_frame_crop(args.dataset, video_path)
             )
         except Exception as exc:
             LOGGER.exception('Pipeline failed video=%s', vid)

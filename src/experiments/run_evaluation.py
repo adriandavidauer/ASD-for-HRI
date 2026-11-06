@@ -15,6 +15,7 @@ _DEFAULT_GROUNDTRUTH = {
     'unitalk': 'csv/val_orig.csv',
     'ava':     'ava/annotations/ava_val_groundtruth.csv',
     'wasd':    'wasd/csv/val_orig.csv',
+    'easycom': 'easycom/csv/{split}_orig.csv',   # --split val (sessions 4, 12) or test (10, 11)
 }
 
 
@@ -121,7 +122,8 @@ def main():
             LOGGER.error('video_id %s not found in video_list', args.video)
             raise SystemExit(1)
 
-    groundtruth_csv = data_dir / (args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset])
+    groundtruth_csv = data_dir / (args.groundtruth_csv or _DEFAULT_GROUNDTRUTH[args.dataset]
+                                  .format(split=args.split))
     processed, skipped, failed = run_pipeline_phase(args, video_list, result_dir,
                                                     architecture=args.architecture,
                                                     stride=args.stride,
