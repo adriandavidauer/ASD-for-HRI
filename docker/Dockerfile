@@ -69,7 +69,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install torch python_speech_features gdown yt-dlp pandas h5py scikit-learn wget pytest
 
 # smoke test on the target architecture: the pipeline builds and torch imports
-RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); import torch"
+RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); import torch, asd4hri.av"
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 VOLUME ["/app/data"]

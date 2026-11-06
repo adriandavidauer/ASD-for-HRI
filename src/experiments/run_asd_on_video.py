@@ -7,6 +7,7 @@ import os
 import time
 
 from asd4hri.asd import ASD
+from asd4hri.av import load_audio
 
 import cv2
 import numpy as np
@@ -192,6 +193,7 @@ def run_asd_on_video(video_path,
                     weighted: bool = True,
                     max_consecutive_empty: int = 2,
                     groundtruth=None, causal_mode='streaming', window=38,
+                    av_window=25, audio_fallback='noise', use_audio=True,
                     time_range=None, frame_crop=None):
     """Run ASD on one video and write predictions + timing rows.
 
@@ -211,6 +213,9 @@ def run_asd_on_video(video_path,
         max_consecutive_empty: frames a face may be missing before its buffer is cleared.
         frame_crop:         Optional ``(x0, y0, x1, y1)`` in pixels: every frame is cropped to
                             this region first (EasyCom's banner); boxes refer to the crop.
+        av_window:          frames per prediction of the audio-visual models ('AV:<model>', #80).
+        audio_fallback:     what the audio-visual models get without audio: 'noise' or 'visual'.
+        use_audio:          use the video's audio track (False tests the fallback).
         causal_mode:        'streaming' or 'window', for the causal landmark models (#45);
                             ignored by the other architectures.
         window:             frames per prediction in the causal 'window' mode.
@@ -243,7 +248,12 @@ def run_asd_on_video(video_path,
 
 
     pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty,
-                   causal_mode=causal_mode, window_size=window)
+                   causal_mode=causal_mode, window_size=window,
+                   av_window=av_window, audio_fallback=audio_fallback)
+    if pipeline.av is not None:
+        with pipeline.timer.stage('audio_decode'):
+            audio = load_audio(video_path) if use_audio else None
+        pipeline.set_audio(audio, native_fps)
     os.makedirs(os.path.dirname(predictions_csv) or '.', exist_ok=True)
 
     gt_index = _GroundTruthFrames(groundtruth, native_fps) if groundtruth is not None else None
@@ -287,11 +297,11 @@ def run_asd_on_video(video_path,
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # ASD expects RGB (#77)
             try:
                 if gt_index is None:
-                    output = pipeline(frame)
+                    output = pipeline(frame, timestamp=timestamp)
                 else:
                     gt_ts, gt_frame = gt_index.at(timestamp)
                     boxes, ids = gt_index.boxes2D(gt_frame, width, height)
-                    output = pipeline(frame, boxes, ids)
+                    output = pipeline(frame, boxes, ids, timestamp=timestamp)
                     timestamp = gt_ts if gt_frame else timestamp
                 if output is None:
                     frame_idx += 1

@@ -56,6 +56,12 @@ def build_parser():
                    help='Override the auto-generated log file path')
     p.add_argument('--stride', default=1,
                    help='Integer. How many frames are between the predictions (computational expansive (low stride) vs high latency (high stride))')
+    p.add_argument('--av_window', type=int, default=25,
+                   help="Frames per prediction for the audio-visual models 'AV:<model>' (#80)")
+    p.add_argument('--audio_fallback', default='noise', choices=['noise', 'visual'],
+                   help='What the audio-visual models get without audio (#40)')
+    p.add_argument('--no_audio', action='store_true',
+                   help='Ignore the audio track (tests the audio fallback)')
     p.add_argument('--causal_mode', default='streaming', choices=['streaming', 'window'],
                    help='Only for LipShapeCausal/FaceShapeCausal: one LSTM step per frame '
                         '(streaming) or the model on the last --window frames (window); see #45')
@@ -252,6 +258,9 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 aggregate_time_csv=str(aggregate_time_csv), video_id=vid, architecture=architecture,
                 stride=int(stride),
                 groundtruth=None if gt_boxes is None else gt_boxes.get(vid, []),
+                av_window=getattr(args, 'av_window', 25),
+                audio_fallback=getattr(args, 'audio_fallback', 'noise'),
+                use_audio=not getattr(args, 'no_audio', False),
                 causal_mode=getattr(args, 'causal_mode', 'streaming'),
                 window=getattr(args, 'window', 38),
                 time_range=annotated_range(all_gt.get(vid)),
