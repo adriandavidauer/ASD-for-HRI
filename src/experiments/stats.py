@@ -717,7 +717,9 @@ def write_aggregate_csv(result_dir, per_video, times_by_video=None):
         fps_values = []                        # per-video fps, for the average row
 
         for video_id, stats in per_video:
-            timing = times_by_video.get(video_id)
+            # runs without aggregate_time.csv still get scored, with blank timing columns
+            timing = times_by_video.get(video_id) or {
+                'frames_processed': 0, 'elapsed_seconds': 0.0, 'fps': 0.0}
             row = {
                 'video_id':          video_id,
                 'tp': stats.tp, 'tn': stats.tn, 'fp': stats.fp, 'fn': stats.fn,
@@ -760,7 +762,7 @@ def write_aggregate_csv(result_dir, per_video, times_by_video=None):
         micro_recall    = tot_tp / max(1, tot_tp + tot_fn)
         micro_f1        = 2 * micro_precision * micro_recall / max(1e-9, micro_precision + micro_recall)
         micro_accuracy  = tot_correct / max(1, tot_matched)
-        avg_fps = tot_frames / tot_elapsed
+        avg_fps = tot_frames / tot_elapsed if tot_elapsed else 0.0
         pooled_scores    = np.concatenate([s.ap_scores for _vid, s in per_video])
         pooled_positives = np.concatenate([s.ap_positives for _vid, s in per_video])
         writer.writerow({
