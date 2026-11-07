@@ -30,12 +30,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# audio-visual baselines (TalkNet, LR-ASD, ...; #40, #80). Their code comes from the git
-# submodules in src/, the weights are downloaded on first use.
+# audio-visual baselines (TalkNet, LR-ASD, Light-ASD, LRX-ASD; #40, #80). The networks come from
+# pyasd (LRX-ASD repo, Apache-2.0), pinned to a commit; the AVA weights are downloaded on first
+# use. gdown: TalkNet's original weights are on Google Drive.
 av = [
     "torch",
     "python_speech_features",
     "gdown",
+    "pyasd @ git+https://github.com/SebastianJanampa/LRX-ASD@ec5b72b77bcc6a4d2f8be9551e152f601db748d4",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -81,7 +83,7 @@ pythonpath = [
 ]
 
 [tool.ruff]
-extend-exclude = ["src/TalkNet-ASD", "src/LR-ASD", "trial", "docker"]
+extend-exclude = ["trial", "docker"]
 
 [tool.interrogate]
 ignore-init-method = true
@@ -89,5 +91,5 @@ ignore-magic = true
 ignore-private = true
 ignore-module = false
 fail-under = 0
-exclude = ["src/TalkNet-ASD", "src/LR-ASD", "trial", "docker", "build"]
+exclude = ["trial", "docker", "build"]
 verbose = 1

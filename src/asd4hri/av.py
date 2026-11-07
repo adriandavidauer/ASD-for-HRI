@@ -7,15 +7,17 @@ TalkNet, LR-ASD, Light-ASD and LRX-ASD share one input format:
   data loader, the MFCC window and step are scaled by ``25 / fps``, so the video does not have
   to be resampled to 25 fps.
 
-The models are PyTorch and live in their own repositories (git submodules under ``src/``).
-They are imported by path and need the optional extra ``pip install asd4hri[av]``.
+The networks come from the ``pyasd`` package (LRX-ASD repository, pinned in the ``av`` extra:
+``pip install asd4hri[av]``). The AVA weights are downloaded on first use into
+``$ASD4HRI_WEIGHTS`` (default ``src/models``) and checked against their SHA-256.
 ``AVClassifier`` buffers the crops of every face and predicts the newest frame from the last
 ``window`` frames plus the audio of the same span (no look-ahead beyond the current frame).
 """
 
-import importlib
+import hashlib
+import os
 import subprocess
-import sys
+import urllib.request
 from collections import deque
 from pathlib import Path
 
@@ -26,22 +28,34 @@ from paz.abstract import Processor
 from .timing import NULL_TIMER
 
 _SRC = Path(__file__).resolve().parent.parent
-_MODEL_DIR = _SRC / 'models'
+_PYASD_RELEASE = 'https://github.com/SebastianJanampa/LRX-ASD/releases/download/models_weight/'
 
-# name -> how to build it. 'repo' is the submodule directory, 'net' the model class,
-# 'cross_attention' whether the TalkNet cross-attention step runs between front end and back end.
+# name -> pyasd architecture and AVA weights. The LR-ASD and Light-ASD files of the pyasd
+# release are byte-identical to the authors' AVA weights. pyasd's TalkNet file is a retrained
+# model, so TalkNet uses the authors' original checkpoint (the one behind its 92.3 mAP).
 AV_MODELS = {
     'LR-ASD': {
-        'repo': 'LR-ASD', 'net': ('model.Model', 'ASD_Model'), 'cross_attention': False,
-        'weights': ('file', 'weight/pretrain_AVA.model'),
+        'pyasd': 'lrasd', 'file': 'lr_asd.model', 'url': _PYASD_RELEASE + 'lr_asd.model',
+        'sha256': 'e76d2e1d6d0f3b3d64468f055a03e44e074bca2bfc90d4a10af1b7fa4ae27091',
     },
     'TalkNet': {
-        'repo': 'TalkNet-ASD', 'net': ('model.talkNetModel', 'talkNetModel'),
-        'cross_attention': True,
-        'weights': ('gdrive', '1NVIkksrD3zbxbDuDbPc_846bLfPSZcZm', 'TalkNet_pretrain_AVA.model'),
+        'pyasd': 'talknet', 'file': 'TalkNet_pretrain_AVA.model',
+        'gdrive': '1NVIkksrD3zbxbDuDbPc_846bLfPSZcZm',
+        'sha256': 'a83d7e88c46633ebd06025337512a7d78edd8ebb8981b148b702c02de767a4e0',
+    },
+    'Light-ASD': {
+        'pyasd': 'lightasd', 'file': 'light_asd.model', 'url': _PYASD_RELEASE + 'light_asd.model',
+        'sha256': '7ed8c839e7eaa772ca0504e8bd9fc09901e7539561e9ae3465e7671f7a4079ec',
+    },
+    'LRX-ASD': {
+        'pyasd': 'lrxasd', 'file': 'lrx_asd.model', 'url': _PYASD_RELEASE + 'lrx_asd.model',
+        'sha256': '0219bb1295e8815feaf221c250bd3a149b14f3c245a77ffed87881a7954fe207',
     },
 }
 AV_PREFIX = 'AV:'
+
+# parameters that only exist for training (LRX-ASD's DINO head) and may be absent in a file
+_TRAINING_ONLY = ('dino_head.', 'center')
 
 
 def av_architectures():
@@ -115,91 +129,114 @@ def face_crop(image, box):
 
 # ── models ───────────────────────────────────────────────────────────────────
 
-def _import_from_repo(repo_dir, module, attr):
-    """Import ``module.attr`` from a model repo whose modules have generic names (model, loss).
-
-    Args:
-        repo_dir: The repo (submodule) directory.
-        module: Module with the network class, e.g. 'model.Model'.
-        attr: Class name.
+def weights_dir():
+    """Folder for the downloaded AV weights: ``$ASD4HRI_WEIGHTS`` or ``src/models``.
 
     Returns:
-        tuple: ``(network class, lossAV class, lossV class)``.
+        pathlib.Path: The folder.
     """
-    repo_dir = str(repo_dir)
-    clashing = [m for m in list(sys.modules) if m in ('model', 'loss') or m.startswith('model.')]
-    saved = {m: sys.modules.pop(m) for m in clashing}
-    sys.path.insert(0, repo_dir)
-    try:
-        net_cls = getattr(importlib.import_module(module), attr)
-        loss = importlib.import_module('loss')
-        return net_cls, loss.lossAV, loss.lossV
-    finally:
-        sys.path.remove(repo_dir)
-        for m in [m for m in list(sys.modules) if m in ('model', 'loss') or m.startswith('model.')]:
-            sys.modules.pop(m)
-        sys.modules.update(saved)
+    return Path(os.environ.get('ASD4HRI_WEIGHTS', _SRC / 'models'))
+
+
+def _sha256(path):
+    """SHA-256 of a file.
+
+    Args:
+        path: The file.
+
+    Returns:
+        str: Hex digest.
+    """
+    digest = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def weights_path(name):
-    """Local path of a model's AVA weights, downloading them if needed.
+    """Local path of a model's AVA weights, downloading and checking them if needed.
 
     Args:
         name: Key of ``AV_MODELS``.
 
     Returns:
         pathlib.Path: The weights file.
+
+    Raises:
+        RuntimeError: If the file does not have the expected SHA-256.
     """
-    spec = AV_MODELS[name]['weights']
-    if spec[0] == 'file':
-        return _SRC / AV_MODELS[name]['repo'] / spec[1]
-    path = _MODEL_DIR / spec[2]
+    spec = AV_MODELS[name]
+    path = weights_dir() / spec['file']
     if not path.is_file():
-        import gdown
         path.parent.mkdir(parents=True, exist_ok=True)
-        gdown.download(id=spec[1], output=str(path), quiet=True)
+        tmp = path.with_suffix(path.suffix + '.part')
+        if 'gdrive' in spec:
+            import gdown
+            gdown.download(id=spec['gdrive'], output=str(tmp), quiet=True)
+        else:
+            urllib.request.urlretrieve(spec['url'], tmp)
+        tmp.replace(path)
+    if _sha256(path) != spec['sha256']:
+        raise RuntimeError(f'{path}: unexpected SHA-256, delete it to download it again')
     return path
 
 
+def _rename(key):
+    """Map a state-dict key of the original repos (or pyasd) to pyasd's module names.
+
+    The original checkpoints wrap the network as ``model.*`` and call the heads
+    ``lossAV`` / ``lossV`` / ``lossA``; pyasd calls them ``av_head`` / ``v_head`` / ``a_head``.
+
+    Args:
+        key: State-dict key.
+
+    Returns:
+        str: The key in pyasd's naming.
+    """
+    for prefix in ('module.', 'model.'):
+        if key.startswith(prefix):
+            key = key[len(prefix):]
+    for old, new in (('lossAV.', 'av_head.'), ('lossV.', 'v_head.'), ('lossA.', 'a_head.')):
+        if key.startswith(old):
+            key = new + key[len(old):]
+    return key
+
+
 class AVModel:
-    """One TalkNet-family model, ready for inference.
+    """One TalkNet-family model from ``pyasd``, ready for inference.
 
     Args:
         name: Key of ``AV_MODELS``.
         device: 'cuda', 'cpu' or None (cuda if available).
+        deploy: Fuse the re-parameterisable branches (LRX-ASD) for speed. This removes the
+            visual-only head, so ``scores(video, None)`` is then not available.
     """
 
-    def __init__(self, name, device=None):
+    def __init__(self, name, device=None, deploy=False):
         """Build the network and load its AVA weights.
 
         Raises:
-            RuntimeError: If less than 95 % of the weights match the network.
+            RuntimeError: If the weights do not fit the network.
         """
         import torch
+        from pyasd.engine.model import MODELS
         self.torch = torch
-        spec = AV_MODELS[name]
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
-        net_cls, loss_av, loss_v = _import_from_repo(_SRC / spec['repo'], *spec['net'])
-
-        # same attribute names as the repos' training wrappers, so the state dict keys match
-        class Wrapper(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.model, self.lossAV, self.lossV = net_cls(), loss_av(), loss_v()
-
-        self.net = Wrapper()
-        state = torch.load(weights_path(name), map_location='cpu')
-        own = self.net.state_dict()
-        loaded = 0
-        for key, value in state.items():
-            key = key.replace('module.', '')
-            if key in own and own[key].shape == value.shape:
-                own[key].copy_(value)
-                loaded += 1
-        if loaded < len(own) * 0.95:
-            raise RuntimeError(f'{name}: only {loaded}/{len(own)} weights matched')
-        self.net.to(self.device).eval()
-        self.cross_attention = spec['cross_attention']
+        self.net = MODELS[AV_MODELS[name]['pyasd']]()
+        state = torch.load(weights_path(name), map_location='cpu', weights_only=True)
+        if isinstance(state, dict) and 'model' in state and isinstance(state['model'], dict):
+            state = state['model']
+        state = {_rename(k): v for k, v in state.items()}
+        missing, unexpected = self.net.load_state_dict(state, strict=False)
+        missing = [k for k in missing if not k.startswith(_TRAINING_ONLY)]
+        if missing or unexpected:
+            raise RuntimeError(f'{name}: weights do not fit, missing {missing[:5]}, '
+                               f'unexpected {unexpected[:5]}')
+        self.net.eval()
+        if deploy and hasattr(self.net, 'deploy'):
+            self.net = self.net.deploy()
+        self.net.to(self.device)
 
     def scores(self, video, audio=None):
         """Speaking probabilities for every frame of a batch of equal-length tracks.
@@ -210,23 +247,23 @@ class AVModel:
 
         Returns:
             numpy.ndarray: ``(B, T)`` probabilities.
+
+        Raises:
+            RuntimeError: For ``audio=None`` on a deployed model (no visual-only head).
         """
-        torch = self.torch
-        m, B, T = self.net.model, video.shape[0], video.shape[1]
+        torch, net = self.torch, self.net
+        B, T = video.shape[0], video.shape[1]
         with torch.no_grad():
-            v = m.forward_visual_frontend(torch.as_tensor(video, dtype=torch.float32,
-                                                          device=self.device))
+            v = torch.as_tensor(video, dtype=torch.float32, device=self.device)
+            v = (v / 255.0).unsqueeze(2)                      # (B, T, 1, 112, 112) in [0, 1]
             if audio is None:
-                x = m.forward_visual_backend(v)
-                logits = self.net.lossV.FC(x)
+                if not hasattr(net, 'v_head'):
+                    raise RuntimeError('visual-only scores need deploy=False')
+                logits = net.v_head(net.forward_visual_backend(net.forward_visual_frontend(v)))
+                prob = torch.softmax(logits, dim=-1)[..., 1]
             else:
-                a = m.forward_audio_frontend(torch.as_tensor(audio, dtype=torch.float32,
-                                                             device=self.device))
-                if self.cross_attention:
-                    a, v = m.forward_cross_attention(a, v)
-                x = m.forward_audio_visual_backend(a, v)
-                logits = self.net.lossAV.FC(x)
-            prob = torch.softmax(logits, dim=-1)[:, 1]
+                a = torch.as_tensor(audio, dtype=torch.float32, device=self.device)
+                prob = net(v, a.transpose(1, 2))['pred_scores'][..., 1]   # audio (B, 13, 4T)
         return prob.reshape(B, T).cpu().numpy()
 
 
@@ -259,7 +296,7 @@ class AVClassifier(Processor):
         super().__init__()
         if audio_fallback not in ('noise', 'visual'):
             raise ValueError(f"audio_fallback must be 'noise' or 'visual', not {audio_fallback}")
-        self.model = AVModel(name, device)
+        self.model = AVModel(name, device, deploy=audio_fallback == 'noise')
         self.window, self.stride = window, stride
         self.max_consecutive_empty = max_consecutive_empty
         self.audio_fallback = audio_fallback

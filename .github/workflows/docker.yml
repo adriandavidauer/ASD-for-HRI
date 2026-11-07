@@ -51,8 +51,6 @@ jobs:
           df -h /
 
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - uses: docker/setup-buildx-action@v4
 
