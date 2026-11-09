@@ -873,8 +873,12 @@ before it</strong> (zero look-ahead), from the first frame of a face on. <code>-
 (default) keeps one LSTM state per face and costs one step per frame; <code>--causal_mode window</code>
 re-runs the model on the last <code>--window</code> frames (default 38). Retrain them with
 <code>python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/</code>.</p>
-<p>Audio-visual baselines (#40, #80; <code>pip install -e '.[av]'</code>, needs the git submodules):
-<code>AV:LR-ASD</code> (0.84 M parameters) and <code>AV:TalkNet</code> (15.7 M), both with their AVA weights. They
+<p>Audio-visual baselines (#40, #80; <code>pip install -e '.[av]'</code>): <code>AV:LRX-ASD</code> (0.50 M parameters),
+<code>AV:LR-ASD</code> (0.84 M), <code>AV:Light-ASD</code> (1.02 M) and <code>AV:TalkNet</code> (15.7 M), all with their AVA
+weights. The networks come from <a href="https://github.com/SebastianJanampa/LRX-ASD">pyasd</a>, pinned to a
+commit; the weights are downloaded on first use into <code>$ASD4HRI_WEIGHTS</code> (default <code>src/models</code>,
+in the image <code>/opt/asd4hri/weights</code>) and checked by SHA-256. TalkNet uses the authors' original
+checkpoint, because pyasd's TalkNet file is a retrained model. They
 use the video's own audio track; every face is scored for its newest frame from the last
 <code>--av_window</code> frames (default 25) and the audio of the same span. Without audio,
 <code>--audio_fallback noise</code> (default) feeds low-level noise and <code>visual</code> uses the model's
