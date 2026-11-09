@@ -4,7 +4,7 @@ Runs the benchmark from #83 as a Slurm job array on the cluster: one array task 
 model × dataset × boxes combination, each on one GPU. The results land in the same
 `benchmark/<run>/` layout as on the workstation, so one table can be built from both.
 
-Needs: an account on `lnode01` and about 110 GB of free space under `/mnt/beegfs/data`.
+Needs: an account on `lnode01` and about 60 GB of free space under `/mnt/beegfs/data`.
 
 ## 1. Image
 
@@ -34,12 +34,17 @@ container, so it needs this layout (the same as the workstation's data root):
 └── easycom/    EasyCom videos + csv/
 ```
 
-Copy it from the workstation, for example:
+Copy it from the PC that holds the data with `cluster/sync_data.sh`. It copies only the files the
+benchmark reads, about 58 GB: no WASD source videos, no extracted UniTalk frames, no training CSVs.
+It can be stopped and started again.
 
 ```bash
-rsync -a --info=progress2 /Data/data/{ava,videos,csv,wasd,easycom} \
-    <user>@lnode01:/mnt/beegfs/data/asd4hri/
+CLUSTER_USER=<user> cluster/sync_data.sh unitalk        # 0.7 GB, enough for the first test job
+CLUSTER_USER=<user> cluster/sync_data.sh                 # all: unitalk wasd easycom ava
 ```
+
+`SRC` (default `/Data/data`) and `DEST` (default `/mnt/beegfs/data/asd4hri`) can be changed the same
+way.
 
 The cluster storage is not backed up and is shared: delete the datasets when the benchmark is done.
 
