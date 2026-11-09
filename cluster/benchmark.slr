@@ -20,7 +20,8 @@
 # paths on the cluster; override with environment variables when submitting
 IMAGE=${IMAGE:-/mnt/beegfs/public/images/asd4hri/asd4hri.sif}
 # holds ava/ videos/ csv/ wasd/ easycom/; benchmark/ and logs/ are written here
-DATA=${DATA:-/mnt/beegfs/data/asd4hri}
+DATA=${DATA:-$HOME/SCRATCH/asd4hri}
+DATA=$(readlink -f "$DATA")         # ~/SCRATCH is a link; bind the real folder
 TAG=${TAG:-cluster}
 
 MODELS=(LipShapeCausal FaceShapeCausal CNN2Plus1D_Light AV:LR-ASD AV:TalkNet)

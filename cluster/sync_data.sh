@@ -13,7 +13,8 @@ set -euo pipefail
 SRC=${SRC:-/Data/data}                                  # local data root
 HOST=${HOST:-lnode01}
 CLUSTER_USER=${CLUSTER_USER:-$USER}
-DEST=${DEST:-/mnt/beegfs/data/asd4hri}                  # = DATA in cluster/benchmark.slr
+# on the cluster, relative to your home there: ~/SCRATCH is the link to your scratch space
+DEST=${DEST:-SCRATCH/asd4hri}                           # = DATA in cluster/benchmark.slr
 
 cd "$SRC"                                               # before the globs below expand
 # relative to SRC; "./" marks where the path on the cluster starts (rsync -R)
