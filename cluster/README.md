@@ -4,7 +4,8 @@ Runs the benchmark from #83 as a Slurm job array on the cluster: one array task 
 model × dataset × boxes combination, each on one GPU. The results land in the same
 `benchmark/<run>/` layout as on the workstation, so one table can be built from both.
 
-Needs: an account on `lnode01` and about 60 GB of free space under `/mnt/beegfs/data`.
+Needs: an account on `lnode01` and about 60 GB of free space in your scratch folder (`~/SCRATCH`, a link in your home folder
+on the cluster).
 
 ## 1. Image
 
@@ -13,8 +14,8 @@ The Singularity image is converted from the public multi-arch image on GHCR
 weights. Converting needs no root and no definition file, so it can be done on `lnode01` directly:
 
 ```bash
-mkdir -p /mnt/beegfs/public/images/asd4hri && cd /mnt/beegfs/public/images/asd4hri
-singularity pull asd4hri.sif docker://ghcr.io/adriandavidauer/asd-for-hri:main
+mkdir -p ~/SCRATCH/images && cd ~/SCRATCH/images
+singularity pull --force asd4hri.sif docker://ghcr.io/adriandavidauer/asd-for-hri:main
 ```
 
 Pull again after a new image is published on `main`. For a fixed version use the
@@ -26,7 +27,7 @@ One folder holds the datasets and receives the results. It is mounted as `/app/d
 container, so it needs this layout (the same as the workstation's data root):
 
 ```text
-/mnt/beegfs/data/asd4hri/
+~/SCRATCH/asd4hri/
 ├── ava/        AVA val videos + annotations/
 ├── videos/     UniTalk videos (val/)
 ├── csv/        UniTalk annotation CSVs
@@ -43,7 +44,7 @@ CLUSTER_USER=<user> cluster/sync_data.sh unitalk        # 0.7 GB, enough for the
 CLUSTER_USER=<user> cluster/sync_data.sh                 # all: unitalk wasd easycom ava
 ```
 
-`SRC` (default `/Data/data`) and `DEST` (default `/mnt/beegfs/data/asd4hri`) can be changed the same
+`SRC` (default `/Data/data`) and `DEST` (default `SCRATCH/asd4hri`, relative to your home folder on the cluster) can be changed the same
 way.
 
 The cluster storage is not backed up and is shared: delete the datasets when the benchmark is done.
@@ -72,8 +73,8 @@ Every task also rewrites `benchmark/benchmark.csv`, and parallel tasks can overw
 version. So when all tasks are done, build the table once more:
 
 ```bash
-singularity exec --containall --bind /mnt/beegfs/data/asd4hri:/app/data \
-    /mnt/beegfs/public/images/asd4hri/asd4hri.sif \
+singularity exec --containall --bind $(readlink -f ~/SCRATCH/asd4hri):/app/data \
+    $(readlink -f ~/SCRATCH/images/asd4hri.sif) \
     bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --collect_only"
 ```
 
