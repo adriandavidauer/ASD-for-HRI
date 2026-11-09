@@ -51,7 +51,8 @@ The cluster storage is not backed up and is shared: delete the datasets when the
 
 ## 3. Submit
 
-On `lnode01`, in a checkout of this repository:
+On `lnode01`, in a checkout of this repository (e.g. `~/repos/ASD-for-HRI`); Slurm writes the logs
+to `logs/` in the folder you submit from, so create it first:
 
 ```bash
 bash cluster/benchmark.slr --list            # the index of every run

@@ -36,7 +36,8 @@ for d in "${DATASETS[@]}"; do
 done
 
 if [ "$1" = "--list" ]; then
-  for i in "${!RUNS[@]}"; do echo "$i ${RUNS[$i]}"; done
+  # 2>/dev/null: no "Broken pipe" noise when the list is piped into head
+  for i in "${!RUNS[@]}"; do echo "$i ${RUNS[$i]}"; done 2>/dev/null
   exit 0
 fi
 
