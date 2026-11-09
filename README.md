@@ -105,7 +105,8 @@ re-runs the model on the last `--window` frames (default 38). Retrain them with
 
 Audio-visual baselines (#40, #80; `pip install -e '.[av]'`): `AV:LRX-ASD` (0.50 M parameters),
 `AV:LR-ASD` (0.84 M), `AV:Light-ASD` (1.02 M) and `AV:TalkNet` (15.7 M), all with their AVA
-weights. The networks come from [pyasd](https://github.com/SebastianJanampa/LRX-ASD), pinned to a
+weights, and `AV:FabuLight` (1.02 M): FabuLight-ASD without body pose, the Light-ASD network
+trained on **WASD**. The networks come from [pyasd](https://github.com/SebastianJanampa/LRX-ASD), pinned to a
 commit; the weights are downloaded on first use into `$ASD4HRI_WEIGHTS` (default `src/models`,
 in the image `/opt/asd4hri/weights`) and checked by SHA-256. TalkNet uses the authors' original
 checkpoint, because pyasd's TalkNet file is a retrained model. They

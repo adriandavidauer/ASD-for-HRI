@@ -1,6 +1,6 @@
 """Audio-visual ASD models (TalkNet family) inside the asd4hri pipeline (#40, #80).
 
-TalkNet, LR-ASD, Light-ASD and LRX-ASD share one input format:
+TalkNet, LR-ASD, Light-ASD, LRX-ASD and FabuLight share one input format:
 
 * video: grey 112x112 face crops of one face track, ``(B, T, 112, 112)`` uint8;
 * audio: 13 MFCCs with 4 audio frames per video frame, ``(B, 4T, 13)``. As in TalkNet's AVA
@@ -8,7 +8,8 @@ TalkNet, LR-ASD, Light-ASD and LRX-ASD share one input format:
   to be resampled to 25 fps.
 
 The networks come from the ``pyasd`` package (LRX-ASD repository, pinned in the ``av`` extra:
-``pip install asd4hri[av]``). The AVA weights are downloaded on first use into
+``pip install asd4hri[av]``); FabuLight-ASD is pyasd's Light-ASD with FabuLight's WASD
+weights. The weights are downloaded on first use into
 ``$ASD4HRI_WEIGHTS`` (default ``src/models``) and checked against their SHA-256.
 ``AVClassifier`` buffers the crops of every face and predicts the newest frame from the last
 ``window`` frames plus the audio of the same span (no look-ahead beyond the current frame).
@@ -29,6 +30,10 @@ from .timing import NULL_TIMER
 
 _SRC = Path(__file__).resolve().parent.parent
 _PYASD_RELEASE = 'https://github.com/SebastianJanampa/LRX-ASD/releases/download/models_weight/'
+_FABULIGHT = ('https://raw.githubusercontent.com/knowledgetechnologyuhh/FabuLight-ASD/'
+              '265c5ce95b55830a2622ce35ae6556dd50289fc0/exps/exp_0.001_0.95_60_2000_Adam_epochStep_'
+              '0.0_1.3_linear_0.02_112_F_fabulight_config/model/best_0044.model')
+_VISUAL_MEAN, _VISUAL_STD = 0.4161, 0.1688        # pyasd's normalisation of the grey crops
 
 # name -> pyasd architecture and AVA weights. The LR-ASD and Light-ASD files of the pyasd
 # release are byte-identical to the authors' AVA weights. pyasd's TalkNet file is a retrained
@@ -52,6 +57,13 @@ AV_MODELS = {
     'LRX-ASD': {
         'pyasd': 'lrxasd', 'file': 'lrx_asd.model', 'url': _PYASD_RELEASE + 'lrx_asd.model',
         'sha256': '0219bb1295e8815feaf221c250bd3a149b14f3c245a77ffed87881a7954fe207',
+    },
+    # FabuLight-ASD without body pose (MIT): the Light-ASD network trained on WASD instead of
+    # AVA, with another std for the crops (0.2380). Same outputs as its own code (tested).
+    'FabuLight': {
+        'pyasd': 'lightasd', 'file': 'fabulight_wasd.model', 'url': _FABULIGHT,
+        'sha256': '40dfff26c90140194c0f6269f6a50840cb9de84e9c5947d830bc8c44863b3845',
+        'visual_std': 0.2380,
     },
 }
 AV_PREFIX = 'AV:'
@@ -187,8 +199,10 @@ def weights_path(name):
 def _rename(key):
     """Map a state-dict key of the original repos (or pyasd) to pyasd's module names.
 
-    The original checkpoints wrap the network as ``model.*`` and call the heads
-    ``lossAV`` / ``lossV`` / ``lossA``; pyasd calls them ``av_head`` / ``v_head`` / ``a_head``.
+    The original checkpoints wrap the network as ``model.*`` (``model.module.*`` with
+    DataParallel) and call the heads ``lossAV`` / ``lossV`` / ``lossA``; pyasd calls them
+    ``av_head`` / ``v_head`` / ``a_head``. FabuLight names the visual encoder ``faceEncoder``,
+    the GRU ``GRUFA`` and the heads ``lossFA`` / ``lossF``.
 
     Args:
         key: State-dict key.
@@ -196,12 +210,16 @@ def _rename(key):
     Returns:
         str: The key in pyasd's naming.
     """
-    for prefix in ('module.', 'model.'):
-        if key.startswith(prefix):
-            key = key[len(prefix):]
-    for old, new in (('lossAV.', 'av_head.'), ('lossV.', 'v_head.'), ('lossA.', 'a_head.')):
+    parts = [p for p in key.split('.') if p != 'module']
+    if parts[0] == 'model':
+        parts = parts[1:]
+    key = '.'.join(parts)
+    for old, new in (('lossAV.', 'av_head.'), ('lossV.', 'v_head.'), ('lossA.', 'a_head.'),
+                     ('lossFA.', 'av_head.'), ('lossF.', 'v_head.'),
+                     ('faceEncoder.', 'visualEncoder.'), ('GRUFA.', 'GRU.')):
         if key.startswith(old):
             key = new + key[len(old):]
+            break
     return key
 
 
@@ -227,6 +245,8 @@ class AVModel:
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.net = MODELS[AV_MODELS[name]['pyasd']]()
         self.cross_attention = AV_MODELS[name].get('cross_attention', False)
+        # rescale the crops so that pyasd's normalisation gives the model's own std
+        self.visual_scale = _VISUAL_STD / AV_MODELS[name].get('visual_std', _VISUAL_STD)
         state = torch.load(weights_path(name), map_location='cpu', weights_only=True)
         if isinstance(state, dict) and 'model' in state and isinstance(state['model'], dict):
             state = state['model']
@@ -258,7 +278,10 @@ class AVModel:
         B, T = video.shape[0], video.shape[1]
         with torch.no_grad():
             v = torch.as_tensor(video, dtype=torch.float32, device=self.device)
-            v = (v / 255.0).unsqueeze(2)                      # (B, T, 1, 112, 112) in [0, 1]
+            v = v / 255.0
+            if self.visual_scale != 1.0:
+                v = _VISUAL_MEAN + (v - _VISUAL_MEAN) * self.visual_scale
+            v = v.unsqueeze(2)                                # (B, T, 1, 112, 112)
             if audio is None:
                 if not hasattr(net, 'v_head'):
                     raise RuntimeError('visual-only scores need deploy=False')
