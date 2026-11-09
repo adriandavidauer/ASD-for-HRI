@@ -42,6 +42,8 @@ AV_MODELS = {
         'pyasd': 'talknet', 'file': 'TalkNet_pretrain_AVA.model',
         'gdrive': '1NVIkksrD3zbxbDuDbPc_846bLfPSZcZm',
         'sha256': 'a83d7e88c46633ebd06025337512a7d78edd8ebb8981b148b702c02de767a4e0',
+        # pyasd's TalkNet.forward skips this step of the original model, so ``scores`` runs it
+        'cross_attention': True,
     },
     'Light-ASD': {
         'pyasd': 'lightasd', 'file': 'light_asd.model', 'url': _PYASD_RELEASE + 'light_asd.model',
@@ -224,6 +226,7 @@ class AVModel:
         self.torch = torch
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.net = MODELS[AV_MODELS[name]['pyasd']]()
+        self.cross_attention = AV_MODELS[name].get('cross_attention', False)
         state = torch.load(weights_path(name), map_location='cpu', weights_only=True)
         if isinstance(state, dict) and 'model' in state and isinstance(state['model'], dict):
             state = state['model']
@@ -263,7 +266,12 @@ class AVModel:
                 prob = torch.softmax(logits, dim=-1)[..., 1]
             else:
                 a = torch.as_tensor(audio, dtype=torch.float32, device=self.device)
-                prob = net(v, a.transpose(1, 2))['pred_scores'][..., 1]   # audio (B, 13, 4T)
+                a = net.forward_audio_frontend(a.transpose(1, 2))      # MFCCs as (B, 13, 4T)
+                v = net.forward_visual_frontend(v)
+                if self.cross_attention:
+                    a, v = net.forward_cross_attention(a, v)
+                logits = net.av_head(net.forward_audio_visual_backend(a, v))
+                prob = torch.softmax(logits, dim=-1)[..., 1]
         return prob.reshape(B, T).cpu().numpy()
 
 
