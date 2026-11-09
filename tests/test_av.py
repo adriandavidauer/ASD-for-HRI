@@ -7,10 +7,47 @@ import pytest
 
 torch = pytest.importorskip('torch')
 pytest.importorskip('python_speech_features')
+pytest.importorskip('pyasd')
 
-from asd4hri.av import AVClassifier, face_crop, load_audio, mfcc_window  # noqa: E402
+from asd4hri.av import (AV_MODELS, AVClassifier, AVModel, face_crop, load_audio,  # noqa: E402
+                        mfcc_window)
 
 VIDEO = Path(__file__).parent / '001.avi'
+# scores of the previous implementation (the authors' repos as git submodules) on fixed inputs
+REFERENCE = Path(__file__).parent / 'av_reference.npz'
+
+
+def _reference_inputs():
+    """The fixed inputs the reference scores were computed on.
+
+    Returns:
+        tuple: ``(video (2, 25, 112, 112) uint8, audio (2, 100, 13) float32)``.
+    """
+    rng = np.random.default_rng(0)
+    video = rng.integers(0, 255, (2, 25, 112, 112), dtype=np.uint8)
+    video = ((video.astype(np.float32) + np.roll(video, 1, -1)) / 2).astype(np.uint8)
+    audio = rng.normal(0, 10, (2, 100, 13)).astype(np.float32)
+    return video, audio
+
+
+@pytest.mark.parametrize('name', ['LR-ASD', 'TalkNet'])
+def test_pyasd_models_match_the_original_repos(name):
+    """With the AVA weights, pyasd gives the scores of the authors' code, with and without audio."""
+    video, audio = _reference_inputs()
+    ref = np.load(REFERENCE)
+    model = AVModel(name, device='cpu')
+    np.testing.assert_allclose(model.scores(video, audio), ref[f'{name}_av'], atol=1e-5)
+    np.testing.assert_allclose(model.scores(video, None), ref[f'{name}_v'], atol=1e-5)
+
+
+@pytest.mark.parametrize('name', list(AV_MODELS))
+def test_every_av_model_loads_and_scores_every_frame(name):
+    """Every AV model loads its AVA weights and returns one probability per frame."""
+    video, audio = _reference_inputs()
+    for deploy in (False, True):
+        out = AVModel(name, device='cpu', deploy=deploy).scores(video[:, :8], audio[:, :32])
+        assert out.shape == (2, 8)
+        assert np.all((out >= 0) & (out <= 1))
 
 
 def test_mfcc_window_has_four_rows_per_frame():

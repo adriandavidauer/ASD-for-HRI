@@ -32,7 +32,7 @@ docker run --rm --gpus all --user $(id -u):$(id -g) -v /Data/data:/app/data \
 
 `--user $(id -u):$(id -g)` makes the results on the data mount yours; the model weights live
 outside `$HOME`, so any uid works. Build locally with
-`git submodule update --init && docker build -f docker/Dockerfile -t asd4hri .`
+`docker build -f docker/Dockerfile -t asd4hri .`
 (targets: `base` = asd4hri only, `experiments` = default, adds the evaluation and PyTorch deps).
 `docker/Dockerfile_GPU` (also the devcontainer) and `docker/Dockerfile_PI` are kept for now.
 
@@ -103,8 +103,12 @@ before it** (zero look-ahead), from the first frame of a face on. `--causal_mode
 re-runs the model on the last `--window` frames (default 38). Retrain them with
 `python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/`.
 
-Audio-visual baselines (#40, #80; `pip install -e '.[av]'`, needs the git submodules):
-`AV:LR-ASD` (0.84 M parameters) and `AV:TalkNet` (15.7 M), both with their AVA weights. They
+Audio-visual baselines (#40, #80; `pip install -e '.[av]'`): `AV:LRX-ASD` (0.50 M parameters),
+`AV:LR-ASD` (0.84 M), `AV:Light-ASD` (1.02 M) and `AV:TalkNet` (15.7 M), all with their AVA
+weights. The networks come from [pyasd](https://github.com/SebastianJanampa/LRX-ASD), pinned to a
+commit; the weights are downloaded on first use into `$ASD4HRI_WEIGHTS` (default `src/models`,
+in the image `/opt/asd4hri/weights`) and checked by SHA-256. TalkNet uses the authors' original
+checkpoint, because pyasd's TalkNet file is a retrained model. They
 use the video's own audio track; every face is scored for its newest frame from the last
 `--av_window` frames (default 25) and the audio of the same span. Without audio,
 `--audio_fallback noise` (default) feeds low-level noise and `visual` uses the model's

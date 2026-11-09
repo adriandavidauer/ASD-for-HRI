@@ -11,7 +11,6 @@
 #
 # Published by .github/workflows/docker.yml as ghcr.io/adriandavidauer/asd-for-hri:<tag>,
 # `docker pull` picks the right architecture. Local build (current architecture):
-#   git submodule update --init
 #   docker build -f docker/Dockerfile -t asd4hri .
 # Run as yourself so that results on the data mount belong to you:
 #   docker run --rm --gpus all --user $(id -u):$(id -g) -v /Data/data:/app/data \
@@ -66,15 +65,21 @@ FROM base AS experiments
 ARG TARGETARCH
 # torch on amd64: the CUDA 12.6 build, because the default PyPI wheel (CUDA 13) only runs on
 # compute capability >= 7.5 and the cluster's Pascal (6.x) and V100 (7.0) GPUs need older kernels
-# (#93). On arm64 (Pi) the default PyPI wheel is the CPU build.
+# (#93). torchvision (needed by pyasd) has to come from the same index, or its ops do not match
+# torch. On arm64 (Pi) the default PyPI wheels are the CPU builds.
+# The [av] extra adds pyasd (TalkNet, LR-ASD, Light-ASD, LRX-ASD) at a pinned commit.
+ENV ASD4HRI_WEIGHTS=/opt/asd4hri/weights
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$TARGETARCH" = "amd64" ]; then \
-        pip install torch --index-url https://download.pytorch.org/whl/cu126; \
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
     fi \
-    && pip install torch python_speech_features gdown yt-dlp pandas h5py scikit-learn wget pytest
+    && pip install -e ".[av]" yt-dlp pandas h5py scikit-learn wget pytest \
+    && python -c "from asd4hri.av import AV_MODELS, weights_path; [weights_path(n) for n in AV_MODELS]" \
+    && chmod -R a+rX /opt/asd4hri
 
-# smoke test on the target architecture: the pipeline builds and torch imports
-RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); import torch, asd4hri.av"
+# smoke test on the target architecture: the pipeline builds, every AV model loads its weights
+RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); \
+from asd4hri.av import AV_MODELS, AVModel; [AVModel(n, device='cpu') for n in AV_MODELS]"
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 VOLUME ["/app/data"]
