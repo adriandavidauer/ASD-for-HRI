@@ -106,14 +106,18 @@ re-runs the model on the last `--window` frames (default 38). Retrain them with
 Audio-visual baselines (#40, #80; `pip install -e '.[av]'`): `AV:LRX-ASD` (0.50 M parameters),
 `AV:LR-ASD` (0.84 M), `AV:Light-ASD` (1.02 M) and `AV:TalkNet` (15.7 M), all with their AVA
 weights, and `AV:FabuLight` (1.02 M): FabuLight-ASD without body pose, the Light-ASD network
-trained on **WASD**. The networks come from [pyasd](https://github.com/SebastianJanampa/LRX-ASD), pinned to a
+trained on **WASD**. `AV:CAST-ASD` (16.0 M plus the frozen 39.4 M Mimi audio encoder) is the
+causal scene model CAST-ASD with its AVA weights: every face is scored together with up to two
+other faces seen in the same frames, from the raw audio. Its code (`cast-asd`), `moshi` and
+`torchaudio` are installed with `--no-deps` (see `docker/Dockerfile`), because their pins would
+replace the torch build. The other networks come from [pyasd](https://github.com/SebastianJanampa/LRX-ASD), pinned to a
 commit; the weights are downloaded on first use into `$ASD4HRI_WEIGHTS` (default `src/models`,
 in the image `/opt/asd4hri/weights`) and checked by SHA-256. TalkNet uses the authors' original
 checkpoint, because pyasd's TalkNet file is a retrained model. They
 use the video's own audio track; every face is scored for its newest frame from the last
 `--av_window` frames (default 25) and the audio of the same span. Without audio,
 `--audio_fallback noise` (default) feeds low-level noise and `visual` uses the model's
-visual-only head; `--no_audio` forces the fallback.
+visual-only head (CAST-ASD always gets noise); `--no_audio` forces the fallback.
 
 UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With `--no_download`, nothing is downloaded and videos missing from `--data_dir` are skipped with a warning.
 

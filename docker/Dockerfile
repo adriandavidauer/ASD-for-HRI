@@ -68,19 +68,29 @@ ARG TARGETARCH
 # (#93). torchvision (needed by pyasd) has to come from the same index, or its ops do not match
 # torch. On arm64 (Pi) the default PyPI wheels are the CPU builds.
 # The [av] extra adds pyasd (TalkNet, LR-ASD, Light-ASD, LRX-ASD; FabuLight reuses Light-ASD)
-# at a pinned commit.
+# at a pinned commit, and the pure-Python dependencies of CAST-ASD.
+# CAST-ASD, moshi (its Mimi audio encoder) and torchaudio are installed without their
+# dependencies: moshi pins torch<2.10, and torchaudio ends at 2.11 and would pull torch 2.11.
+# CAST-ASD only calls torchaudio.functional.resample, which is plain torch code (tested in
+# tests/test_cast.py).
 ENV ASD4HRI_WEIGHTS=/opt/asd4hri/weights
+ARG CAST_ASD=git+https://github.com/prathamg007/CAST-ASD@66aba10ae4dc7c5464edcb5d45e7df2e210e9e91
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$TARGETARCH" = "amd64" ]; then \
-        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 \
+        && pip install --no-deps torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu126; \
+    else \
+        pip install --no-deps torchaudio==2.11.0; \
     fi \
+    && pip install --no-deps "cast-asd @ $CAST_ASD" moshi==0.2.12 \
     && pip install -e ".[av]" yt-dlp pandas h5py scikit-learn wget pytest \
     && python -c "from asd4hri.av import AV_MODELS, weights_path; [weights_path(n) for n in AV_MODELS]" \
     && chmod -R a+rX /opt/asd4hri
 
 # smoke test on the target architecture: the pipeline builds, every AV model loads its weights
 RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); \
-from asd4hri.av import AV_MODELS, AVModel; [AVModel(n, device='cpu') for n in AV_MODELS]"
+from asd4hri.av import AV_MODELS, AVModel; from asd4hri.cast import CASTModel; \
+[CASTModel(n, device='cpu') if AV_MODELS[n].get('scene') else AVModel(n, device='cpu') for n in AV_MODELS]"
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 VOLUME ["/app/data"]
