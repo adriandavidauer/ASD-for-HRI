@@ -65,12 +65,13 @@ FROM base AS experiments
 ARG TARGETARCH
 # torch on amd64: the CUDA 12.6 build, because the default PyPI wheel (CUDA 13) only runs on
 # compute capability >= 7.5 and the cluster's Pascal (6.x) and V100 (7.0) GPUs need older kernels
-# (#93). On arm64 (Pi) the default PyPI wheel is the CPU build.
+# (#93). torchvision (needed by pyasd) has to come from the same index, or its ops do not match
+# torch. On arm64 (Pi) the default PyPI wheels are the CPU builds.
 # The [av] extra adds pyasd (TalkNet, LR-ASD, Light-ASD, LRX-ASD) at a pinned commit.
 ENV ASD4HRI_WEIGHTS=/opt/asd4hri/weights
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$TARGETARCH" = "amd64" ]; then \
-        pip install torch --index-url https://download.pytorch.org/whl/cu126; \
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126; \
     fi \
     && pip install -e ".[av]" yt-dlp pandas h5py scikit-learn wget pytest \
     && python -c "from asd4hri.av import AV_MODELS, weights_path; [weights_path(n) for n in AV_MODELS]" \
