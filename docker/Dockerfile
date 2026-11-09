@@ -64,9 +64,14 @@ RUN pip install --no-deps -e . \
 # ── experiments ──────────────────────────────────────────────────────────────────────────────
 FROM base AS experiments
 ARG TARGETARCH
-# torch: the default PyPI wheels are CUDA builds on amd64 and CPU builds on arm64
+# torch on amd64: the CUDA 12.6 build, because the default PyPI wheel (CUDA 13) only runs on
+# compute capability >= 7.5 and the cluster's Pascal (6.x) and V100 (7.0) GPUs need older kernels
+# (#93). On arm64 (Pi) the default PyPI wheel is the CPU build.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch python_speech_features gdown yt-dlp pandas h5py scikit-learn wget pytest
+    if [ "$TARGETARCH" = "amd64" ]; then \
+        pip install torch --index-url https://download.pytorch.org/whl/cu126; \
+    fi \
+    && pip install torch python_speech_features gdown yt-dlp pandas h5py scikit-learn wget pytest
 
 # smoke test on the target architecture: the pipeline builds and torch imports
 RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); import torch, asd4hri.av"

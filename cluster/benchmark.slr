@@ -1,0 +1,47 @@
+#!/bin/bash
+# Benchmark on the DFKI cluster (#93): one Slurm array task per model x dataset x boxes run.
+#
+#   sbatch --array=0-39 cluster/benchmark.slr          # all 5 x 4 x 2 runs
+#   sbatch --array=0-39%8 cluster/benchmark.slr        # at most 8 at the same time
+#   bash cluster/benchmark.slr --list                  # print the index of every run
+#
+# Finished runs (stats/summary.json exists) are skipped, so failed tasks can simply be resubmitted.
+# Afterwards build one table from all runs with the --collect_only line in cluster/README.md.
+#SBATCH --job-name=asd4hri_benchmark
+#SBATCH --partition=gpu_titan
+#SBATCH --account=deepl
+#SBATCH --time=1-00:00:00
+#SBATCH -N 1
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --output=logs/slurm_%A_%a.log
+
+# paths on the cluster; override with environment variables when submitting
+IMAGE=${IMAGE:-/mnt/beegfs/public/images/asd4hri/asd4hri.sif}
+# holds ava/ videos/ csv/ wasd/ easycom/; benchmark/ and logs/ are written here
+DATA=${DATA:-/mnt/beegfs/data/asd4hri}
+TAG=${TAG:-cluster}
+
+MODELS=(LipShapeCausal FaceShapeCausal CNN2Plus1D_Light AV:LR-ASD AV:TalkNet)
+DATASETS=(unitalk wasd easycom ava)
+BOXES=(gt detector)
+
+RUNS=()
+for d in "${DATASETS[@]}"; do
+  for m in "${MODELS[@]}"; do
+    for b in "${BOXES[@]}"; do RUNS+=("$d $m $b"); done
+  done
+done
+
+if [ "$1" = "--list" ]; then
+  for i in "${!RUNS[@]}"; do echo "$i ${RUNS[$i]}"; done
+  exit 0
+fi
+
+read -r DATASET MODEL BOX <<< "${RUNS[${SLURM_ARRAY_TASK_ID:?submit with sbatch --array}]}"
+echo "task $SLURM_ARRAY_TASK_ID on $(hostname): $DATASET $MODEL $BOX"
+mkdir -p "$DATA/logs" "$DATA/home"
+singularity exec --nv --containall --home "$DATA/home" --bind "$DATA:/app/data" "$IMAGE" \
+  bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --no_download \
+    --tag $TAG --architectures $MODEL --datasets $DATASET --boxes $BOX"
