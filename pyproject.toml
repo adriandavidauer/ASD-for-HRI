@@ -30,14 +30,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# audio-visual baselines (TalkNet, LR-ASD, Light-ASD, LRX-ASD; #40, #80). The networks come from
-# pyasd (LRX-ASD repo, Apache-2.0), pinned to a commit; the AVA weights are downloaded on first
-# use. gdown: TalkNet's original weights are on Google Drive.
+# audio-visual baselines (TalkNet, LR-ASD, Light-ASD, LRX-ASD, FabuLight; #40, #80). The networks
+# come from pyasd (LRX-ASD repo, Apache-2.0), pinned to a commit; the weights are downloaded on
+# first use. gdown: TalkNet's original weights are on Google Drive.
+# CAST-ASD also needs cast-asd, moshi and torchaudio, installed with --no-deps (see the
+# Dockerfile); the last four packages here are their remaining dependencies.
 av = [
     "torch",
     "python_speech_features",
     "gdown",
     "pyasd @ git+https://github.com/SebastianJanampa/LRX-ASD@ec5b72b77bcc6a4d2f8be9551e152f601db748d4",
+    "safetensors>=0.4,<0.8",
+    "sentencepiece",
+    "huggingface-hub<1.0",
+    "einops",
 ]
 dev = [
     "pytest>=7.0.0",

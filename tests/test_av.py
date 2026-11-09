@@ -41,7 +41,7 @@ def test_pyasd_models_match_the_original_repos(name):
     np.testing.assert_allclose(model.scores(video, None), ref[f'{name}_v'], atol=1e-5)
 
 
-@pytest.mark.parametrize('name', list(AV_MODELS))
+@pytest.mark.parametrize('name', [n for n in AV_MODELS if not AV_MODELS[n].get('scene')])
 def test_every_av_model_loads_and_scores_every_frame(name):
     """Every AV model loads its weights and returns one probability per frame."""
     video, audio = _reference_inputs()

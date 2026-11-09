@@ -33,6 +33,7 @@ _PYASD_RELEASE = 'https://github.com/SebastianJanampa/LRX-ASD/releases/download/
 _FABULIGHT = ('https://raw.githubusercontent.com/knowledgetechnologyuhh/FabuLight-ASD/'
               '265c5ce95b55830a2622ce35ae6556dd50289fc0/exps/exp_0.001_0.95_60_2000_Adam_epochStep_'
               '0.0_1.3_linear_0.02_112_F_fabulight_config/model/best_0044.model')
+_HF = 'https://huggingface.co/'
 _VISUAL_MEAN, _VISUAL_STD = 0.4161, 0.1688        # pyasd's normalisation of the grey crops
 
 # name -> pyasd architecture and AVA weights. The LR-ASD and Light-ASD files of the pyasd
@@ -64,6 +65,21 @@ AV_MODELS = {
         'pyasd': 'lightasd', 'file': 'fabulight_wasd.model', 'url': _FABULIGHT,
         'sha256': '40dfff26c90140194c0f6269f6a50840cb9de84e9c5947d830bc8c44863b3845',
         'visual_std': 0.2380,
+    },
+    # CAST-ASD (MIT): causal scene model, one target face plus up to two faces of the same frames
+    # (asd4hri.cast). Audio goes through the frozen Mimi encoder of kyutai (CC-BY 4.0), whose
+    # weights are the second file.
+    'CAST-ASD': {
+        'scene': True, 'file': 'cast_asd_ava.ckpt',
+        'url': _HF + 'prathamg007/CAST-ASD/resolve/86b2ec3f412ee1f814401701a866c0a0f65a6ef5/'
+                     'weights/ava_cast.ckpt',
+        'sha256': 'd1fdcc538ec5fae06b78516cc9301f8dd3500a5dedd0bb0c22c6e39b118fd358',
+        'extra': [{
+            'file': 'mimi-e351c8d8-checkpoint125.safetensors',
+            'url': _HF + 'kyutai/moshiko-pytorch-bf16/resolve/2bfc9ae6e89079a5cc7ed2a68436010d91a3d289/'
+                         'tokenizer-e351c8d8-checkpoint125.safetensors',
+            'sha256': '09b782f0629851a271227fb9d36db65c041790365f11bbe5d3d59369cf863f50',
+        }],
     },
 }
 AV_PREFIX = 'AV:'
@@ -169,18 +185,31 @@ def _sha256(path):
 
 
 def weights_path(name):
-    """Local path of a model's AVA weights, downloading and checking them if needed.
+    """Local path of a model's weights, downloading and checking them (and its extra files).
 
     Args:
         name: Key of ``AV_MODELS``.
 
     Returns:
-        pathlib.Path: The weights file.
+        pathlib.Path: The weights file; the extra files are next to it.
+    """
+    for extra in AV_MODELS[name].get('extra', []):
+        fetch(extra)
+    return fetch(AV_MODELS[name])
+
+
+def fetch(spec):
+    """Download one weights file of ``spec`` into ``weights_dir()`` if missing, and check it.
+
+    Args:
+        spec: Dict with ``file``, ``sha256`` and ``url`` (or ``gdrive``, a Google Drive id).
+
+    Returns:
+        pathlib.Path: The file.
 
     Raises:
         RuntimeError: If the file does not have the expected SHA-256.
     """
-    spec = AV_MODELS[name]
     path = weights_dir() / spec['file']
     if not path.is_file():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -327,13 +356,19 @@ class AVClassifier(Processor):
         super().__init__()
         if audio_fallback not in ('noise', 'visual'):
             raise ValueError(f"audio_fallback must be 'noise' or 'visual', not {audio_fallback}")
-        self.model = AVModel(name, device, deploy=audio_fallback == 'noise')
+        self.scene = AV_MODELS[name].get('scene', False)
+        if self.scene:
+            from .cast import CASTModel
+            self.model = CASTModel(name, device)
+        else:
+            self.model = AVModel(name, device, deploy=audio_fallback == 'noise')
         self.window, self.stride = window, stride
         self.max_consecutive_empty = max_consecutive_empty
         self.audio_fallback = audio_fallback
         self.timer = timer or NULL_TIMER
         self.audio, self.fps = np.zeros(0, dtype=np.int16), 25.0
         self.tracks = {}
+        self.frame = 0                                    # frame counter, aligns scene-mates
         self.rng = np.random.default_rng(0)
 
     def set_audio(self, audio, fps):
@@ -345,6 +380,7 @@ class AVClassifier(Processor):
     def reset(self):
         """Drop all face buffers."""
         self.tracks = {}
+        self.frame = 0
 
     def _audio_for(self, start_s, num_frames):
         if len(self.audio) and start_s * 16000 < len(self.audio):
@@ -375,9 +411,11 @@ class AVClassifier(Processor):
             for key, crop in zip(keys, crops):
                 track = self.tracks.setdefault(key, {'faces': deque(maxlen=self.window),
                                                      'times': deque(maxlen=self.window),
+                                                     'frames': deque(maxlen=self.window),
                                                      'missed': 0, 'since': self.stride - 1})
                 track['faces'].append(crop)
                 track['times'].append(timestamp)
+                track['frames'].append(self.frame)
                 track['missed'] = 0
                 track['since'] += 1
             for key in list(self.tracks):
@@ -385,6 +423,7 @@ class AVClassifier(Processor):
                     self.tracks[key]['missed'] += 1
                     if self.tracks[key]['missed'] >= self.max_consecutive_empty:
                         del self.tracks[key]
+        self.frame += 1
         due = [k for k in keys if self.tracks[k]['since'] >= self.stride]
         scores = {}
         if due:
@@ -393,6 +432,9 @@ class AVClassifier(Processor):
                 self.tracks[k]['since'] = 0
                 groups.setdefault(len(self.tracks[k]['faces']), []).append(k)
             for length, group in groups.items():
+                if self.scene:
+                    scores.update(self._scene_scores(group, length))
+                    continue
                 video = np.stack([np.stack(self.tracks[k]['faces']) for k in group])
                 with timer.stage('audio', len(group)):
                     audio = [self._audio_for(self.tracks[k]['times'][0] or 0.0, length)
@@ -402,3 +444,60 @@ class AVClassifier(Processor):
                     out = self.model.scores(video, audio)[:, -1]
                 scores.update(zip(group, out.tolist()))
         return [scores.get(k) for k in keys]
+
+    def _scene_scores(self, group, length):
+        """Scores of a scene model for targets with ``length`` buffered frames each.
+
+        As in CAST-ASD's AVA data: each target gets up to ``max_tracks - 1`` scene-mates, the
+        buffered faces that share more than half of its frames (most shared first, ties by
+        id), aligned onto its frames and zero where they are missing.
+
+        Args:
+            group: Keys of the targets.
+            length: Their number of frames.
+
+        Returns:
+            dict: Key -> probability for the target's newest frame.
+        """
+        timer, scenes, waves = self.timer, [], []
+        with timer.stage('buffer', len(group)):
+            for k in group:
+                own = list(self.tracks[k]['frames'])
+                position = {f: i for i, f in enumerate(own)}
+                mates = []
+                for other, track in self.tracks.items():
+                    shared = [(position[f], j) for j, f in enumerate(track['frames'])
+                              if f in position]
+                    if other != k and len(shared) > 0.5 * length:
+                        mates.append((-len(shared), str(other), track, shared))
+                mates.sort(key=lambda m: m[:2])
+                faces = np.zeros((1 + min(len(mates), self.model.max_tracks - 1), length, 112, 112),
+                                 dtype=np.uint8)
+                faces[0] = np.stack(self.tracks[k]['faces'])
+                for slot, (_, _, track, shared) in enumerate(mates[:len(faces) - 1], start=1):
+                    for i, j in shared:
+                        faces[slot, i] = track['faces'][j]
+                scenes.append(faces)
+        with timer.stage('audio', len(group)):
+            for k in group:
+                start = self.tracks[k]['times'][0] or 0.0
+                waves.append(self._waveform_for(start, length))
+        with timer.stage('model', len(group)):
+            out = self.model.scores(scenes, np.stack(waves))[:, -1]
+        return dict(zip(group, out.tolist()))
+
+    def _waveform_for(self, start_s, num_frames):
+        """16 kHz float waveform of ``num_frames`` frames from ``start_s``; noise without audio.
+
+        Returns:
+            numpy.ndarray: ``(samples,)`` float32 in [-1, 1].
+        """
+        samples = int(round(num_frames / self.fps * 16000))
+        if len(self.audio) and start_s * 16000 < len(self.audio):
+            first = max(0, int(round(start_s * 16000)))
+            segment = self.audio[first:first + samples]
+        else:
+            segment = self.rng.normal(0, 30, samples).astype(np.int16)
+        wave = np.zeros(samples, dtype=np.float32)
+        wave[:len(segment)] = segment.astype(np.float32) / 32768.0
+        return wave
