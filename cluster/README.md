@@ -14,8 +14,8 @@ The Singularity image is converted from the public multi-arch image on GHCR
 weights. Converting needs no root and no definition file, so it can be done on `lnode01` directly:
 
 ```bash
-mkdir -p /mnt/beegfs/public/images/asd4hri && cd /mnt/beegfs/public/images/asd4hri
-singularity pull asd4hri.sif docker://ghcr.io/adriandavidauer/asd-for-hri:main
+mkdir -p ~/SCRATCH/images && cd ~/SCRATCH/images
+singularity pull --force asd4hri.sif docker://ghcr.io/adriandavidauer/asd-for-hri:main
 ```
 
 Pull again after a new image is published on `main`. For a fixed version use the
@@ -74,7 +74,7 @@ version. So when all tasks are done, build the table once more:
 
 ```bash
 singularity exec --containall --bind $(readlink -f ~/SCRATCH/asd4hri):/app/data \
-    /mnt/beegfs/public/images/asd4hri/asd4hri.sif \
+    $(readlink -f ~/SCRATCH/images/asd4hri.sif) \
     bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --collect_only"
 ```
 
