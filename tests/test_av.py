@@ -13,7 +13,8 @@ from asd4hri.av import (AV_MODELS, AVClassifier, AVModel, face_crop, load_audio,
                         mfcc_window)
 
 VIDEO = Path(__file__).parent / '001.avi'
-# scores of the previous implementation (the authors' repos as git submodules) on fixed inputs
+# scores of the authors' code on fixed inputs: TalkNet and LR-ASD from their repos (the former git
+# submodules), FabuLight from its repo at the pinned commit
 REFERENCE = Path(__file__).parent / 'av_reference.npz'
 
 
@@ -30,9 +31,9 @@ def _reference_inputs():
     return video, audio
 
 
-@pytest.mark.parametrize('name', ['LR-ASD', 'TalkNet'])
+@pytest.mark.parametrize('name', ['LR-ASD', 'TalkNet', 'FabuLight'])
 def test_pyasd_models_match_the_original_repos(name):
-    """With the AVA weights, pyasd gives the scores of the authors' code, with and without audio."""
+    """With the published weights, pyasd gives the scores of the authors' code, with and without audio."""
     video, audio = _reference_inputs()
     ref = np.load(REFERENCE)
     model = AVModel(name, device='cpu')
@@ -42,7 +43,7 @@ def test_pyasd_models_match_the_original_repos(name):
 
 @pytest.mark.parametrize('name', list(AV_MODELS))
 def test_every_av_model_loads_and_scores_every_frame(name):
-    """Every AV model loads its AVA weights and returns one probability per frame."""
+    """Every AV model loads its weights and returns one probability per frame."""
     video, audio = _reference_inputs()
     for deploy in (False, True):
         out = AVModel(name, device='cpu', deploy=deploy).scores(video[:, :8], audio[:, :32])

@@ -67,7 +67,8 @@ ARG TARGETARCH
 # compute capability >= 7.5 and the cluster's Pascal (6.x) and V100 (7.0) GPUs need older kernels
 # (#93). torchvision (needed by pyasd) has to come from the same index, or its ops do not match
 # torch. On arm64 (Pi) the default PyPI wheels are the CPU builds.
-# The [av] extra adds pyasd (TalkNet, LR-ASD, Light-ASD, LRX-ASD) at a pinned commit.
+# The [av] extra adds pyasd (TalkNet, LR-ASD, Light-ASD, LRX-ASD; FabuLight reuses Light-ASD)
+# at a pinned commit.
 ENV ASD4HRI_WEIGHTS=/opt/asd4hri/weights
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ "$TARGETARCH" = "amd64" ]; then \
