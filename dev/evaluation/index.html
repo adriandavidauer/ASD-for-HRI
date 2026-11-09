@@ -876,14 +876,18 @@ re-runs the model on the last <code>--window</code> frames (default 38). Retrain
 <p>Audio-visual baselines (#40, #80; <code>pip install -e '.[av]'</code>): <code>AV:LRX-ASD</code> (0.50 M parameters),
 <code>AV:LR-ASD</code> (0.84 M), <code>AV:Light-ASD</code> (1.02 M) and <code>AV:TalkNet</code> (15.7 M), all with their AVA
 weights, and <code>AV:FabuLight</code> (1.02 M): FabuLight-ASD without body pose, the Light-ASD network
-trained on <strong>WASD</strong>. The networks come from <a href="https://github.com/SebastianJanampa/LRX-ASD">pyasd</a>, pinned to a
+trained on <strong>WASD</strong>. <code>AV:CAST-ASD</code> (16.0 M plus the frozen 39.4 M Mimi audio encoder) is the
+causal scene model CAST-ASD with its AVA weights: every face is scored together with up to two
+other faces seen in the same frames, from the raw audio. Its code (<code>cast-asd</code>), <code>moshi</code> and
+<code>torchaudio</code> are installed with <code>--no-deps</code> (see <code>docker/Dockerfile</code>), because their pins would
+replace the torch build. The other networks come from <a href="https://github.com/SebastianJanampa/LRX-ASD">pyasd</a>, pinned to a
 commit; the weights are downloaded on first use into <code>$ASD4HRI_WEIGHTS</code> (default <code>src/models</code>,
 in the image <code>/opt/asd4hri/weights</code>) and checked by SHA-256. TalkNet uses the authors' original
 checkpoint, because pyasd's TalkNet file is a retrained model. They
 use the video's own audio track; every face is scored for its newest frame from the last
 <code>--av_window</code> frames (default 25) and the audio of the same span. Without audio,
 <code>--audio_fallback noise</code> (default) feeds low-level noise and <code>visual</code> uses the model's
-visual-only head; <code>--no_audio</code> forces the fallback.</p>
+visual-only head (CAST-ASD always gets noise); <code>--no_audio</code> forces the fallback.</p>
 <p>UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With <code>--no_download</code>, nothing is downloaded and videos missing from <code>--data_dir</code> are skipped with a warning.</p>
 <p>The run above writes to the host:</p>
 <ul>
