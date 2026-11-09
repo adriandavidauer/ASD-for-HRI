@@ -1,8 +1,8 @@
 # ASD-for-HRI
 [![Quality](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml/badge.svg)](https://github.com/adriandavidauer/ASD-for-HRI/actions/workflows/quality.yml)
 <!-- badges:start -->
-[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-41%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42650907417)
-[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-92.8%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42650907417)
+[![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-41%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42658776365)
+[![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-92.9%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42658776365)
 [![Test coverage](https://img.shields.io/badge/Test%20coverage-80%25-green)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/42650907385)
 <!-- badges:end -->
 
