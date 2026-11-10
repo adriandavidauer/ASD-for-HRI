@@ -1,8 +1,8 @@
 #!/bin/bash
 # Benchmark on the DFKI cluster (#93): one Slurm array task per model x dataset x boxes run.
 #
-#   sbatch --array=0-39 cluster/benchmark.slr          # all 5 x 4 x 2 runs
-#   sbatch --array=0-39%8 cluster/benchmark.slr        # at most 8 at the same time
+#   sbatch --array=0-71 cluster/benchmark.slr          # all 9 x 4 x 2 runs
+#   sbatch --array=0-71%8 cluster/benchmark.slr        # at most 8 at the same time
 #   bash cluster/benchmark.slr --list                  # print the index of every run
 #
 # Finished runs (stats/summary.json exists) are skipped, so failed tasks can simply be resubmitted.
@@ -24,7 +24,8 @@ DATA=${DATA:-$HOME/SCRATCH/asd4hri}
 DATA=$(readlink -f "$DATA")         # ~/SCRATCH is a link; bind the real folder
 TAG=${TAG:-cluster}
 
-MODELS=(LipShapeCausal FaceShapeCausal CNN2Plus1D_Light AV:LR-ASD AV:TalkNet)
+MODELS=(LipShapeCausal FaceShapeCausal CNN2Plus1D_Light AV:LR-ASD AV:TalkNet
+        AV:Light-ASD AV:LRX-ASD AV:FabuLight AV:CAST-ASD)
 DATASETS=(unitalk wasd easycom ava)
 BOXES=(gt detector)
 
