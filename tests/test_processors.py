@@ -645,3 +645,33 @@ def test_buffer_features_reset_clears_keyed():
     buffer([1], ids=['a'])
     buffer.reset()
     assert buffer.keyed == {}
+
+
+def test_GetShapeFeatures_second_pass_refits_in_the_landmark_box(monkeypatch):
+    """With passes=2 the second dlib call gets the bounding box of the first pass's points (#92)."""
+    import dlib
+    image = cv2.cvtColor(cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg')),
+                         cv2.COLOR_BGR2RGB)[:300, :300]
+    single = GetShapeFeatures(passes=1)
+    double = GetShapeFeatures(passes=2)
+    rects = []
+    predictor = double.shape_predictor
+    class Spy:
+        """Records the rectangles given to the dlib shape predictor."""
+
+        def __call__(self, img, rect):
+            """Record ``rect`` and run dlib.
+
+            Returns:
+                dlib.full_object_detection: The landmarks.
+            """
+            rects.append(rect)
+            return predictor(img, rect)
+    double.shape_predictor = Spy()
+    first = single([image])[0]
+    second = double([image])[0]
+    assert len(rects) == 2 and second.shape == (68, 2)
+    assert rects[0] == dlib.rectangle(0, 0, 300, 300)
+    (x0, y0), (x1, y1) = first.min(0), first.max(0)
+    assert rects[1] == dlib.rectangle(int(x0), int(y0), int(x1), int(y1))
+    assert np.array_equal(GetShapeFeatures('LipShape', passes=2)([image])[0], second[48:68])

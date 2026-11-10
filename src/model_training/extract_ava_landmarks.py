@@ -55,8 +55,12 @@ def read_annotations(csv_path):
 class FaceLandmarks:
     """The crop and landmark steps of the pipeline for GT boxes (``ASD`` + ``GetShapeFeatures``)."""
 
-    def __init__(self):
-        """Build the square, clip and crop processors and load dlib."""
+    def __init__(self, passes=1):
+        """Build the square, clip and crop processors and load dlib.
+
+        Args:
+            passes: dlib passes per face (``GetShapeFeatures``).
+        """
         import paz.processors as pr
         from paz.abstract import SequentialProcessor
 
@@ -64,7 +68,7 @@ class FaceLandmarks:
         self.square = SequentialProcessor([pr.SquareBoxes2D(), pr.OffsetBoxes2D([0, 0])])
         self.clip = pr.ClipBoxes2D()
         self.crop = pr.CropBoxes2D()
-        self.landmarks = GetShapeFeatures(architecture='FaceShape')
+        self.landmarks = GetShapeFeatures(architecture='FaceShape', passes=passes)
 
     def __call__(self, image, boxes):
         """Landmarks of every box of one RGB frame.
@@ -87,13 +91,14 @@ class FaceLandmarks:
         return points, sizes, keep
 
 
-def extract_video(video_path, csv_path, out_path):
+def extract_video(video_path, csv_path, out_path, passes=1):
     """Extract the landmarks of all GT faces of one video and write them to ``out_path``.
 
     Args:
         video_path: The video.
         csv_path: Its annotation CSV.
         out_path: The ``.npz`` to write.
+        passes: dlib passes per face (``GetShapeFeatures``).
 
     Returns:
         int: Number of extracted faces.
@@ -113,7 +118,7 @@ def extract_video(video_path, csv_path, out_path):
     first, last = index.timestamps[0], index.timestamps[-1]
     cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, int(first * fps) - 2))
     frame_idx = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-    face = FaceLandmarks()
+    face = FaceLandmarks(passes)
     rows = {k: [] for k in ('entity', 'timestamp', 'frame', 'landmarks', 'label', 'size')}
     try:
         while frame_idx / fps <= last + 0.5 / fps:
@@ -151,17 +156,17 @@ def _job(args):
     """Worker: extract one video unless its output exists.
 
     Args:
-        args: ``(video_path, csv_path, out_path)``.
+        args: ``(video_path, csv_path, out_path, passes)``.
 
     Returns:
         tuple: ``(video name, faces or error message)``.
     """
-    video_path, csv_path, out_path = args
+    video_path, csv_path, out_path, passes = args
     if out_path.exists():
         return video_path.name, 'exists'
     tmp = out_path.with_name(out_path.stem + '.part.npz')
     try:
-        n = extract_video(video_path, csv_path, tmp)
+        n = extract_video(video_path, csv_path, tmp, passes)
     except Exception as exc:          # one broken video must not stop the others
         return video_path.name, f'FAILED {exc}'
     tmp.rename(out_path)
@@ -194,10 +199,11 @@ def main():
     p.add_argument('ava_dir', help='folder with videos/ and annotations/')
     p.add_argument('out_dir')
     p.add_argument('--workers', type=int, default=8)
+    p.add_argument('--passes', type=int, default=1, help='dlib passes per face')
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    todo = jobs(args.ava_dir, args.out_dir)
+    todo = [job + (args.passes,) for job in jobs(args.ava_dir, args.out_dir)]
     LOGGER.info('%d videos', len(todo))
     with multiprocessing.get_context('spawn').Pool(args.workers) as pool:
         for i, (name, result) in enumerate(pool.imap_unordered(_job, todo), 1):

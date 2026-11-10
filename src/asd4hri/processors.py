@@ -332,14 +332,19 @@ class GetShapeFeatures(Processor):
             value returns all 68 landmarks.
         shape_predictor_path: Path to a dlib shape predictor. If None, the 68 face landmark
             predictor is downloaded if needed and used.
+        passes: Number of dlib passes. The first pass fits the landmarks in the whole crop; each
+            further pass fits them again in the bounding box of the previous landmarks. dlib
+            expects the tight box of its own face detector, so a second pass helps with loose
+            boxes such as AVA's GT boxes (#92); it doubles the cost.
     """
-    def __init__(self, architecture='FaceShape', shape_predictor_path=None):
+    def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1):
         """Load the dlib shape predictor."""
         super(GetShapeFeatures, self).__init__()
         if shape_predictor_path is None:
             shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
         self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
         self.architecture = architecture
+        self.passes = passes
 
     def call(self, face_images):
         """Convert a batch of face images to a batch of landmark coordinates.
@@ -359,13 +364,13 @@ class GetShapeFeatures(Processor):
         for image in face_images:
             if len(image.shape) == 2 and image.shape[-1] == 3:
                 raise AssertionError(f"Probably not receiving a batch - could be a batch of images with the shape {image.shape} but that makes no sense.")
-            shape = self.shape_predictor(image, dlib.rectangle(
-                    0, 0, image.shape[1], image.shape[0]))
-            if self.architecture == 'LipShape':
-                # return only lip landmarks (48-67)
-                ret_batch.append(np.array([(p.x, p.y) for p in shape.parts()[48:68]]))
-            else:
-                ret_batch.append(np.array([(p.x, p.y) for p in shape.parts()]))
+            rect = dlib.rectangle(0, 0, image.shape[1], image.shape[0])
+            for _ in range(self.passes):
+                points = np.array([(p.x, p.y) for p in self.shape_predictor(image, rect).parts()])
+                (x0, y0), (x1, y1) = points.min(0), points.max(0)
+                rect = dlib.rectangle(int(x0), int(y0), int(x1), int(y1))
+            # 'LipShape': only the lip landmarks (48-67)
+            ret_batch.append(points[48:68] if self.architecture == 'LipShape' else points)
         return ret_batch
 
 

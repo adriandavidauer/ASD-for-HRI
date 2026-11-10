@@ -67,6 +67,9 @@ def build_parser():
                         '(streaming) or the model on the last --window frames (window); see #45')
     p.add_argument('--window', type=int, default=38,
                    help='Frames per prediction for --causal_mode window (default: 38)')
+    p.add_argument('--shape_passes', type=int, default=1,
+                   help='dlib passes per face for the landmark models; 2 fits loose boxes '
+                        'better (#92)')
     p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
                    help='Face boxes to classify: the face detector (end-to-end protocol) or the '
                         'ground-truth boxes (literature protocol, detector skipped); see #75')
@@ -263,6 +266,7 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 use_audio=not getattr(args, 'no_audio', False),
                 causal_mode=getattr(args, 'causal_mode', 'streaming'),
                 window=getattr(args, 'window', 38),
+                shape_passes=getattr(args, 'shape_passes', 1),
                 time_range=annotated_range(all_gt.get(vid)),
                 frame_crop=_frame_crop(args.dataset, video_path)
             )
