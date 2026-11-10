@@ -58,12 +58,12 @@ to `logs/` in the folder you submit from, so create it first:
 bash cluster/benchmark.slr --list            # the index of every run
 mkdir -p logs                                # Slurm writes logs/slurm_<job>_<task>.log
 sbatch --array=0 cluster/benchmark.slr       # one test task first
-sbatch --array=1-39%8 cluster/benchmark.slr  # then the rest, at most 8 at once
+sbatch --array=1-71%8 cluster/benchmark.slr  # then the rest, at most 8 at once
 ```
 
 Partition, account and time limit are set in the `#SBATCH` lines of `cluster/benchmark.slr`.
 Paths and the run tag can be changed when submitting, for example
-`IMAGE=... DATA=... TAG=volta sbatch --array=0-39 cluster/benchmark.slr`. A finished run is
+`IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. A finished run is
 skipped, so failed tasks can be resubmitted with the same command.
 
 Watch the jobs with `squeue -u $USER`; cancel them with `scancel <jobid>`.
