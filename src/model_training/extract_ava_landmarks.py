@@ -16,6 +16,9 @@ One ``<video_id>.npz`` per video, with one row per (video frame, face):
 Usage (from the repo root, in the image)::
 
     python -m src.model_training.extract_ava_landmarks /Data/data/ava_train out/ --workers 8
+
+The default of 2 dlib passes matches the released ``*_ava`` weights; the pipeline must then
+run with ``--shape_passes 2`` as well.
 """
 
 import argparse
@@ -199,7 +202,8 @@ def main():
     p.add_argument('ava_dir', help='folder with videos/ and annotations/')
     p.add_argument('out_dir')
     p.add_argument('--workers', type=int, default=8)
-    p.add_argument('--passes', type=int, default=1, help='dlib passes per face')
+    p.add_argument('--passes', type=int, default=2,
+                   help='dlib passes per face (2: refit on the landmark box, see #92)')
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     Path(args.out_dir).mkdir(parents=True, exist_ok=True)
