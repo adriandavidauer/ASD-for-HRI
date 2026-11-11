@@ -4,15 +4,18 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one control bar on top; the speed/accuracy plot as the main view, two smaller views
-   side by side below it, the table last. Colours: cool neutral ground, one hue per model family. */
+/* Layout: control bar; the two protocols side by side (model only | full pipeline) with one
+   y-scale; the cost of detection and the stage timing below; progress over versions; the table.
+   Colours: cool neutral ground, one colour per model (same in every view), stage colours split
+   into a warm detection group and a cool model-side group. */
 :root {
   --bg: #f4f6f7; --panel: #ffffff; --ink: #18212b; --muted: #5a6672; --line: #dbe1e6;
   --accent: #0d7a6f; --notice: #fff5e0; --notice-ink: #6b4a00;
-  --fam-landmarks: #0d8a7c; --fam-pixels: #c25210; --fam-av: #4f5cc0;
-  --st-read: #9aa4ae; --st-detect: #d98a2b; --st-track: #e7c15a; --st-crop: #a9bb6a;
-  --st-pre: #2a9d8f; --st-buffer: #8ccfc6; --st-audio: #8a78d6; --st-model: #3b5998;
-  --st-average: #c46a86; --st-other: #cfd6dc;
+  --m1: #0d8a7c; --m2: #4f9a2e; --m3: #c25210; --m4: #4f5cc0; --m5: #2f7fc1;
+  --m6: #8a4fc0; --m7: #6b6f8f; --m8: #b8408a; --m9: #1a9bb0;
+  --st-read: #a3acb5; --st-detect: #d9822b; --st-track: #ecb648;
+  --st-crop: #8cc9c0; --st-pre: #2a9d8f; --st-buffer: #bfe0db; --st-audio: #5b8fd1;
+  --st-model: #34508f; --st-average: #7d93b8; --st-other: #d5dbe0;
   --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --f-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
   --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -21,20 +24,22 @@
   :root:not([data-theme="light"]) {
     --bg: #0f1418; --panel: #161d23; --ink: #e5eaee; --muted: #97a3ae; --line: #2a333c;
     --accent: #3cc7b4; --notice: #2e2615; --notice-ink: #f1d08a;
-    --fam-landmarks: #35c4b1; --fam-pixels: #f08a45; --fam-av: #8f99f3;
-    --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b; --st-crop: #a7bb63;
-    --st-pre: #36b3a3; --st-buffer: #6fb8ae; --st-audio: #9d8de6; --st-model: #6d8fd6;
-    --st-average: #d784a0; --st-other: #46505a;
+    --m1: #35c4b1; --m2: #7cc65a; --m3: #f08a45; --m4: #8f99f3; --m5: #5fb0f0;
+    --m6: #b88af0; --m7: #a3a8c8; --m8: #e57ab8; --m9: #4fd0e3;
+    --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b;
+    --st-crop: #5e9e96; --st-pre: #36b3a3; --st-buffer: #3f6f69; --st-audio: #6fa2e6;
+    --st-model: #8fa8e8; --st-average: #a3b3cf; --st-other: #46505a;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1418; --panel: #161d23; --ink: #e5eaee; --muted: #97a3ae; --line: #2a333c;
   --accent: #3cc7b4; --notice: #2e2615; --notice-ink: #f1d08a;
-  --fam-landmarks: #35c4b1; --fam-pixels: #f08a45; --fam-av: #8f99f3;
-  --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b; --st-crop: #a7bb63;
-  --st-pre: #36b3a3; --st-buffer: #6fb8ae; --st-audio: #9d8de6; --st-model: #6d8fd6;
-  --st-average: #d784a0; --st-other: #46505a;
+  --m1: #35c4b1; --m2: #7cc65a; --m3: #f08a45; --m4: #8f99f3; --m5: #5fb0f0;
+  --m6: #b88af0; --m7: #a3a8c8; --m8: #e57ab8; --m9: #4fd0e3;
+  --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b;
+  --st-crop: #5e9e96; --st-pre: #36b3a3; --st-buffer: #3f6f69; --st-audio: #6fa2e6;
+  --st-model: #8fa8e8; --st-average: #a3b3cf; --st-other: #46505a;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -44,18 +49,18 @@ body {
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 28px 48px;
 }
-.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
 header { display: grid; gap: 6px; }
 h1 { font: 700 clamp(26px, 4vw, 36px)/1.1 var(--f-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
 h2 { font: 600 18px/1.3 var(--f-display); margin: 0; text-wrap: balance; }
-.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+.lede { color: var(--muted); margin: 0; max-width: 78ch; }
 .notice { background: var(--notice); color: var(--notice-ink); border-radius: 8px; padding: 10px 14px; margin: 0; }
 .controls {
   display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
 }
 .field { display: grid; gap: 4px; min-width: 0; }
-.field > span, .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.field > span, .label, .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
 select, input[type="search"] {
   font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 6px 8px; min-width: 0;
@@ -73,18 +78,35 @@ button {
   border-radius: 6px; padding: 8px 12px; cursor: pointer;
 }
 button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; min-width: 0; }
+button:focus-visible, select:focus-visible, input:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; min-width: 0; align-content: start; }
 .panel .sub { color: var(--muted); font-size: 13px; margin: 0; }
-.plot { width: 100%; min-height: 380px; }
-.plot.main { min-height: 470px; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.plot { width: 100%; min-height: 360px; }
+.plot.main { min-height: 430px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 20px; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 0; }
+.pair > .side { display: grid; gap: 6px; padding: 4px 12px; min-width: 0; align-content: start; }
+.pair > .side + .side { border-left: 1px solid var(--line); }
+@media (max-width: 1010px) { .pair > .side + .side { border-left: 0; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 8px; } }
+.side h3 { font: 600 16px/1.3 var(--f-display); margin: 0; }
+.includes { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 11px/1 var(--f-data); padding: 4px 7px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+.chip.det { border-color: var(--st-detect); color: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw.sq { border-radius: 2px; } .sw.open { background: transparent !important; border: 2px solid var(--muted); }
 .table-tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
 .table-tools label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
-th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: var(--panel); }
+th.s { cursor: pointer; user-select: none; }
+th.grp { text-align: center; color: var(--ink); border-bottom: 2px solid var(--line); }
+th.grp.det { border-bottom-color: var(--st-detect); }
+th.grp.gt { border-bottom-color: var(--st-pre); }
+th.first, td.first { border-left: 1px solid var(--line); }
 th[aria-sort="ascending"]::after { content: " ▲"; } th[aria-sort="descending"]::after { content: " ▼"; }
 td.n { text-align: right; font-family: var(--f-data); font-variant-numeric: tabular-nums; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
@@ -92,23 +114,23 @@ td.n { text-align: right; font-family: var(--f-data); font-variant-numeric: tabu
 .pill.pi { color: var(--accent); border-color: var(--accent); }
 textarea.copy { position: absolute; left: -9999px; }
 #copied { font-size: 13px; color: var(--accent); }
-footer { color: var(--muted); font-size: 13px; }
+footer { color: var(--muted); font-size: 13px; max-width: 100ch; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 <!--BODY-->
 <div class="wrap">
   <header>
     <h1>__TITLE__</h1>
-    <p class="lede">Active speaker detection on AVA, UniTalk, WASD and EasyCom, scored with the official AVA script (mAP at 0.5 IoU). Every point is one model with ground-truth boxes or with the face detector in the loop. Move the version slider to see how each configuration changes from release to release.</p>
+    <p class="lede">Active speaker detection on AVA, UniTalk, WASD and EasyCom, scored with the official AVA script (mAP at 0.5 IoU). Each model is measured twice: on the dataset's own face boxes, which measures the model alone, and with our face detector in the loop, which is what a robot actually runs. Move the version slider to see how each configuration changes from release to release.</p>
     <p class="notice" id="banner" hidden></p>
   </header>
 
   <section class="controls" aria-label="Filters">
     <label class="field"><span>Dataset</span><select id="dataset"></select></label>
     <label class="field"><span>Metric</span><select id="metric"></select></label>
-    <label class="field"><span>Time axis</span><select id="axis">
-      <option value="pi">Raspberry Pi 4, ms per frame</option>
-      <option value="gpu">GPU machine, ms per frame</option>
+    <label class="field"><span>Timing</span><select id="axis">
+      <option value="pi">Raspberry Pi 4</option>
+      <option value="gpu">GPU machine</option>
     </select></label>
     <div class="versions">
       <span class="label">Version</span>
@@ -123,15 +145,31 @@ footer { color: var(--muted); font-size: 13px; }
 
   <section class="panel">
     <h2>Speed and accuracy</h2>
-    <p class="sub" id="scatter-sub"></p>
-    <div id="scatter" class="plot main"></div>
+    <p class="sub" id="main-sub"></p>
+    <div class="legend" id="legend"></div>
+    <div class="pair">
+      <div class="side">
+        <span class="kicker">Protocol 1</span>
+        <h3>Model only (ground-truth boxes)</h3>
+        <p class="sub">The dataset's annotated face boxes go straight to the model, as in the literature. It measures how well the model itself decides who speaks. Time: crop, landmarks or preprocessing, model and averaging per frame.</p>
+        <div class="includes"><span class="chip">crop</span><span class="chip">landmarks / preprocess</span><span class="chip">model</span><span class="chip">averaging</span></div>
+        <div id="scatter-gt" class="plot main"></div>
+      </div>
+      <div class="side">
+        <span class="kicker">Protocol 2</span>
+        <h3>Full pipeline (face detector)</h3>
+        <p class="sub">Our face detector and tracker find the faces, as on the robot. Missed faces count as errors and wrong boxes cost accuracy. Time: everything per frame, from reading the frame to the decision.</p>
+        <div class="includes"><span class="chip">read frame</span><span class="chip det">face detection</span><span class="chip det">tracking</span><span class="chip">crop</span><span class="chip">landmarks / preprocess</span><span class="chip">model</span><span class="chip">averaging</span></div>
+        <div id="scatter-det" class="plot main"></div>
+      </div>
+    </div>
   </section>
 
   <div class="grid2">
     <section class="panel">
-      <h2>Progress per configuration</h2>
-      <p class="sub">The selected metric of every configuration of this dataset, version by version. Solid lines use ground-truth boxes, dotted lines the face detector.</p>
-      <div id="progress" class="plot"></div>
+      <h2>Cost of face detection</h2>
+      <p class="sub" id="cost-sub"></p>
+      <div id="cost" class="plot"></div>
     </section>
     <section class="panel">
       <h2>Where the time goes</h2>
@@ -141,9 +179,15 @@ footer { color: var(--muted); font-size: 13px; }
   </div>
 
   <section class="panel">
+    <h2>Progress per configuration</h2>
+    <p class="sub">The selected metric of every model on this dataset, version by version. Solid lines: model only (ground-truth boxes). Dotted lines: full pipeline (face detector).</p>
+    <div id="progress" class="plot"></div>
+  </section>
+
+  <section class="panel">
     <h2>All runs</h2>
     <div class="table-tools">
-      <input type="search" id="filter" placeholder="Filter, e.g. LR-ASD detector" aria-label="Filter the runs">
+      <input type="search" id="filter" placeholder="Filter, e.g. LR-ASD wasd" aria-label="Filter the runs">
       <label><input type="checkbox" id="only-version" checked> Only the selected version</label>
       <button type="button" class="ghost" id="copy">Copy as CSV</button>
       <span id="copied" aria-live="polite"></span>
@@ -151,33 +195,40 @@ footer { color: var(--muted); font-size: 13px; }
     <div class="scroll"><table id="table"><thead></thead><tbody></tbody></table></div>
   </section>
 
-  <footer>Timing on the GPU machine comes from a shared workstation and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed.</footer>
+  <footer>Timing on the GPU machine comes from a shared workstation and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed. Hollow markers: no per-stage timing for that run, so the end-to-end time is shown instead of the model-side time.</footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script>
 const D = /*__DATA__*/null;
-const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces', coverage: 'Faces scored'};
-const FAMILY = {landmarks: 'Landmarks (ours)', pixels: 'Pixels (ours)', av: 'Audio-visual (literature)'};
+const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces'};
+const MODELS = ['LipShapeCausal', 'FaceShapeCausal', 'CNN2Plus1D_Light', 'AV:LR-ASD', 'AV:Light-ASD', 'AV:LRX-ASD', 'AV:TalkNet', 'AV:CAST-ASD', 'AV:FabuLight'];
+const DETECTION = ['detect', 'track'];
+const INPUT = ['read'];
 const STAGES = [
-  ['read', ['read'], 'Read video'], ['detect', ['detect'], 'Face detection'], ['track', ['track'], 'Tracking'],
-  ['crop', ['crop'], 'Crop'], ['pre', ['preprocess'], 'Preprocess / landmarks'], ['buffer', ['buffer'], 'Buffer'],
-  ['audio', ['audio', 'audio_decode'], 'Audio'], ['model', ['model'], 'Model'], ['average', ['average'], 'Averaging'],
+  ['read', ['read'], 'Read frame', 'Input'],
+  ['detect', ['detect'], 'Face detection', 'Detection'], ['track', ['track'], 'Tracking', 'Detection'],
+  ['crop', ['crop'], 'Crop', 'Model side'], ['pre', ['preprocess'], 'Landmarks / preprocess', 'Model side'],
+  ['buffer', ['buffer'], 'Buffer', 'Model side'], ['audio', ['audio', 'audio_decode'], 'Audio', 'Model side'],
+  ['model', ['model'], 'Model', 'Model side'], ['average', ['average'], 'Averaging', 'Model side'],
 ];
 const DATASETS = ['ava', 'unitalk', 'wasd', 'easycom'];
 const DNAME = {ava: 'AVA val', unitalk: 'UniTalk val', wasd: 'WASD val', easycom: 'EasyCom test'};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
-const S = {dataset: null, metric: 'map', axis: null, vi: D.versions.length - 1, timer: null, sort: ['ms', 1]};
+const S = {dataset: null, metric: 'map', axis: null, vi: D.versions.length - 1, timer: null, sort: ['model', 1]};
 
 const gpu = D.runs.filter(r => r.device === 'gpu');
 const pi = D.runs.filter(r => r.device === 'pi');
 const vIndex = Object.fromEntries(D.versions.map((v, i) => [v, i]));
 const cfg = r => [r.dataset, r.model, r.boxes, r.variant].join('|');
+const mkey = r => r.model + '|' + r.variant;
 const short = m => m.replace(/^AV:/, '').replace('ShapeCausal', 'Shape').replace('CNN2Plus1D_Light', 'CNN (2+1)D');
 const label = r => short(r.model) + (r.variant ? ` (${r.variant})` : '');
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const pct = v => v == null ? null : v * 100;
+const otherModels = [...new Set(D.runs.map(r => r.model))].filter(m => !MODELS.includes(m)).sort();
+const colorOf = m => { const i = MODELS.indexOf(m); return tok('--m' + (((i >= 0 ? i : MODELS.length + otherModels.indexOf(m)) % 9) + 1)); };
 
 function piTiming(r, vi) {
   // Pi run of the same model/boxes/variant with the same settings, in this or an earlier version
@@ -188,12 +239,21 @@ function piTiming(r, vi) {
   }
   return null;
 }
-function xOf(r, vi, axis) {
-  if (axis === 'gpu') return r.ms;
-  const p = piTiming(r, vi);
-  return p ? p.ms : null;
+function modelSide(src) {
+  // ms per frame of everything but reading, detection and tracking; null without stage timing
+  const ks = Object.keys(src.stages || {});
+  if (!ks.length) return null;
+  return ks.filter(k => !INPUT.includes(k) && !DETECTION.includes(k)).reduce((s, k) => s + src.stages[k], 0);
 }
-const runsAt = vi => gpu.filter(r => vIndex[r.v] === vi && r.dataset === S.dataset);
+function timing(r, vi, axis) {
+  // {ms, fallback, src} on the protocol's clock: model side for gt boxes, end to end for the detector
+  const src = axis === 'pi' ? piTiming(r, vi) : r;
+  if (!src || src.ms == null) return null;
+  if (r.boxes !== 'gt') return {ms: src.ms, fallback: false, src};
+  const m = modelSide(src);
+  return m ? {ms: m, fallback: false, src} : {ms: src.ms, fallback: true, src};
+}
+const runsAt = (vi, boxes) => gpu.filter(r => vIndex[r.v] === vi && r.dataset === S.dataset && (!boxes || (boxes === 'gt') === (r.boxes === 'gt')));
 
 function defaultAxis() {
   const rs = runsAt(S.vi);
@@ -202,61 +262,151 @@ function defaultAxis() {
 }
 
 function baseLayout(extra) {
-  const ink = tok('--ink'), muted = tok('--muted'), line = tok('--line');
+  const muted = tok('--muted'), line = tok('--line');
   const ax = {gridcolor: line, zerolinecolor: line, linecolor: line, tickfont: {color: muted}, title: {font: {color: muted, size: 12}}};
   return Object.assign({
     paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-    font: {family: tok('--f-body'), color: ink, size: 13},
+    font: {family: tok('--f-body'), color: tok('--ink'), size: 13},
     margin: {l: 56, r: 16, t: 10, b: 50}, hoverlabel: {font: {family: tok('--f-data')}},
-    legend: {orientation: 'h', y: -0.18, font: {size: 12, color: muted}},
-    xaxis: Object.assign({}, ax), yaxis: Object.assign({}, ax),
+    showlegend: false, xaxis: Object.assign({}, ax), yaxis: Object.assign({}, ax),
   }, extra || {});
 }
-const CONF = {responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d']};
+const axTitle = t => ({text: t, font: {color: tok('--muted'), size: 12}});
+const CONF = {responsive: true, displaylogo: false, displayModeBar: 'hover', modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d']};
 
-function drawScatter() {
-  const vi = S.vi, axis = S.axis, m = S.metric;
-  const rs = runsAt(vi);
-  const pts = rs.map(r => ({r, x: xOf(r, vi, axis), y: pct(r[m])})).filter(p => p.x != null && p.y != null);
-  const hidden = rs.length - pts.length;
-  // trails: where each configuration was in the earlier versions
+// fixed ranges over all versions, so the slider shows movement and both panels share the y-scale
+function yRange() {
+  const ys = gpu.filter(r => r.dataset === S.dataset).map(r => pct(r[S.metric])).filter(v => v != null);
+  if (!ys.length) return [0, 100];
+  return [Math.max(0, Math.min(...ys) - 6), Math.min(100, Math.max(...ys) + 6)];
+}
+function xRange(gt) {
+  const xs = [];
+  D.versions.forEach((_, i) => runsAt(i, gt ? 'gt' : 'det').forEach(r => { const t = timing(r, i, S.axis); if (t) xs.push(t.ms); }));
+  if (!xs.length) return undefined;
+  return [Math.log10(Math.min(...xs)) - 0.12, Math.log10(Math.max(...xs)) + 0.12];
+}
+
+function drawScatter(gt) {
+  const vi = S.vi, axis = S.axis, m = S.metric, div = gt ? 'scatter-gt' : 'scatter-det';
+  const rs = runsAt(vi, gt ? 'gt' : 'det');
+  const pts = rs.map(r => ({r, t: timing(r, vi, axis), y: pct(r[m])})).filter(p => p.t && p.y != null).map(p => Object.assign(p, {x: p.t.ms}));
   const tx = [], ty = [];
   for (const p of pts) {
     const path = [];
     for (let i = 0; i <= vi; i++) {
       const q = gpu.find(g => vIndex[g.v] === i && cfg(g) === cfg(p.r));
-      if (q) { const x = xOf(q, i, axis), y = pct(q[m]); if (x != null && y != null) path.push([x, y]); }
+      const t = q && timing(q, i, axis), y = q && pct(q[m]);
+      if (t && y != null) path.push([t.ms, y]);
     }
     if (path.length > 1) { for (const [x, y] of path) { tx.push(x); ty.push(y); } tx.push(null); ty.push(null); }
   }
-  // Pareto front: nothing else is both faster and better
   const front = []; let best = -Infinity;
   for (const p of [...pts].sort((a, b) => a.x - b.x || b.y - a.y)) if (p.y > best) { front.push(p); best = p.y; }
+  const sorted = [...pts].sort((a, b) => a.x - b.x);
   const traces = [
-    {x: tx, y: ty, mode: 'lines', line: {color: tok('--muted'), width: 1.5}, opacity: 0.35, hoverinfo: 'skip', name: 'Earlier versions', showlegend: tx.length > 0},
-    {x: front.map(p => p.x), y: front.map(p => p.y), mode: 'lines', line: {color: tok('--ink'), width: 1, dash: 'dot', shape: 'hv'}, opacity: 0.55, hoverinfo: 'skip', name: 'Pareto front'},
+    {x: tx, y: ty, mode: 'lines', line: {color: tok('--muted'), width: 1.5}, opacity: 0.35, hoverinfo: 'skip'},
+    {x: front.map(p => p.x), y: front.map(p => p.y), mode: 'lines', line: {color: tok('--ink'), width: 1, dash: 'dot', shape: 'hv'}, opacity: 0.5, hoverinfo: 'skip'},
+    {
+      x: sorted.map(p => p.x), y: sorted.map(p => p.y), mode: 'markers+text',
+      text: sorted.map(p => label(p.r)), textposition: sorted.map((p, i) => i % 2 ? 'bottom center' : 'top center'),
+      textfont: {size: 11, color: tok('--muted')},
+      marker: {size: 12, color: sorted.map(p => p.t.fallback ? 'rgba(0,0,0,0)' : colorOf(p.r.model)),
+        symbol: sorted.map(p => p.r.variant ? 'square' : 'circle'),
+        line: {width: 2, color: sorted.map(p => p.t.fallback ? colorOf(p.r.model) : tok('--panel'))}},
+      customdata: sorted.map(p => [label(p.r), p.r.settings, p.r.v, p.t.fallback ? ' (end to end: no stage timing)' : '',
+        p.t.src.device === 'pi' ? 'Pi 4' : 'GPU', p.r.det_recall == null ? '' : `<br>faces found ${(p.r.det_recall * 100).toFixed(1)}%`]),
+      hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]}<br>' + METRICS[m] + ' %{y:.1f}<br>%{x:.1f} ms/frame on %{customdata[4]}%{customdata[3]}%{customdata[5]}<br>version %{customdata[2]}<extra></extra>',
+    },
   ];
-  for (const fam of Object.keys(FAMILY)) {
-    const fp = pts.filter(p => p.r.family === fam).sort((a, b) => a.x - b.x);
-    traces.push({
-      x: fp.map(p => p.x), y: fp.map(p => p.y), mode: 'markers+text', name: FAMILY[fam],
-      text: fp.map(p => label(p.r)), textposition: fp.map((p, i) => i % 2 ? 'bottom center' : 'top center'), textfont: {size: 11, color: tok('--muted')},
-      marker: {color: tok('--fam-' + fam), size: 12, symbol: fp.map(p => p.r.boxes === 'gt' ? 'circle' : 'diamond'), line: {color: tok('--panel'), width: 1.5}},
-      customdata: fp.map(p => [label(p.r), p.r.boxes === 'gt' ? 'ground-truth boxes' : 'face detector', p.r.settings, p.r.v]),
-      hovertemplate: '<b>%{customdata[0]}</b> · %{customdata[1]}<br>%{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.1f} ms/frame<br>version %{customdata[3]}<extra></extra>',
-    });
-  }
-  for (const [sym, nm] of [['circle', 'Ground-truth boxes'], ['diamond', 'Face detector']])
-    traces.push({x: [null], y: [null], mode: 'markers', name: nm, marker: {symbol: sym, size: 10, color: tok('--muted')}});
+  const where = axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine';
   const layout = baseLayout({
-    xaxis: Object.assign(baseLayout().xaxis, {type: 'log', tickvals: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000], title: {text: (axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine') + ', ms per frame (log scale, faster to the left)', font: {color: tok('--muted'), size: 12}}}),
-    yaxis: Object.assign(baseLayout().yaxis, {title: {text: METRICS[m] + ' (%)', font: {color: tok('--muted'), size: 12}}}),
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'log', range: xRange(gt), tickvals: [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000],
+      title: axTitle(gt ? `Model-side ms per frame, ${where} (log)` : `End-to-end ms per frame, ${where} (log)`)}),
+    yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
     transition: {duration: reduced ? 0 : 450, easing: 'cubic-in-out'},
   });
-  Plotly.react('scatter', traces, layout, CONF);
-  const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
-  $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ${timing}` +
-    (hidden ? ` ${hidden} configuration${hidden > 1 ? 's have' : ' has'} no ${axis === 'pi' ? 'Pi' : ''} timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
+  Plotly.react(div, traces, layout, CONF);
+  return rs.length - pts.length;
+}
+
+function drawLegend() {
+  const ms = [...new Map(gpu.filter(r => r.dataset === S.dataset).map(r => [r.model, r])).values()]
+    .sort((a, b) => (MODELS.indexOf(a.model) + 99) % 99 - (MODELS.indexOf(b.model) + 99) % 99);
+  $('legend').innerHTML = ms.map(r => `<span><i class="sw" style="background:${colorOf(r.model)}"></i>${short(r.model)}</span>`).join('') +
+    '<span><i class="sw sq" style="background:var(--muted)"></i>face only (no audio)</span>' +
+    '<span><i class="sw open"></i>no stage timing</span>' +
+    '<span>· · · Pareto front</span><span>— earlier versions</span>';
+}
+
+function drawCost() {
+  const vi = S.vi, m = S.metric, axis = S.axis;
+  const gt = runsAt(vi, 'gt'), det = runsAt(vi, 'det');
+  const rows = [];
+  for (const g of gt) {
+    const d = det.find(x => mkey(x) === mkey(g));
+    if (!d || g[m] == null || d[m] == null) continue;
+    const tg = timing(g, vi, axis), td = timing(d, vi, axis);
+    rows.push({g, d, a: pct(g[m]), b: pct(d[m]), dms: tg && td ? td.ms - tg.ms : null});
+  }
+  rows.sort((p, q) => (p.a - p.b) - (q.a - q.b));
+  const names = rows.map(x => label(x.g));
+  const lx = [], ly = [];
+  rows.forEach((x, i) => { lx.push(x.a, x.b, null); ly.push(names[i], names[i], null); });
+  const traces = [
+    {x: lx, y: ly, mode: 'lines', line: {color: tok('--line'), width: 6}, hoverinfo: 'skip'},
+    {x: rows.map(x => x.a), y: names, mode: 'markers', name: 'Model only', marker: {size: 12, symbol: 'circle', color: rows.map(x => colorOf(x.g.model)), line: {width: 1.5, color: tok('--panel')}},
+      hovertemplate: '<b>%{y}</b><br>model only: %{x:.1f}<extra></extra>'},
+    {x: rows.map(x => x.b), y: names, mode: 'markers', name: 'Full pipeline', marker: {size: 12, symbol: 'diamond-open', color: rows.map(x => colorOf(x.g.model)), line: {width: 2.5}},
+      customdata: rows.map(x => [(x.b - x.a).toFixed(1), x.dms == null ? 'n/a' : '+' + x.dms.toFixed(1), x.d.det_recall == null ? 'n/a' : (x.d.det_recall * 100).toFixed(1) + '%']),
+      hovertemplate: '<b>%{y}</b><br>full pipeline: %{x:.1f}<br>Δ ' + METRICS[m] + ' %{customdata[0]}<br>Δ time %{customdata[1]} ms/frame<br>faces found %{customdata[2]}<extra></extra>'},
+  ];
+  const annotations = rows.map((x, i) => ({x: Math.max(x.a, x.b), y: names[i], xanchor: 'left', xshift: 12, showarrow: false,
+    text: `${(x.b - x.a).toFixed(1)}` + (x.dms == null ? '' : ` · +${x.dms.toFixed(1)} ms`), font: {size: 11, family: tok('--f-data'), color: tok('--muted')}}));
+  const yr = yRange();
+  const layout = baseLayout({
+    margin: {l: 10, r: 20, t: 10, b: 50}, annotations,
+    xaxis: Object.assign(baseLayout().xaxis, {range: [yr[0], yr[1] + 14], title: axTitle(METRICS[m] + ' (%): ● model only, ◇ full pipeline')}),
+    yaxis: Object.assign(baseLayout().yaxis, {automargin: true, tickfont: {size: 12, color: tok('--muted')}}),
+    height: Math.max(300, 90 + rows.length * 34),
+  });
+  Plotly.react('cost', traces, layout, CONF);
+  $('cost-sub').textContent = rows.length
+    ? `What the face detector costs each model on ${DNAME[S.dataset] || S.dataset}: the gap between the two protocols in ${METRICS[m]}, and the extra time per frame (full pipeline end to end minus model side, ${axis === 'pi' ? 'Pi' : 'GPU'}). Largest loss at the bottom.`
+    : `No model has runs with both box settings on ${DNAME[S.dataset] || S.dataset} in this version yet.`;
+}
+
+function drawStages() {
+  const vi = S.vi;
+  let rs = runsAt(vi, 'det'), which = 'full pipeline';
+  if (!rs.length) { rs = runsAt(vi, 'gt'); which = 'model only (no full-pipeline runs on this dataset yet)'; }
+  const rows = rs.map(r => {
+    const p = S.axis === 'pi' ? piTiming(r, vi) : null;
+    const src = p || r;
+    return {r, src, dev: p ? 'Pi' : 'GPU', total: src.ms || 0};
+  }).filter(x => x.total).sort((a, b) => a.total - b.total);
+  const names = rows.map(x => `${label(x.r)} (${x.dev})`);
+  const traces = STAGES.map(([id, raw, nm, grp]) => ({
+    type: 'bar', orientation: 'h', name: nm, y: names, legendgroup: grp, legendgrouptitle: {text: grp, font: {size: 11, color: tok('--ink')}},
+    x: rows.map(x => raw.reduce((s, k) => s + (x.src.stages[k] || 0), 0)),
+    marker: {color: tok('--st-' + id), line: {width: 0}}, hovertemplate: nm + ': %{x:.2f} ms<extra>%{y}</extra>',
+  }));
+  traces.push({type: 'bar', orientation: 'h', name: 'Other', legendgroup: 'Other', y: names, marker: {color: tok('--st-other')},
+    x: rows.map(x => Math.max(0, x.total - Object.values(x.src.stages).reduce((s, v) => s + v, 0))),
+    hovertemplate: 'Other: %{x:.2f} ms<extra>%{y}</extra>'});
+  const share = rows.map(x => { const d = DETECTION.reduce((s, k) => s + (x.src.stages[k] || 0), 0); return x.total ? d / x.total : 0; });
+  const annotations = rows.map((x, i) => share[i] > 0 ? {x: x.total, y: names[i], xanchor: 'left', xshift: 6, showarrow: false,
+    text: `detection ${(share[i] * 100).toFixed(0)}%`, font: {size: 11, family: tok('--f-data'), color: tok('--st-detect')}} : null).filter(Boolean);
+  const layout = baseLayout({
+    barmode: 'stack', margin: {l: 10, r: 20, t: 10, b: 60}, showlegend: true, annotations,
+    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle('ms per frame'), range: [0, Math.max(1, ...rows.map(x => x.total)) * 1.28]}),
+    yaxis: Object.assign(baseLayout().yaxis, {automargin: true, tickfont: {size: 11, color: tok('--muted')}}),
+    legend: {orientation: 'h', y: -0.3, yanchor: 'top', font: {size: 11, color: tok('--muted')}, groupclick: 'toggleitem', traceorder: 'grouped'},
+    height: Math.max(380, 150 + rows.length * 30),
+  });
+  Plotly.react('stages', traces, layout, CONF);
+  $('stages-sub').textContent = `Per frame, ${which}, ${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. Warm colours are face detection and tracking, cool colours the model side. ` +
+    (S.axis === 'pi' ? 'Pi timing where it exists, otherwise GPU (marked in the labels).' : 'GPU timing.');
 }
 
 function drawProgress() {
@@ -265,111 +415,120 @@ function drawProgress() {
   const traces = keys.map(k => {
     const ys = D.versions.map((v, i) => { const r = gpu.find(g => vIndex[g.v] === i && cfg(g) === k); return r ? pct(r[m]) : null; });
     const r = gpu.find(g => cfg(g) === k);
-    return {x: D.versions, y: ys, mode: 'lines+markers', name: label(r) + (r.boxes === 'gt' ? '' : ' · detector'),
-      line: {color: tok('--fam-' + r.family), width: 2, dash: r.boxes === 'gt' ? 'solid' : 'dot'}, marker: {size: 7},
-      hovertemplate: '<b>' + label(r) + '</b> · ' + r.boxes + '<br>%{x}: %{y:.1f}<extra></extra>'};
+    const proto = r.boxes === 'gt' ? 'model only' : 'full pipeline';
+    return {x: D.versions, y: ys, mode: 'lines+markers', name: `${label(r)}, ${proto}`,
+      line: {color: colorOf(r.model), width: 2, dash: r.boxes === 'gt' ? 'solid' : 'dot'},
+      marker: {size: 8, symbol: r.boxes === 'gt' ? 'circle' : 'diamond-open', line: {width: 2}},
+      hovertemplate: `<b>${label(r)}</b> · ${proto}<br>%{x}: %{y:.1f}<extra></extra>`};
   });
   const layout = baseLayout({
-    xaxis: Object.assign(baseLayout().xaxis, {type: 'category', automargin: true, range: [-0.4, D.versions.length - 0.6]}),
-    yaxis: Object.assign(baseLayout().yaxis, {title: {text: METRICS[m] + ' (%)', font: {color: tok('--muted'), size: 12}}}),
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'category', automargin: true, range: [-0.3, D.versions.length - 0.7]}),
+    yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
     shapes: [{type: 'line', xref: 'x', yref: 'paper', x0: D.versions[S.vi], x1: D.versions[S.vi], y0: 0, y1: 1, line: {color: tok('--accent'), width: 2}, opacity: 0.4}],
-    legend: {orientation: 'h', y: -0.25, font: {size: 11, color: tok('--muted')}}, margin: {l: 56, r: 16, t: 10, b: 60},
+    showlegend: true, legend: {orientation: 'v', x: 1.02, y: 1, font: {size: 11, color: tok('--muted')}},
+    margin: {l: 56, r: 10, t: 10, b: 50},
   });
   Plotly.react('progress', traces, layout, CONF);
 }
 
-function drawStages() {
-  const vi = S.vi;
-  const rows = runsAt(vi).map(r => {
-    const p = S.axis === 'pi' ? piTiming(r, vi) : null;
-    const src = p || r;
-    return {r, src, dev: p ? 'Pi' : 'GPU', total: src.ms || 0};
-  }).filter(x => x.total).sort((a, b) => a.total - b.total);
-  const names = rows.map(x => `${label(x.r)} · ${x.r.boxes} (${x.dev})`);
-  const traces = STAGES.map(([id, raw, nm]) => ({
-    type: 'bar', orientation: 'h', name: nm, y: names,
-    x: rows.map(x => raw.reduce((s, k) => s + (x.src.stages[k] || 0), 0)),
-    marker: {color: tok('--st-' + id)}, hovertemplate: nm + ': %{x:.2f} ms<extra>%{y}</extra>',
-  }));
-  traces.push({type: 'bar', orientation: 'h', name: 'Other', y: names, marker: {color: tok('--st-other')},
-    x: rows.map(x => Math.max(0, x.total - Object.values(x.src.stages).reduce((s, v) => s + v, 0))),
-    hovertemplate: 'Other: %{x:.2f} ms<extra>%{y}</extra>'});
-  const layout = baseLayout({
-    barmode: 'stack', margin: {l: 10, r: 16, t: 10, b: 60},
-    xaxis: Object.assign(baseLayout().xaxis, {title: {text: 'ms per frame', font: {color: tok('--muted'), size: 12}}}),
-    yaxis: Object.assign(baseLayout().yaxis, {automargin: true, tickfont: {size: 11, color: tok('--muted')}}),
-    legend: {orientation: 'h', y: -0.22, font: {size: 11, color: tok('--muted')}},
-    height: Math.max(380, 60 + rows.length * 28),
-  });
-  Plotly.react('stages', traces, layout, CONF);
-  $('stages-sub').textContent = `Pipeline stages per frame for ${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ` +
-    (S.axis === 'pi' ? 'Pi timing where it exists, otherwise GPU timing (marked in the labels).' : 'GPU timing.');
-}
-
+// table: one row per model and version; columns grouped by protocol
 const COLS = [
-  ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['boxes', 'Boxes'], ['device', 'Device'],
-  ['videos', 'Videos', 0], ['map', 'mAP', 1], ['f1', 'F1', 1], ['map_small', 'mAP small', 1],
-  ['coverage', 'Scored', 1], ['det_recall', 'Det. recall', 1], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
+  ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['device', 'Device'],
+  ['gt.map', 'mAP', 1, 'gt'], ['gt.f1', 'F1', 1, 'gt'], ['gt.map_small', 'mAP small', 1, 'gt'], ['gt.ms', 'ms/frame', 2, 'gt'],
+  ['det.map', 'mAP', 1, 'det'], ['det.f1', 'F1', 1, 'det'], ['det.map_small', 'mAP small', 1, 'det'],
+  ['det.det_recall', 'Faces found', 1, 'det'], ['det.coverage', 'Scored', 1, 'det'], ['det.ms', 'ms/frame', 2, 'det'],
+  ['settings', 'Settings'],
 ];
+function grouped() {
+  const out = new Map();
+  for (const r of D.runs) {
+    const k = [r.v, r.device, r.dataset, r.model, r.variant].join('|');
+    if (!out.has(k)) out.set(k, {v: r.v, device: r.device, dataset: r.dataset, model: r.model, variant: r.variant, settings: r.settings, gt: {}, det: {}});
+    const g = out.get(k);
+    const side = r.boxes === 'gt' ? 'gt' : 'det';
+    const ms = r.boxes === 'gt' ? (modelSide(r) ?? r.ms) : r.ms;
+    g[side] = Object.assign({}, r, {ms});
+    if (side === 'det') g.settings = r.settings;
+  }
+  return [...out.values()];
+}
+const get = (o, k) => k.split('.').reduce((a, p) => a == null ? null : a[p], o);
 function tableRows() {
   const q = $('filter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  let rs = D.runs.filter(r => !$('only-version').checked || vIndex[r.v] === S.vi);
-  rs = rs.filter(r => { const s = [r.v, r.dataset, label(r), r.model, r.boxes, r.device, r.settings].join(' ').toLowerCase(); return q.every(w => s.includes(w)); });
+  let rs = grouped().filter(r => !$('only-version').checked || vIndex[r.v] === S.vi);
+  rs = rs.filter(r => { const s = [r.v, r.dataset, DNAME[r.dataset], label(r), r.model, r.device, r.settings].join(' ').toLowerCase(); return q.every(w => s.includes(w)); });
   const [k, dir] = S.sort;
-  return rs.sort((a, b) => { const x = a[k], y = b[k]; if (x == null) return 1; if (y == null) return -1; return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+  return rs.sort((a, b) => {
+    const x = k === 'model' ? MODELS.indexOf(a.model) : get(a, k), y = k === 'model' ? MODELS.indexOf(b.model) : get(b, k);
+    if (x == null) return 1; if (y == null) return -1;
+    return ((x > y ? 1 : x < y ? -1 : 0) * dir) || a.dataset.localeCompare(b.dataset);
+  });
 }
-function fmt(r, k, kind) {
-  const v = r[k];
+function fmt(v, kind) {
   if (v == null || v === '') return '–';
   if (kind === 1) return (v * 100).toFixed(1);
   if (kind === 2) return v.toFixed(1);
-  if (kind === 0) return String(v);
   return v;
 }
 function drawTable() {
   const head = $('table').tHead, body = $('table').tBodies[0];
-  head.innerHTML = '<tr>' + COLS.map(([k, h]) => `<th data-k="${k}" aria-sort="${S.sort[0] === k ? (S.sort[1] > 0 ? 'ascending' : 'descending') : 'none'}" tabindex="0">${h}</th>`).join('') + '</tr>';
+  const sortAttr = k => `aria-sort="${S.sort[0] === k ? (S.sort[1] > 0 ? 'ascending' : 'descending') : 'none'}"`;
+  head.innerHTML = '<tr><th colspan="4"></th><th colspan="4" class="grp gt first">Model only (ground-truth boxes)</th><th colspan="6" class="grp det first">Full pipeline (face detector)</th><th></th></tr>' +
+    '<tr>' + COLS.map(([k, h, , grp]) => `<th class="s${(k === 'gt.map' || k === 'det.map') ? ' first' : ''}" data-k="${k}" ${sortAttr(k)} tabindex="0">${h}</th>`).join('') + '</tr>';
   body.innerHTML = tableRows().map(r => '<tr>' + COLS.map(([k, , kind]) => {
-    if (k === 'model') return `<td><span class="dot" style="background:var(--fam-${r.family})"></span>${label(r)}</td>`;
+    const first = (k === 'gt.map' || k === 'det.map') ? ' first' : '';
+    if (k === 'model') return `<td><span class="dot" style="background:${colorOf(r.model)}"></span>${label(r)}</td>`;
     if (k === 'device') return `<td><span class="pill ${r.device}">${r.device === 'pi' ? 'Pi 4' : 'GPU'}</span></td>`;
-    if (k === 'dataset') return `<td>${DNAME[r.dataset] || r.dataset}</td>`;
-    return `<td class="${kind != null ? 'n' : ''}">${fmt(r, k, kind)}</td>`;
+    if (k === 'dataset') return `<td>${DNAME[r.dataset] || r.dataset}${r.device === 'pi' ? ' (timing only)' : ''}</td>`;
+    if (kind == null) return `<td>${get(r, k) ?? '–'}</td>`;
+    const pIsTiming = r.device === 'pi' && kind !== 2;
+    return `<td class="n${first}">${pIsTiming ? '–' : fmt(get(r, k), kind)}</td>`;
   }).join('') + '</tr>').join('');
-  head.querySelectorAll('th').forEach(th => {
+  head.querySelectorAll('th.s').forEach(th => {
     const go = () => { const k = th.dataset.k; S.sort = [k, S.sort[0] === k ? -S.sort[1] : 1]; drawTable(); };
     th.onclick = go; th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
   });
 }
 function copyCsv() {
-  const rs = tableRows();
-  const keys = ['v', 'dataset', 'model', 'boxes', 'variant', 'device', 'settings', 'videos', 'map', 'f1', 'map_small', 'coverage', 'det_recall', 'ms', 'fps'];
+  // flat rows, one per run
+  const q = $('filter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const rs = D.runs.filter(r => (!$('only-version').checked || vIndex[r.v] === S.vi) &&
+    q.every(w => [r.v, r.dataset, label(r), r.model, r.device, r.settings, r.boxes].join(' ').toLowerCase().includes(w)));
+  const keys = ['v', 'dataset', 'model', 'variant', 'boxes', 'device', 'settings', 'videos', 'map', 'f1', 'map_small', 'coverage', 'det_recall', 'ms_model_side', 'ms', 'fps'];
   const esc = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
-  const text = [keys.join(',')].concat(rs.map(r => keys.map(k => esc(r[k])).join(','))).join('\n');
+  const text = [keys.join(',')].concat(rs.map(r => keys.map(k => esc(k === 'ms_model_side' ? modelSide(r) : r[k])).join(','))).join('\n');
   const done = msg => { $('copied').textContent = msg; setTimeout(() => { $('copied').textContent = ''; }, 2500); };
   const fallback = () => { const t = document.createElement('textarea'); t.className = 'copy'; t.value = text; document.body.appendChild(t); t.select(); done('Selected: press Ctrl+C to copy'); setTimeout(() => t.remove(), 8000); };
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(`Copied ${rs.length} rows`), fallback);
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(`Copied ${rs.length} runs`), fallback);
   else fallback();
 }
 
+function drawMain() {
+  const hidden = drawScatter(true) + drawScatter(false);
+  const timingTxt = S.axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
+  $('main-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[S.vi]}. Both panels share the ${METRICS[S.metric]} scale; up is better, left is faster. ${timingTxt}` +
+    (hidden ? ` ${hidden} run${hidden > 1 ? 's have' : ' has'} no ${S.axis === 'pi' ? 'Pi ' : ''}timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
+}
 function drawVersion() {
   $('version').value = S.vi;
   [...$('ticks').children].forEach((t, i) => t.classList.toggle('on', i === S.vi));
   $('vnote').textContent = D.notes[D.versions[S.vi]] || '';
 }
-function drawAll() { drawVersion(); drawScatter(); drawProgress(); drawStages(); drawTable(); }
+function drawAll() { drawVersion(); drawLegend(); drawMain(); drawCost(); drawStages(); drawProgress(); drawTable(); }
 
 function init() {
   if (D.banner) { $('banner').textContent = D.banner; $('banner').hidden = false; }
   const present = DATASETS.filter(d => gpu.some(r => r.dataset === d)).concat([...new Set(gpu.map(r => r.dataset))].filter(d => !DATASETS.includes(d)));
   $('dataset').innerHTML = present.map(d => `<option value="${d}">${DNAME[d] || d}</option>`).join('');
-  S.dataset = present[0];
+  S.dataset = present.find(d => gpu.some(r => r.dataset === d && r.boxes !== 'gt')) || present[0];
+  $('dataset').value = S.dataset;
   $('metric').innerHTML = Object.entries(METRICS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   $('version').max = D.versions.length - 1;
   $('ticks').innerHTML = D.versions.map(v => `<span>${v}</span>`).join('');
   S.axis = defaultAxis(); $('axis').value = S.axis;
   $('dataset').onchange = e => { S.dataset = e.target.value; S.axis = defaultAxis(); $('axis').value = S.axis; drawAll(); };
-  $('metric').onchange = e => { S.metric = e.target.value; drawScatter(); drawProgress(); };
-  $('axis').onchange = e => { S.axis = e.target.value; drawScatter(); drawStages(); };
+  $('metric').onchange = e => { S.metric = e.target.value; drawMain(); drawCost(); drawProgress(); };
+  $('axis').onchange = e => { S.axis = e.target.value; drawMain(); drawCost(); drawStages(); };
   $('version').oninput = e => { stop(); S.vi = +e.target.value; drawAll(); };
   $('play').onclick = () => S.timer ? stop() : play();
   $('filter').oninput = drawTable; $('only-version').onchange = drawTable; $('copy').onclick = copyCsv;
