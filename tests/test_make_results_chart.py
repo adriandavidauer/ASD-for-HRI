@@ -1,0 +1,70 @@
+"""Tests for the interactive results page (#74)."""
+
+import json
+
+from src.experiments.make_results_chart import build, settings
+from src.experiments.run_benchmark import write_csv
+
+
+def _summary(arch, boxes='gt', machine='x86_64', started='2026-11-01T00:00', **extra):
+    """A ``summary.json`` as ``run_benchmark`` collects it.
+
+    Returns:
+        dict: The summary.
+    """
+    row = {'dataset': 'unitalk', 'split': 'val', 'architecture': arch, 'boxes': boxes,
+           'stride': 1, 'av_window': 25, 'audio': True, 'causal_mode': 'streaming',
+           'window': 38, 'machine': machine, 'started_at': started, 'videos': 18, 'map': 0.5,
+           'f1': 0.4, 'coverage': 0.99, 'fps': 100.0,
+           'stage_ms_per_frame': {'read': 1.0, 'model': 4.0, 'frame': 10.0}, 'run': arch}
+    row.update(extra)
+    return row
+
+
+def _embedded(html):
+    """The data embedded in the page.
+
+    Returns:
+        dict: The data.
+    """
+    start = html.index('const D = ') + len('const D = ')
+    return json.loads(html[start:html.index(';\n', start)].replace('<\\/', '</'))
+
+
+def test_page_holds_all_versions_and_runs(tmp_path):
+    """Runs keep their version, Pi runs are marked, the frame time comes from the stages."""
+    write_csv([_summary('LipShapeCausal'), _summary('LipShapeCausal', machine='aarch64'),
+               _summary('AV:LR-ASD', audio=False)], tmp_path / 'a.csv')
+    write_csv([_summary('LipShapeCausal', shape_passes=2)], tmp_path / 'b.csv')
+    out = tmp_path / 'page.html'
+    build([('0.0.0', tmp_path / 'a.csv'), ('0.1.0', tmp_path / 'b.csv')], out,
+          notes={'0.1.0': 'fine-tuned'}, banner='preview')
+    html = out.read_text()
+    assert html.startswith('<!doctype html>') and '<!--BODY-->' not in html
+    data = _embedded(html)
+    assert data['versions'] == ['0.0.0', '0.1.0'] and data['notes'] == {'0.1.0': 'fine-tuned'}
+    runs = data['runs']
+    assert [r['v'] for r in runs] == ['0.0.0'] * 3 + ['0.1.0']
+    assert sorted(r['device'] for r in runs if r['v'] == '0.0.0') == ['gpu', 'gpu', 'pi']
+    assert [r['variant'] for r in runs if r['model'] == 'AV:LR-ASD'] == ['face only']
+    assert runs[0]['ms'] == 10.0 and runs[0]['stages'] == {'read': 1.0, 'model': 4.0}
+    assert runs[-1]['settings'] == 'streaming, 2 dlib passes'
+
+
+def test_duplicate_configuration_keeps_the_later_run(tmp_path):
+    """Two runs of one configuration in one version: the later one is used."""
+    write_csv([_summary('LipShapeCausal', started='2026-11-02T00:00', map=0.3),
+               _summary('LipShapeCausal', started='2026-11-01T00:00', map=0.9)], tmp_path / 'a.csv')
+    out = tmp_path / 'page.html'
+    data = build([('0.0.0', tmp_path / 'a.csv')], out, fragment=True)
+    assert [r['map'] for r in data['runs']] == [0.3]
+    assert '<html' not in out.read_text()
+
+
+def test_settings_name_what_changes_results():
+    """Defaults are left out; window mode, stride and dlib passes are named."""
+    base = {'architecture': 'LipShapeCausal', 'causal_mode': 'streaming', 'stride': '1',
+            'shape_passes': '1', 'audio': 'True'}
+    assert settings(base) == 'streaming'
+    assert settings(dict(base, causal_mode='window', window='38', stride='2')) == 'window 38, stride 2'
+    assert settings(dict(base, architecture='AV:TalkNet', audio='False')) == 'streaming, no audio'

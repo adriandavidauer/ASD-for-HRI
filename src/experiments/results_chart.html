@@ -1,0 +1,388 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one control bar on top; the speed/accuracy plot as the main view, two smaller views
+   side by side below it, the table last. Colours: cool neutral ground, one hue per model family. */
+:root {
+  --bg: #f4f6f7; --panel: #ffffff; --ink: #18212b; --muted: #5a6672; --line: #dbe1e6;
+  --accent: #0d7a6f; --notice: #fff5e0; --notice-ink: #6b4a00;
+  --fam-landmarks: #0d8a7c; --fam-pixels: #c25210; --fam-av: #4f5cc0;
+  --st-read: #9aa4ae; --st-detect: #d98a2b; --st-track: #e7c15a; --st-crop: #a9bb6a;
+  --st-pre: #2a9d8f; --st-buffer: #8ccfc6; --st-audio: #8a78d6; --st-model: #3b5998;
+  --st-average: #c46a86; --st-other: #cfd6dc;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1418; --panel: #161d23; --ink: #e5eaee; --muted: #97a3ae; --line: #2a333c;
+    --accent: #3cc7b4; --notice: #2e2615; --notice-ink: #f1d08a;
+    --fam-landmarks: #35c4b1; --fam-pixels: #f08a45; --fam-av: #8f99f3;
+    --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b; --st-crop: #a7bb63;
+    --st-pre: #36b3a3; --st-buffer: #6fb8ae; --st-audio: #9d8de6; --st-model: #6d8fd6;
+    --st-average: #d784a0; --st-other: #46505a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1418; --panel: #161d23; --ink: #e5eaee; --muted: #97a3ae; --line: #2a333c;
+  --accent: #3cc7b4; --notice: #2e2615; --notice-ink: #f1d08a;
+  --fam-landmarks: #35c4b1; --fam-pixels: #f08a45; --fam-av: #8f99f3;
+  --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b; --st-crop: #a7bb63;
+  --st-pre: #36b3a3; --st-buffer: #6fb8ae; --st-audio: #9d8de6; --st-model: #6d8fd6;
+  --st-average: #d784a0; --st-other: #46505a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font: 700 clamp(26px, 4vw, 36px)/1.1 var(--f-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font: 600 18px/1.3 var(--f-display); margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+.notice { background: var(--notice); color: var(--notice-ink); border-radius: 8px; padding: 10px 14px; margin: 0; }
+.controls {
+  display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+}
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span, .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+select, input[type="search"] {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; min-width: 0;
+}
+.versions { flex: 1 1 320px; display: grid; gap: 4px; min-width: 0; }
+.slider-row { display: flex; gap: 10px; align-items: center; }
+.slider-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.ticks { display: flex; justify-content: space-between; gap: 6px; font: 12px/1.3 var(--f-data); color: var(--muted); }
+.ticks span { flex: 1 1 0; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.ticks span:first-child { text-align: left; } .ticks span:last-child { text-align: right; }
+.ticks span.on { color: var(--ink); font-weight: 500; }
+.vnote { font-size: 13px; color: var(--muted); min-height: 1.3em; }
+button {
+  font: 600 13px/1 var(--f-body); color: var(--panel); background: var(--accent); border: 0;
+  border-radius: 6px; padding: 8px 12px; cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; min-width: 0; }
+.panel .sub { color: var(--muted); font-size: 13px; margin: 0; }
+.plot { width: 100%; min-height: 380px; }
+.plot.main { min-height: 470px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.table-tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.table-tools label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); }
+th[aria-sort="ascending"]::after { content: " ▲"; } th[aria-sort="descending"]::after { content: " ▼"; }
+td.n { text-align: right; font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.pill { font: 500 11px/1 var(--f-data); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.pill.pi { color: var(--accent); border-color: var(--accent); }
+textarea.copy { position: absolute; left: -9999px; }
+#copied { font-size: 13px; color: var(--accent); }
+footer { color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<!--BODY-->
+<div class="wrap">
+  <header>
+    <h1>__TITLE__</h1>
+    <p class="lede">Active speaker detection on AVA, UniTalk, WASD and EasyCom, scored with the official AVA script (mAP at 0.5 IoU). Every point is one model with ground-truth boxes or with the face detector in the loop. Move the version slider to see how each configuration changes from release to release.</p>
+    <p class="notice" id="banner" hidden></p>
+  </header>
+
+  <section class="controls" aria-label="Filters">
+    <label class="field"><span>Dataset</span><select id="dataset"></select></label>
+    <label class="field"><span>Metric</span><select id="metric"></select></label>
+    <label class="field"><span>Time axis</span><select id="axis">
+      <option value="pi">Raspberry Pi 4, ms per frame</option>
+      <option value="gpu">GPU machine, ms per frame</option>
+    </select></label>
+    <div class="versions">
+      <span class="label">Version</span>
+      <div class="slider-row">
+        <button id="play" type="button" aria-label="Play through the versions">Play</button>
+        <input id="version" type="range" min="0" max="0" step="1" value="0" aria-label="Version">
+      </div>
+      <div class="ticks" id="ticks"></div>
+      <div class="vnote" id="vnote"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Speed and accuracy</h2>
+    <p class="sub" id="scatter-sub"></p>
+    <div id="scatter" class="plot main"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Progress per configuration</h2>
+      <p class="sub">The selected metric of every configuration of this dataset, version by version. Solid lines use ground-truth boxes, dotted lines the face detector.</p>
+      <div id="progress" class="plot"></div>
+    </section>
+    <section class="panel">
+      <h2>Where the time goes</h2>
+      <p class="sub" id="stages-sub"></p>
+      <div id="stages" class="plot"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>All runs</h2>
+    <div class="table-tools">
+      <input type="search" id="filter" placeholder="Filter, e.g. LR-ASD detector" aria-label="Filter the runs">
+      <label><input type="checkbox" id="only-version" checked> Only the selected version</label>
+      <button type="button" class="ghost" id="copy">Copy as CSV</button>
+      <span id="copied" aria-live="polite"></span>
+    </div>
+    <div class="scroll"><table id="table"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <footer>Timing on the GPU machine comes from a shared workstation and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+const D = /*__DATA__*/null;
+const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces', coverage: 'Faces scored'};
+const FAMILY = {landmarks: 'Landmarks (ours)', pixels: 'Pixels (ours)', av: 'Audio-visual (literature)'};
+const STAGES = [
+  ['read', ['read'], 'Read video'], ['detect', ['detect'], 'Face detection'], ['track', ['track'], 'Tracking'],
+  ['crop', ['crop'], 'Crop'], ['pre', ['preprocess'], 'Preprocess / landmarks'], ['buffer', ['buffer'], 'Buffer'],
+  ['audio', ['audio', 'audio_decode'], 'Audio'], ['model', ['model'], 'Model'], ['average', ['average'], 'Averaging'],
+];
+const DATASETS = ['ava', 'unitalk', 'wasd', 'easycom'];
+const DNAME = {ava: 'AVA val', unitalk: 'UniTalk val', wasd: 'WASD val', easycom: 'EasyCom test'};
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = id => document.getElementById(id);
+const S = {dataset: null, metric: 'map', axis: null, vi: D.versions.length - 1, timer: null, sort: ['ms', 1]};
+
+const gpu = D.runs.filter(r => r.device === 'gpu');
+const pi = D.runs.filter(r => r.device === 'pi');
+const vIndex = Object.fromEntries(D.versions.map((v, i) => [v, i]));
+const cfg = r => [r.dataset, r.model, r.boxes, r.variant].join('|');
+const short = m => m.replace(/^AV:/, '').replace('ShapeCausal', 'Shape').replace('CNN2Plus1D_Light', 'CNN (2+1)D');
+const label = r => short(r.model) + (r.variant ? ` (${r.variant})` : '');
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pct = v => v == null ? null : v * 100;
+
+function piTiming(r, vi) {
+  // Pi run of the same model/boxes/variant with the same settings, in this or an earlier version
+  for (let i = vi; i >= 0; i--) {
+    const hit = pi.find(p => vIndex[p.v] === i && p.model === r.model && p.boxes === r.boxes &&
+                             p.variant === r.variant && p.settings === r.settings);
+    if (hit) return hit;
+  }
+  return null;
+}
+function xOf(r, vi, axis) {
+  if (axis === 'gpu') return r.ms;
+  const p = piTiming(r, vi);
+  return p ? p.ms : null;
+}
+const runsAt = vi => gpu.filter(r => vIndex[r.v] === vi && r.dataset === S.dataset);
+
+function defaultAxis() {
+  const rs = runsAt(S.vi);
+  const withPi = rs.filter(r => piTiming(r, S.vi)).length;
+  return rs.length && withPi / rs.length >= 0.5 ? 'pi' : 'gpu';
+}
+
+function baseLayout(extra) {
+  const ink = tok('--ink'), muted = tok('--muted'), line = tok('--line');
+  const ax = {gridcolor: line, zerolinecolor: line, linecolor: line, tickfont: {color: muted}, title: {font: {color: muted, size: 12}}};
+  return Object.assign({
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: {family: tok('--f-body'), color: ink, size: 13},
+    margin: {l: 56, r: 16, t: 10, b: 50}, hoverlabel: {font: {family: tok('--f-data')}},
+    legend: {orientation: 'h', y: -0.18, font: {size: 12, color: muted}},
+    xaxis: Object.assign({}, ax), yaxis: Object.assign({}, ax),
+  }, extra || {});
+}
+const CONF = {responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d']};
+
+function drawScatter() {
+  const vi = S.vi, axis = S.axis, m = S.metric;
+  const rs = runsAt(vi);
+  const pts = rs.map(r => ({r, x: xOf(r, vi, axis), y: pct(r[m])})).filter(p => p.x != null && p.y != null);
+  const hidden = rs.length - pts.length;
+  // trails: where each configuration was in the earlier versions
+  const tx = [], ty = [];
+  for (const p of pts) {
+    const path = [];
+    for (let i = 0; i <= vi; i++) {
+      const q = gpu.find(g => vIndex[g.v] === i && cfg(g) === cfg(p.r));
+      if (q) { const x = xOf(q, i, axis), y = pct(q[m]); if (x != null && y != null) path.push([x, y]); }
+    }
+    if (path.length > 1) { for (const [x, y] of path) { tx.push(x); ty.push(y); } tx.push(null); ty.push(null); }
+  }
+  // Pareto front: nothing else is both faster and better
+  const front = []; let best = -Infinity;
+  for (const p of [...pts].sort((a, b) => a.x - b.x || b.y - a.y)) if (p.y > best) { front.push(p); best = p.y; }
+  const traces = [
+    {x: tx, y: ty, mode: 'lines', line: {color: tok('--muted'), width: 1.5}, opacity: 0.35, hoverinfo: 'skip', name: 'Earlier versions', showlegend: tx.length > 0},
+    {x: front.map(p => p.x), y: front.map(p => p.y), mode: 'lines', line: {color: tok('--ink'), width: 1, dash: 'dot', shape: 'hv'}, opacity: 0.55, hoverinfo: 'skip', name: 'Pareto front'},
+  ];
+  for (const fam of Object.keys(FAMILY)) {
+    const fp = pts.filter(p => p.r.family === fam).sort((a, b) => a.x - b.x);
+    traces.push({
+      x: fp.map(p => p.x), y: fp.map(p => p.y), mode: 'markers+text', name: FAMILY[fam],
+      text: fp.map(p => label(p.r)), textposition: fp.map((p, i) => i % 2 ? 'bottom center' : 'top center'), textfont: {size: 11, color: tok('--muted')},
+      marker: {color: tok('--fam-' + fam), size: 12, symbol: fp.map(p => p.r.boxes === 'gt' ? 'circle' : 'diamond'), line: {color: tok('--panel'), width: 1.5}},
+      customdata: fp.map(p => [label(p.r), p.r.boxes === 'gt' ? 'ground-truth boxes' : 'face detector', p.r.settings, p.r.v]),
+      hovertemplate: '<b>%{customdata[0]}</b> · %{customdata[1]}<br>%{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.1f} ms/frame<br>version %{customdata[3]}<extra></extra>',
+    });
+  }
+  for (const [sym, nm] of [['circle', 'Ground-truth boxes'], ['diamond', 'Face detector']])
+    traces.push({x: [null], y: [null], mode: 'markers', name: nm, marker: {symbol: sym, size: 10, color: tok('--muted')}});
+  const layout = baseLayout({
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'log', tickvals: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000], title: {text: (axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine') + ', ms per frame (log scale, faster to the left)', font: {color: tok('--muted'), size: 12}}}),
+    yaxis: Object.assign(baseLayout().yaxis, {title: {text: METRICS[m] + ' (%)', font: {color: tok('--muted'), size: 12}}}),
+    transition: {duration: reduced ? 0 : 450, easing: 'cubic-in-out'},
+  });
+  Plotly.react('scatter', traces, layout, CONF);
+  const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
+  $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ${timing}` +
+    (hidden ? ` ${hidden} configuration${hidden > 1 ? 's have' : ' has'} no ${axis === 'pi' ? 'Pi' : ''} timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
+}
+
+function drawProgress() {
+  const m = S.metric;
+  const keys = [...new Set(gpu.filter(r => r.dataset === S.dataset).map(cfg))];
+  const traces = keys.map(k => {
+    const ys = D.versions.map((v, i) => { const r = gpu.find(g => vIndex[g.v] === i && cfg(g) === k); return r ? pct(r[m]) : null; });
+    const r = gpu.find(g => cfg(g) === k);
+    return {x: D.versions, y: ys, mode: 'lines+markers', name: label(r) + (r.boxes === 'gt' ? '' : ' · detector'),
+      line: {color: tok('--fam-' + r.family), width: 2, dash: r.boxes === 'gt' ? 'solid' : 'dot'}, marker: {size: 7},
+      hovertemplate: '<b>' + label(r) + '</b> · ' + r.boxes + '<br>%{x}: %{y:.1f}<extra></extra>'};
+  });
+  const layout = baseLayout({
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'category', automargin: true, range: [-0.4, D.versions.length - 0.6]}),
+    yaxis: Object.assign(baseLayout().yaxis, {title: {text: METRICS[m] + ' (%)', font: {color: tok('--muted'), size: 12}}}),
+    shapes: [{type: 'line', xref: 'x', yref: 'paper', x0: D.versions[S.vi], x1: D.versions[S.vi], y0: 0, y1: 1, line: {color: tok('--accent'), width: 2}, opacity: 0.4}],
+    legend: {orientation: 'h', y: -0.25, font: {size: 11, color: tok('--muted')}}, margin: {l: 56, r: 16, t: 10, b: 60},
+  });
+  Plotly.react('progress', traces, layout, CONF);
+}
+
+function drawStages() {
+  const vi = S.vi;
+  const rows = runsAt(vi).map(r => {
+    const p = S.axis === 'pi' ? piTiming(r, vi) : null;
+    const src = p || r;
+    return {r, src, dev: p ? 'Pi' : 'GPU', total: src.ms || 0};
+  }).filter(x => x.total).sort((a, b) => a.total - b.total);
+  const names = rows.map(x => `${label(x.r)} · ${x.r.boxes} (${x.dev})`);
+  const traces = STAGES.map(([id, raw, nm]) => ({
+    type: 'bar', orientation: 'h', name: nm, y: names,
+    x: rows.map(x => raw.reduce((s, k) => s + (x.src.stages[k] || 0), 0)),
+    marker: {color: tok('--st-' + id)}, hovertemplate: nm + ': %{x:.2f} ms<extra>%{y}</extra>',
+  }));
+  traces.push({type: 'bar', orientation: 'h', name: 'Other', y: names, marker: {color: tok('--st-other')},
+    x: rows.map(x => Math.max(0, x.total - Object.values(x.src.stages).reduce((s, v) => s + v, 0))),
+    hovertemplate: 'Other: %{x:.2f} ms<extra>%{y}</extra>'});
+  const layout = baseLayout({
+    barmode: 'stack', margin: {l: 10, r: 16, t: 10, b: 60},
+    xaxis: Object.assign(baseLayout().xaxis, {title: {text: 'ms per frame', font: {color: tok('--muted'), size: 12}}}),
+    yaxis: Object.assign(baseLayout().yaxis, {automargin: true, tickfont: {size: 11, color: tok('--muted')}}),
+    legend: {orientation: 'h', y: -0.22, font: {size: 11, color: tok('--muted')}},
+    height: Math.max(380, 60 + rows.length * 28),
+  });
+  Plotly.react('stages', traces, layout, CONF);
+  $('stages-sub').textContent = `Pipeline stages per frame for ${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ` +
+    (S.axis === 'pi' ? 'Pi timing where it exists, otherwise GPU timing (marked in the labels).' : 'GPU timing.');
+}
+
+const COLS = [
+  ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['boxes', 'Boxes'], ['device', 'Device'],
+  ['videos', 'Videos', 0], ['map', 'mAP', 1], ['f1', 'F1', 1], ['map_small', 'mAP small', 1],
+  ['coverage', 'Scored', 1], ['det_recall', 'Det. recall', 1], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
+];
+function tableRows() {
+  const q = $('filter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let rs = D.runs.filter(r => !$('only-version').checked || vIndex[r.v] === S.vi);
+  rs = rs.filter(r => { const s = [r.v, r.dataset, label(r), r.model, r.boxes, r.device, r.settings].join(' ').toLowerCase(); return q.every(w => s.includes(w)); });
+  const [k, dir] = S.sort;
+  return rs.sort((a, b) => { const x = a[k], y = b[k]; if (x == null) return 1; if (y == null) return -1; return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+}
+function fmt(r, k, kind) {
+  const v = r[k];
+  if (v == null || v === '') return '–';
+  if (kind === 1) return (v * 100).toFixed(1);
+  if (kind === 2) return v.toFixed(1);
+  if (kind === 0) return String(v);
+  return v;
+}
+function drawTable() {
+  const head = $('table').tHead, body = $('table').tBodies[0];
+  head.innerHTML = '<tr>' + COLS.map(([k, h]) => `<th data-k="${k}" aria-sort="${S.sort[0] === k ? (S.sort[1] > 0 ? 'ascending' : 'descending') : 'none'}" tabindex="0">${h}</th>`).join('') + '</tr>';
+  body.innerHTML = tableRows().map(r => '<tr>' + COLS.map(([k, , kind]) => {
+    if (k === 'model') return `<td><span class="dot" style="background:var(--fam-${r.family})"></span>${label(r)}</td>`;
+    if (k === 'device') return `<td><span class="pill ${r.device}">${r.device === 'pi' ? 'Pi 4' : 'GPU'}</span></td>`;
+    if (k === 'dataset') return `<td>${DNAME[r.dataset] || r.dataset}</td>`;
+    return `<td class="${kind != null ? 'n' : ''}">${fmt(r, k, kind)}</td>`;
+  }).join('') + '</tr>').join('');
+  head.querySelectorAll('th').forEach(th => {
+    const go = () => { const k = th.dataset.k; S.sort = [k, S.sort[0] === k ? -S.sort[1] : 1]; drawTable(); };
+    th.onclick = go; th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+  });
+}
+function copyCsv() {
+  const rs = tableRows();
+  const keys = ['v', 'dataset', 'model', 'boxes', 'variant', 'device', 'settings', 'videos', 'map', 'f1', 'map_small', 'coverage', 'det_recall', 'ms', 'fps'];
+  const esc = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  const text = [keys.join(',')].concat(rs.map(r => keys.map(k => esc(r[k])).join(','))).join('\n');
+  const done = msg => { $('copied').textContent = msg; setTimeout(() => { $('copied').textContent = ''; }, 2500); };
+  const fallback = () => { const t = document.createElement('textarea'); t.className = 'copy'; t.value = text; document.body.appendChild(t); t.select(); done('Selected: press Ctrl+C to copy'); setTimeout(() => t.remove(), 8000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(`Copied ${rs.length} rows`), fallback);
+  else fallback();
+}
+
+function drawVersion() {
+  $('version').value = S.vi;
+  [...$('ticks').children].forEach((t, i) => t.classList.toggle('on', i === S.vi));
+  $('vnote').textContent = D.notes[D.versions[S.vi]] || '';
+}
+function drawAll() { drawVersion(); drawScatter(); drawProgress(); drawStages(); drawTable(); }
+
+function init() {
+  if (D.banner) { $('banner').textContent = D.banner; $('banner').hidden = false; }
+  const present = DATASETS.filter(d => gpu.some(r => r.dataset === d)).concat([...new Set(gpu.map(r => r.dataset))].filter(d => !DATASETS.includes(d)));
+  $('dataset').innerHTML = present.map(d => `<option value="${d}">${DNAME[d] || d}</option>`).join('');
+  S.dataset = present[0];
+  $('metric').innerHTML = Object.entries(METRICS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('version').max = D.versions.length - 1;
+  $('ticks').innerHTML = D.versions.map(v => `<span>${v}</span>`).join('');
+  S.axis = defaultAxis(); $('axis').value = S.axis;
+  $('dataset').onchange = e => { S.dataset = e.target.value; S.axis = defaultAxis(); $('axis').value = S.axis; drawAll(); };
+  $('metric').onchange = e => { S.metric = e.target.value; drawScatter(); drawProgress(); };
+  $('axis').onchange = e => { S.axis = e.target.value; drawScatter(); drawStages(); };
+  $('version').oninput = e => { stop(); S.vi = +e.target.value; drawAll(); };
+  $('play').onclick = () => S.timer ? stop() : play();
+  $('filter').oninput = drawTable; $('only-version').onchange = drawTable; $('copy').onclick = copyCsv;
+  drawAll();
+  const redraw = () => drawAll();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+  new MutationObserver(redraw).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+}
+function play() {
+  if (S.vi >= D.versions.length - 1) { S.vi = 0; drawAll(); }
+  $('play').textContent = 'Pause';
+  S.timer = setInterval(() => { if (S.vi >= D.versions.length - 1) return stop(); S.vi++; drawAll(); }, 1600);
+}
+function stop() { clearInterval(S.timer); S.timer = null; $('play').textContent = 'Play'; }
+if (window.Plotly) init(); else window.addEventListener('load', init);
+</script>
