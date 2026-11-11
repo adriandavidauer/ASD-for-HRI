@@ -12,13 +12,24 @@ self-contained HTML page (Plotly from a CDN, the data inline):
 4. a filterable table of all runs, with a protocol column
 
 A configuration is ``(dataset, model, boxes, variant)`` and is matched across versions by that
-key. Runs on an ``aarch64`` machine are Pi runs: they give the Pi timing of a ``(model, boxes,
-variant)`` (they usually cover only a few videos, so their accuracy isn't used for the plot).
+key. Pi runs give the Pi fps of a configuration: they come from the version's
+``benchmark_pi.csv`` (``--pi``), or are runs on an ``aarch64`` machine in ``benchmark.csv``.
+They usually cover only a few videos, so their accuracy isn't plotted. A Pi run is matched by
+``(dataset, architecture, settings, boxes)``; when the Pi ran another dataset (e.g. one AVA
+video), a Pi run with the same architecture, settings and boxes is used.
+
+The version of a run is its ``version`` column (written by ``run_evaluation`` from the image's
+``ASD4HRI_VERSION``) when present, otherwise the label given on the command line; a leading
+``v`` is ignored when comparing the two.
+
+Release assets (see ``release_results``): ``benchmark.csv`` (required) and
+``benchmark_pi.csv`` (optional) per ``v*`` release.
 
 Usage::
 
     python -m src.experiments.make_results_chart \
-        --version 0.0.0=benchmark-0.0.0.csv --version 0.1.0=benchmark-0.1.0.csv -o results.html
+        --version v0.0.0=benchmark-0.0.0.csv --pi v0.0.0=benchmark_pi-0.0.0.csv \
+        --version v0.1.0=benchmark-0.1.0.csv -o results.html
 
 No result data belongs in the repository: the CSVs come from the release assets.
 """
@@ -114,12 +125,29 @@ def variant(row):
     return ''
 
 
-def record(row, version):
+def run_version(row, label):
+    """The version of a run: its ``version`` column, else the label of its CSV.
+
+    Args:
+        row: One CSV row.
+        label: Version label of the CSV.
+
+    Returns:
+        str: The version; ``label`` when both name the same version (``v`` prefix ignored).
+    """
+    own = (row.get('version') or '').strip()
+    if not own or own.lstrip('v') == label.lstrip('v'):
+        return label
+    return own
+
+
+def record(row, version, pi=False):
     """One run of the page.
 
     Args:
         row: One CSV row.
         version: Version label.
+        pi: The row comes from a Pi CSV.
 
     Returns:
         dict: The fields the page uses.
@@ -130,7 +158,7 @@ def record(row, version):
     out = {
         'v': version, 'dataset': row['dataset'], 'model': row['architecture'],
         'family': family(row['architecture']), 'boxes': row['boxes'], 'variant': variant(row),
-        'settings': settings(row), 'device': 'pi' if row.get('machine') in PI_MACHINES else 'gpu',
+        'settings': settings(row), 'device': 'pi' if pi or row.get('machine') in PI_MACHINES else 'gpu',
         'videos': _num(row.get('videos')), 'ms': frame_ms, 'fps': _num(row.get('fps')),
         'stages': {k: v for k, v in stages.items() if k != 'frame'}, 'run': row.get('run', ''),
         'started': row.get('started_at', ''),
@@ -140,22 +168,28 @@ def record(row, version):
     return out
 
 
-def load(versions):
+def load(versions, pi=None):
     """Read the CSVs and drop duplicate configurations within a version (the latest run wins).
 
     Args:
         versions: ``[(label, csv path), ...]`` in version order.
+        pi: ``{label: csv path}`` of the Pi runs of a version.
 
     Returns:
         list[dict]: The runs.
     """
     runs = []
+    files = []
     for label, path in versions:
+        files.append((label, path, False))
+        if pi and label in pi:
+            files.append((label, pi[label], True))
+    for label, path, is_pi in files:
         with open(path, newline='') as f:
-            rows = [record(r, label) for r in csv.DictReader(f)]
+            rows = [record(r, run_version(r, label), is_pi) for r in csv.DictReader(f)]
         latest = {}
         for r in rows:
-            key = (r['device'], r['dataset'], r['model'], r['boxes'], r['variant'])
+            key = (r['v'], r['device'], r['dataset'], r['model'], r['boxes'], r['variant'])
             if key in latest:
                 print(f'{label}: two runs of {key}, keeping the later one', file=sys.stderr)
                 if r['started'] < latest[key]['started']:
@@ -165,7 +199,8 @@ def load(versions):
     return runs
 
 
-def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-for-HRI Results'):
+def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-for-HRI Results',
+          pi=None):
     """Write the page.
 
     Args:
@@ -176,12 +211,17 @@ def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-
         fragment: Leave out ``<!doctype>``, ``<html>``, ``<head>`` and ``<body>`` (for hosts that
             wrap the page themselves).
         title: Page title.
+        pi: ``{label: csv path}`` of the Pi runs of a version (``benchmark_pi.csv``).
 
     Returns:
         dict: The data embedded in the page.
     """
-    data = {'versions': [label for label, _ in versions], 'notes': notes or {}, 'banner': banner,
-            'runs': load(versions)}
+    runs = load(versions, pi)
+    order = []
+    for v in [label for label, _ in versions] + [r['v'] for r in runs]:
+        if v not in order and any(r['v'] == v for r in runs):
+            order.append(v)
+    data = {'versions': order, 'notes': notes or {}, 'banner': banner, 'runs': runs}
     html = TEMPLATE.read_text()
     payload = json.dumps(data, separators=(',', ':')).replace('</', '<\\/')
     html = html.replace('__TITLE__', title).replace('/*__DATA__*/null', payload)
@@ -218,6 +258,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--version', action='append', required=True, metavar='LABEL=CSV',
                    help='one benchmark.csv per version, oldest first')
+    p.add_argument('--pi', action='append', metavar='LABEL=CSV',
+                   help='benchmark_pi.csv of a version: its Pi runs (timing)')
     p.add_argument('--note', action='append', metavar='LABEL=TEXT', help='note for a version')
     p.add_argument('--banner', default='', help='notice at the top of the page')
     p.add_argument('--title', default='ASD-for-HRI Results')
@@ -225,7 +267,7 @@ def main(argv=None):
     p.add_argument('-o', '--out', default='results.html')
     args = p.parse_args(argv)
     data = build(_pairs(args.version, '--version'), args.out, dict(_pairs(args.note, '--note')),
-                 args.banner, args.fragment, args.title)
+                 args.banner, args.fragment, args.title, dict(_pairs(args.pi, '--pi')))
     print(f"{args.out}: {len(data['runs'])} runs, versions {', '.join(data['versions'])}")
 
 

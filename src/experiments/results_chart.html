@@ -212,10 +212,12 @@ const symbolOf = r => proto(r) === 'gt' ? 'square' : 'circle';
 const shown = r => $(proto(r) === 'gt' ? 'show-gt' : 'show-det').checked;
 
 function piTiming(r, vi) {
-  // Pi run of the same model/boxes/variant with the same settings, in this or an earlier version
+  // Pi run of the same (dataset, architecture, settings, boxes), else of the same architecture,
+  // settings and boxes on another dataset; in this or an earlier version
+  const same = p => p.model === r.model && p.boxes === r.boxes && p.variant === r.variant && p.settings === r.settings;
   for (let i = vi; i >= 0; i--) {
-    const hit = pi.find(p => vIndex[p.v] === i && p.model === r.model && p.boxes === r.boxes &&
-                             p.variant === r.variant && p.settings === r.settings);
+    const here = pi.filter(p => vIndex[p.v] === i && same(p));
+    const hit = here.find(p => p.dataset === r.dataset) || here[0];
     if (hit) return hit;
   }
   return null;

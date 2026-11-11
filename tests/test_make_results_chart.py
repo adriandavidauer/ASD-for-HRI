@@ -68,3 +68,23 @@ def test_settings_name_what_changes_results():
     assert settings(base) == 'streaming'
     assert settings(dict(base, causal_mode='window', window='38', stride='2')) == 'window 38, stride 2'
     assert settings(dict(base, architecture='AV:TalkNet', audio='False')) == 'streaming, no audio'
+
+
+def test_version_column_wins_over_the_label(tmp_path):
+    """A run's own version is used; 'v0.0.0' and '0.0.0' are the same version."""
+    write_csv([_summary('LipShapeCausal', version='0.0.0'),
+               _summary('FaceShapeCausal', version='0.0.1-dev'),
+               _summary('CNN2Plus1D_Light')], tmp_path / 'a.csv')
+    data = build([('v0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html')
+    assert {r['model']: r['v'] for r in data['runs']} == {
+        'LipShapeCausal': 'v0.0.0', 'FaceShapeCausal': '0.0.1-dev', 'CNN2Plus1D_Light': 'v0.0.0'}
+    assert data['versions'] == ['v0.0.0', '0.0.1-dev']
+
+
+def test_pi_csv_rows_are_pi_runs(tmp_path):
+    """Rows of benchmark_pi.csv are Pi runs whatever their machine column says."""
+    write_csv([_summary('LipShapeCausal')], tmp_path / 'a.csv')
+    write_csv([_summary('LipShapeCausal', machine='')], tmp_path / 'pi.csv')
+    data = build([('v0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html',
+                 pi={'v0.0.0': tmp_path / 'pi.csv'})
+    assert sorted(r['device'] for r in data['runs']) == ['gpu', 'pi']
