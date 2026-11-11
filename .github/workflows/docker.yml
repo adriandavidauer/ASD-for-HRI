@@ -69,6 +69,10 @@ jobs:
           context: .
           file: docker/Dockerfile
           platforms: ${{ matrix.platform }}
+          # tag (e.g. v0.0.0) or branch name, and the commit: recorded in every run's results
+          build-args: |
+            ASD4HRI_VERSION=${{ github.ref_type == 'tag' && github.ref_name || github.head_ref || github.ref_name }}
+            ASD4HRI_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
           outputs: >-

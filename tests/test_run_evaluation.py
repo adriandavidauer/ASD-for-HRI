@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from experiments.run_evaluation import relative_to_data_dir
+from experiments.run_evaluation import code_version, relative_to_data_dir
 
 
 @pytest.mark.parametrize('path, expected', [
@@ -31,3 +31,25 @@ def test_folder_outside_data_dir_fails(path):
     """
     with pytest.raises(ValueError, match='not inside --data_dir'):
         relative_to_data_dir('/app/data', path)
+
+
+def test_code_version_from_the_image_environment(monkeypatch):
+    """Without git (as in the image) the version and commit come from the build's env vars."""
+    def no_git(*args, **kwargs):
+        """Fail like a missing git binary.
+
+        Raises:
+            OSError: Always.
+        """
+        raise OSError('no git')
+    monkeypatch.setattr('subprocess.run', no_git)
+    monkeypatch.setenv('ASD4HRI_VERSION', 'v0.0.0')
+    monkeypatch.setenv('ASD4HRI_COMMIT', '0123456789abcdef')
+    assert code_version() == ('v0.0.0', '0123456')
+
+
+def test_code_version_without_env_is_a_dev_version(monkeypatch):
+    """Outside the image the version is the package version marked as dev."""
+    monkeypatch.delenv('ASD4HRI_VERSION', raising=False)
+    version, _ = code_version()
+    assert version is None or version.endswith('+dev')
