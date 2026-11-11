@@ -4,15 +4,12 @@ Every release carries its benchmark results as a ``benchmark.csv`` asset (writte
 ``run_benchmark``). This script reads one CSV per version, in version order, and writes one
 self-contained HTML page (Plotly from a CDN, the data inline):
 
-1. speed vs. accuracy for the two protocols side by side, with one y-scale, a version slider,
-   trails and the Pareto front: *model only* (ground-truth boxes; x = model-side ms per frame,
-   i.e. all stages but reading, detection and tracking) and *full pipeline* (face detector;
-   x = end-to-end ms per frame)
-2. the cost of face detection per model: metric with GT boxes vs. with the detector, and the
-   extra time per frame
-3. where the time goes: the pipeline stages, detection vs. model side
-4. the metric of every configuration over the versions
-5. a table with one row per model and the two protocols as column groups
+1. speed vs. accuracy: metric over end-to-end ms per frame, full pipeline (circles) and
+   ground-truth boxes (squares) switchable, with a version slider, trails and an optional
+   Pareto front ("best trade-offs")
+2. the metric of every configuration over the versions
+3. where the time goes: the pipeline stages per configuration
+4. a filterable table of all runs, with a protocol column
 
 A configuration is ``(dataset, model, boxes, variant)`` and is matched across versions by that
 key. Runs on an ``aarch64`` machine are Pi runs: they give the Pi timing of a ``(model, boxes,
