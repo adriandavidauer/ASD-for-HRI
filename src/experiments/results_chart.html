@@ -42,6 +42,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body);
   padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -82,6 +83,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, th:focus-visibl
 .panel .sub { color: var(--muted); font-size: 13px; margin: 0; }
 .toggles { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; }
 .toggles label { display: inline-flex; gap: 6px; align-items: center; }
+.plotbox { width: 100%; min-width: 0; overflow: hidden; }
 .plot { width: 100%; height: 360px; }
 .plot.main { height: 440px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
@@ -151,13 +153,15 @@ footer { color: var(--muted); font-size: 13px; }
     <section class="panel">
       <h2>Progress per configuration</h2>
       <p class="sub">The selected metric of every configuration of this dataset, version by version.</p>
-      <div id="progress" class="plot"></div>
+      <div class="toggles"><label><input type="checkbox" id="only-changed" checked> Only configurations that changed</label></div>
+      <div class="plotbox"><div id="progress" class="plot"></div></div>
+      <p class="caption" id="progress-empty" hidden>No configuration changed between versions.</p>
       <div class="legend" id="legend-progress"></div>
     </section>
     <section class="panel">
       <h2>Where the time goes</h2>
       <p class="sub" id="stages-sub"></p>
-      <div id="stages" class="plot"></div>
+      <div class="plotbox"><div id="stages" class="plot"></div></div>
       <div class="legend" id="legend-stages"></div>
     </section>
   </div>
@@ -191,7 +195,7 @@ const DNAME = {ava: 'AVA val', unitalk: 'UniTalk val', wasd: 'WASD val', easycom
 const PROTO = {det: 'Full pipeline', gt: 'GT boxes'};
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
-const S = {dataset: null, metric: 'map', axis: null, vi: D.versions.length - 1, timer: null, sort: ['ms', 1]};
+const S = {dataset: null, metric: 'map', axis: null, vi: D.versions.length - 1, timer: null, sort: ['fps', -1]};
 
 const gpu = D.runs.filter(r => r.device === 'gpu');
 const pi = D.runs.filter(r => r.device === 'pi');
@@ -217,9 +221,9 @@ function piTiming(r, vi) {
   return null;
 }
 function xOf(r, vi, axis) {
-  if (axis === 'gpu') return r.ms;
-  const p = piTiming(r, vi);
-  return p ? p.ms : null;
+  // end-to-end frames per second of the run
+  const src = axis === 'gpu' ? r : piTiming(r, vi);
+  return src && src.ms ? 1000 / src.ms : null;
 }
 const runsAt = vi => gpu.filter(r => vIndex[r.v] === vi && r.dataset === S.dataset);
 
@@ -260,14 +264,14 @@ function drawScatter() {
   const rs = runsAt(vi).filter(shown);
   const pts = rs.map(r => ({r, x: xOf(r, vi, axis), y: pct(r[m])})).filter(p => p.x != null && p.y != null);
   const hidden = rs.length - pts.length;
-  const tx = [], ty = [];
+  const tx = [], ty = [], trails = [];
   for (const p of pts) {
     const path = [];
     for (let i = 0; i <= vi; i++) {
       const q = gpu.find(g => vIndex[g.v] === i && cfg(g) === cfg(p.r));
       if (q) { const x = xOf(q, i, axis), y = pct(q[m]); if (x != null && y != null) path.push([x, y]); }
     }
-    if (path.length > 1) { for (const [x, y] of path) { tx.push(x); ty.push(y); } tx.push(null); ty.push(null); }
+    if (path.length > 1) { for (const [x, y] of path) { tx.push(x); ty.push(y); } tx.push(null); ty.push(null); trails.push(path); }
   }
   const traces = [{x: tx, y: ty, mode: 'lines', line: {color: tok('--muted'), width: 1.5}, opacity: 0.35, hoverinfo: 'skip'}];
   const showFront = $('show-front').checked;
@@ -275,15 +279,16 @@ function drawScatter() {
     const fx = [], fy = [];
     if (showFront) {
       let best = -Infinity;
-      for (const p of pts.filter(p => proto(p.r) === pr).sort((a, b) => a.x - b.x || b.y - a.y)) if (p.y > best) { fx.push(p.x); fy.push(p.y); best = p.y; }
+      // fastest first: a point is on the front when nothing faster is also more accurate
+      for (const p of pts.filter(p => proto(p.r) === pr).sort((a, b) => b.x - a.x || b.y - a.y)) if (p.y > best) { fx.unshift(p.x); fy.unshift(p.y); best = p.y; }
     }
-    traces.push({x: fx, y: fy, mode: 'lines', line: {color: tok('--ink'), width: 1.2, dash: pr === 'gt' ? 'dot' : 'dash', shape: 'hv'}, opacity: 0.55, hoverinfo: 'skip'});
+    traces.push({x: fx, y: fy, mode: 'lines', line: {color: tok('--ink'), width: 1.2, dash: pr === 'gt' ? 'dot' : 'dash', shape: 'vh'}, opacity: 0.55, hoverinfo: 'skip'});
   }
   traces.push({
     x: pts.map(p => p.x), y: pts.map(p => p.y), mode: 'markers', cliponaxis: false,
     marker: {size: 12, color: pts.map(p => colorOf(p.r.model)), symbol: pts.map(p => symbolOf(p.r)), line: {color: tok('--panel'), width: 1.5}},
-    customdata: pts.map(p => [label(p.r), PROTO[proto(p.r)], p.r.settings, p.r.v]),
-    hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.1f} ms/frame<br>version %{customdata[3]}<extra></extra>',
+    customdata: pts.map(p => [label(p.r), PROTO[proto(p.r)], p.r.settings, p.r.v, (1000 / p.x).toFixed(1)]),
+    hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.0f} fps (%{customdata[4]} ms/frame)<br>version %{customdata[3]}<extra></extra>',
   });
   // thin arrow from the GT-box square to the full-pipeline circle of the same model and audio setting
   const arrows = [];
@@ -296,18 +301,19 @@ function drawScatter() {
         opacity: 0.45, standoff: 7, startstandoff: 7});
     }
   }
-  S.scatterPts = pts; S.arrows = arrows;
+  S.scatterPts = pts; S.arrows = arrows; S.trails = trails;
   const layout = baseLayout({
     annotations: arrows,
-    xaxis: Object.assign(baseLayout().xaxis, {type: 'log', range: xRange(), tickvals: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000],
-      title: axTitle((axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine') + ', ms per frame (log)')}),
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'log', range: xRange(), tickvals: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000],
+      title: axTitle($('scatter').clientWidth < 560 ? 'Frames per second (log)'
+        : 'Frames per second, end to end, ' + (axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine') + ' (log, faster to the right)')}),
     yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
     transition: {duration: reduced ? 0 : 450, easing: 'cubic-in-out'},
   });
   Plotly.react('scatter', traces, layout, CONF).then(placeLabels);
   $('front-caption').hidden = !showFront;
   const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
-  $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. Up is better, left is faster. ${timing}` +
+  $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. Up is better, right is faster. ${timing}` +
     (hidden ? ` ${hidden} run${hidden > 1 ? 's have' : ' has'} no ${axis === 'pi' ? 'Pi ' : ''}timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
 }
 
@@ -326,14 +332,17 @@ function placeLabels() {
   const P = S.scatterPts.map(p => ({p, x: xa.l2p(Math.log10(p.x)), y: ya.l2p(p.y)}));
   const R = 7, GAP = 4, TH = 13;
   const taken = P.map(q => [q.x - R, q.y - R, q.x + R, q.y + R]);
-  // the arrows too, as points every 3 px along each one
+  // the arrows and the trails too, as points every 3 px along each segment
   const along = [];
-  for (const a of S.arrows || []) {
-    const x0 = xa.l2p(a.ax), y0 = ya.l2p(a.ay), x1 = xa.l2p(a.x), y1 = ya.l2p(a.y);
+  const segment = (x0, y0, x1, y1) => {
     const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
     for (let i = 0; i <= n; i++) along.push([x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n]);
-  }
-  const hit = b => b[0] < 0 || b[1] < 0 || b[2] > W || b[3] > H ||
+  };
+  for (const a of S.arrows || []) segment(xa.l2p(a.ax), ya.l2p(a.ay), xa.l2p(a.x), ya.l2p(a.y));
+  for (const path of S.trails || [])
+    for (let i = 1; i < path.length; i++)
+      segment(xa.l2p(Math.log10(path[i - 1][0])), ya.l2p(path[i - 1][1]), xa.l2p(Math.log10(path[i][0])), ya.l2p(path[i][1]));
+  const hit = b => b[0] < 6 || b[1] < 0 || b[2] > W || b[3] > H ||
     taken.some(t => b[0] < t[2] && b[2] > t[0] && b[1] < t[3] && b[3] > t[1]) ||
     along.some(([x, y]) => x > b[0] - 2 && x < b[2] + 2 && y > b[1] - 2 && y < b[3] + 2);
   const labels = [];
@@ -366,27 +375,44 @@ function modelChips() {
 function drawLegends() {
   const shapes = '<span><i class="sw ring"></i>Full pipeline</span><span><i class="sw sq ring"></i>GT boxes</span>';
   $('legend').innerHTML = modelChips() + '<i class="sep"></i>' + shapes + '<span>faint line: earlier versions</span><span>arrow: GT boxes → full pipeline</span>';
-  $('legend-progress').innerHTML = modelChips() + '<i class="sep"></i><span>● ─ Full pipeline</span><span>■ ┄ GT boxes</span>';
   $('legend-stages').innerHTML = STAGES.map(([id, , nm]) => `<span><i class="sw bar" style="background:var(--st-${id})"></i>${nm}</span>`).join('') +
     '<span><i class="sw bar" style="background:var(--st-other)"></i>Other</span>';
 }
 
+function wrapTick(v) {
+  // break a long version name into lines of about 16 characters
+  const out = []; let line = '';
+  for (const w of v.split(' ')) { if (line && (line + ' ' + w).length > 16) { out.push(line); line = w; } else line = line ? line + ' ' + w : w; }
+  return out.concat(line ? [line] : []).join('<br>');
+}
+function changed(k, m) {
+  // the metric differs between two versions of this configuration by more than 0.05 points
+  const ys = gpu.filter(g => cfg(g) === k && g[m] != null).map(g => g[m] * 100);
+  return ys.length > 1 && Math.max(...ys) - Math.min(...ys) > 0.05;
+}
 function drawProgress() {
   const m = S.metric;
-  const keys = [...new Set(gpu.filter(r => r.dataset === S.dataset && shown(r)).map(cfg))];
+  let keys = [...new Set(gpu.filter(r => r.dataset === S.dataset && shown(r)).map(cfg))];
+  if ($('only-changed').checked) keys = keys.filter(k => changed(k, m));
+  $('progress-empty').hidden = keys.length > 0;
+  const models = [...new Set(keys.map(k => k.split('|')[1]))].sort((a, b) => mIndex(a) - mIndex(b));
+  $('legend-progress').innerHTML = models.map(mo => `<span><i class="sw" style="background:${colorOf(mo)}"></i>${mo.replace(/^AV:/, '')}</span>`).join('') +
+    (keys.length ? '<i class="sep"></i><span>● ─ Full pipeline</span><span>■ ┄ GT boxes</span>' : '');
+  $('progress').parentElement.hidden = !keys.length;
   const traces = keys.map(k => {
     const ys = D.versions.map((v, i) => { const r = gpu.find(g => vIndex[g.v] === i && cfg(g) === k); return r ? pct(r[m]) : null; });
     const r = gpu.find(g => cfg(g) === k);
-    return {x: D.versions, y: ys, mode: 'lines+markers',
+    return {x: D.versions.map(wrapTick), y: ys, mode: 'lines+markers',
       line: {color: colorOf(r.model), width: 2, dash: proto(r) === 'gt' ? 'dot' : 'solid'}, marker: {size: 8, symbol: symbolOf(r)},
       hovertemplate: `<b>${label(r)}</b><br>${PROTO[proto(r)]}<br>%{x}: %{y:.1f}<extra></extra>`};
   });
   const layout = baseLayout({
-    xaxis: Object.assign(baseLayout().xaxis, {type: 'category', range: [-0.3, D.versions.length - 0.7]}),
+    margin: {l: 10, r: 16, t: 8, b: 16},
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'category', range: [-0.3, D.versions.length - 0.7], tickangle: 0}),
     yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
-    shapes: [{type: 'line', xref: 'x', yref: 'paper', x0: D.versions[S.vi], x1: D.versions[S.vi], y0: 0, y1: 1, line: {color: tok('--accent'), width: 2}, opacity: 0.4}],
+    shapes: [{type: 'line', xref: 'x', yref: 'paper', x0: wrapTick(D.versions[S.vi]), x1: wrapTick(D.versions[S.vi]), y0: 0, y1: 1, line: {color: tok('--accent'), width: 2}, opacity: 0.4}],
   });
-  Plotly.react('progress', traces, layout, CONF);
+  if (keys.length) Plotly.react('progress', traces, layout, CONF).then(() => Plotly.Plots.resize('progress'));
 }
 
 function drawStages() {
@@ -396,7 +422,7 @@ function drawStages() {
     const src = p || r;
     return {r, src, dev: p ? 'Pi' : 'GPU', total: src.ms || 0};
   }).filter(x => x.total).sort((a, b) => a.total - b.total);
-  const names = rows.map(x => `${label(x.r)}, ${proto(x.r) === 'gt' ? 'GT' : 'full'} (${x.dev})`);
+  const names = rows.map(x => `${label(x.r)}, ${proto(x.r) === 'gt' ? 'GT boxes' : 'full pipeline'} (${x.dev})`);
   const traces = STAGES.map(([id, raw, nm]) => ({
     type: 'bar', orientation: 'h', y: names,
     x: rows.map(x => raw.reduce((s, k) => s + (x.src.stages[k] || 0), 0)),
@@ -405,13 +431,16 @@ function drawStages() {
   traces.push({type: 'bar', orientation: 'h', y: names, marker: {color: tok('--st-other')},
     x: rows.map(x => Math.max(0, x.total - Object.values(x.src.stages).reduce((s, v) => s + v, 0))),
     hovertemplate: 'Other: %{x:.2f} ms<extra>%{y}</extra>'});
+  // the names go above their bars, so they always fit, also at phone width
+  const annotations = names.map(n => ({x: 0, y: n, xref: 'x', yref: 'y', xanchor: 'left', yanchor: 'bottom', yshift: 10,
+    showarrow: false, text: n, font: {size: 11, color: tok('--muted'), family: tok('--f-body')}}));
   const layout = baseLayout({
-    barmode: 'stack', bargap: 0.35,
-    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle('ms per frame')}),
-    yaxis: Object.assign(baseLayout().yaxis, {tickfont: {size: 11, color: tok('--muted')}}),
+    barmode: 'stack', bargap: 0.55, annotations, margin: {l: 4, r: 16, t: 22, b: 10},
+    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle('ms per frame'), rangemode: 'tozero'}),
+    yaxis: Object.assign(baseLayout().yaxis, {showticklabels: false, showgrid: false}),
   });
-  $('stages').style.height = Math.max(300, 70 + rows.length * 26) + 'px';
-  Plotly.react('stages', traces, layout, CONF);
+  $('stages').style.height = Math.max(240, 80 + rows.length * 46) + 'px';
+  Plotly.react('stages', traces, layout, CONF).then(() => Plotly.Plots.resize('stages'));
   $('stages-sub').textContent = `Per frame, ${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ` +
     (S.axis === 'pi' ? 'Pi timing where it exists, otherwise GPU (marked in the labels).' : 'GPU timing.');
 }
@@ -419,9 +448,9 @@ function drawStages() {
 const COLS = [
   ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['protocol', 'Protocol'], ['device', 'Device'],
   ['videos', 'Videos', 0], ['map', 'mAP', 1], ['f1', 'F1', 1], ['map_small', 'mAP small', 1],
-  ['det_recall', 'Faces found', 1], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
+  ['det_recall', 'Faces found', 1], ['fps', 'fps', 2], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
 ];
-const val = (r, k) => k === 'protocol' ? PROTO[proto(r)] : k === 'model' ? label(r) : r[k];
+const val = (r, k) => k === 'protocol' ? PROTO[proto(r)] : k === 'model' ? label(r) : k === 'fps' ? (r.ms ? 1000 / r.ms : null) : r[k];
 function tableRows() {
   const q = $('filter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let rs = D.runs.filter(r => !$('only-version').checked || vIndex[r.v] === S.vi);
@@ -486,10 +515,13 @@ function init() {
   for (const id of ['show-det', 'show-gt', 'show-front']) $(id).onchange = drawPlots;
   $('version').oninput = e => { stop(); S.vi = +e.target.value; drawAll(); };
   $('play').onclick = () => S.timer ? stop() : play();
-  $('filter').oninput = drawTable; $('only-version').onchange = drawTable; $('copy').onclick = copyCsv;
+  $('only-changed').onchange = drawProgress; $('filter').oninput = drawTable; $('only-version').onchange = drawTable; $('copy').onclick = copyCsv;
   drawAll();
   let resizeTimer = null;
-  new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { Plotly.Plots.resize('scatter').then(placeLabels); }, 150); }).observe($('scatter'));
+  new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => {
+    Plotly.Plots.resize('scatter').then(drawScatter);
+    for (const id of ['progress', 'stages']) if ($(id).data) Plotly.Plots.resize(id);
+  }, 150); }).observe(document.querySelector('.wrap'));
   const redraw = () => drawAll();
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
   new MutationObserver(redraw).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
