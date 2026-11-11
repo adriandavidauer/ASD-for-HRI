@@ -216,3 +216,25 @@ def test_causal_streaming_equals_window_while_window_not_full():
     for face in faces:
         s, w = stream([face], ids=['a']), window([face], ids=['a'])
     assert s[0] == pytest.approx(w[0], abs=1e-4)
+
+
+def test_ASD_tells_the_landmarks_where_the_crops_are():
+    """The landmarks learn the crop boxes, the box source and the keys of every frame (#105).
+
+    GT boxes come with source 'gt', detector boxes with the detector name.
+    """
+    image = cv2.cvtColor(cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg')),
+                         cv2.COLOR_BGR2RGB)
+    asd = ASD(architecture='LipShapeCausal', shape_box_mode='fixed+previous')
+    features = asd.vvad.preprocess
+    assert features.box_mode == 'fixed+previous'
+    seen = []
+    set_frame = features.set_frame
+    features.set_frame = lambda boxes, source, keys=None: (seen.append((boxes, source, keys)),
+                                                           set_frame(boxes, source, keys))
+    asd(image, [Box2D((10, 10, 110, 110), 1.0, 'Face')], ['e1'])
+    assert seen[-1] == ([(10, 10, 110, 110)], 'gt', ['e1'])
+    assert list(features._previous) == ['e1']
+    out = asd(image)
+    assert seen[-1][1] == 'YuNet' and len(seen[-1][0]) == len(out['boxes2D'])
+    assert ASD(architecture='LipShapeCausal').vvad.preprocess.box_mode == 'none'

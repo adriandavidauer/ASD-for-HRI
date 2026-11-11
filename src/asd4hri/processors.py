@@ -324,27 +324,118 @@ class NormalizeShapeSample(Processor):
                 output_list.append(sample)
         return output_list
 
+# Where dlib's landmarks lie in the square face crop, per box source, as fractions
+# ``(x0, y0, x1, y1)`` of the crop width/height: the median tight box of 2-pass landmarks
+# (``src/model_training/estimate_landmark_box.py``, #105). 'gt' is AVA's hand-drawn boxes.
+LANDMARK_BOX_IN_CROP = {
+    'gt': (0.150, 0.285, 0.873, 0.994),
+    'YuNet': (0.097, 0.259, 0.903, 1.004),
+}
+Shape_Box_Modes = ['none', 'fixed', 'previous', 'fixed+previous']
+
+
+def _iou(a, b):
+    """IoU of two ``(x0, y0, x1, y1)`` boxes.
+
+    Returns:
+        float: The IoU, 0 for empty boxes.
+    """
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    if w <= 0 or h <= 0:
+        return 0.0
+    inter = w * h
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
 class GetShapeFeatures(Processor):
     """Extract facial landmark (shape) features from a batch of cropped RGB faces with dlib.
+
+    dlib's predictor expects the tight box of its own face detector. Where the first pass starts
+    is set by ``box_mode`` (#105):
+
+    * 'none': the whole crop
+    * 'fixed': the typical landmark box of the box source in the crop (``LANDMARK_BOX_IN_CROP``)
+    * 'previous': the landmark box of the same face in the previous frame, mapped into the
+      current crop; the whole crop on a face's first frame or after a jump (IoU of the crop
+      boxes < 0.5)
+    * 'fixed+previous': 'previous', with 'fixed' instead of the whole crop as fallback
+
+    'fixed' and 'previous' need ``set_frame`` before every call (``ASD`` does this); without it
+    they fall back to 'none'.
 
     Args:
         architecture: 'LipShape' to return only the 20 lip landmarks (indices 48-67); any other
             value returns all 68 landmarks.
         shape_predictor_path: Path to a dlib shape predictor. If None, the 68 face landmark
             predictor is downloaded if needed and used.
-        passes: Number of dlib passes. The first pass fits the landmarks in the whole crop; each
+        passes: Number of dlib passes. The first pass fits the landmarks in the start box; each
             further pass fits them again in the bounding box of the previous landmarks. dlib
             expects the tight box of its own face detector, so a second pass helps with loose
             boxes such as AVA's GT boxes (#92); it doubles the cost.
+        box_mode: Start box of the first pass, one of ``Shape_Box_Modes``.
     """
-    def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1):
-        """Load the dlib shape predictor."""
+    def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1,
+                 box_mode='none'):
+        """Load the dlib shape predictor.
+
+        Raises:
+            ValueError: If ``box_mode`` is unknown.
+        """
         super(GetShapeFeatures, self).__init__()
+        if box_mode not in Shape_Box_Modes:
+            raise ValueError(f'box_mode must be one of {Shape_Box_Modes} but is {box_mode}')
         if shape_predictor_path is None:
             shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
         self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
         self.architecture = architecture
         self.passes = passes
+        self.box_mode = box_mode
+        self._frame = None      # (crop boxes, box source, keys) of the next call
+        self._previous = {}     # key -> (crop box, landmark box), both in image pixels
+
+    def set_frame(self, boxes, source, keys=None):
+        """Tell the next ``call`` where its crops come from.
+
+        Args:
+            boxes: ``(x0, y0, x1, y1)`` of every crop in image pixels, in batch order.
+            source: Box source, a key of ``LANDMARK_BOX_IN_CROP`` ('gt' or the detector name).
+            keys: Entity ids, one per crop; the batch positions if None.
+        """
+        keys = list(range(len(boxes))) if keys is None else list(keys)
+        self._frame = ([tuple(float(v) for v in b) for b in boxes], source, keys)
+
+    def reset(self):
+        """Forget the landmarks of the previous frame."""
+        self._previous = {}
+        self._frame = None
+
+    def _start_box(self, image, k, frame):
+        """Start box of the first dlib pass for the ``k``-th crop.
+
+        Returns:
+            tuple: ``(x0, y0, x1, y1)`` in crop pixels.
+        """
+        h, w = image.shape[:2]
+        full = (0, 0, w, h)
+        if frame is None or self.box_mode == 'none' or k >= len(frame[0]):
+            return full
+        boxes, source, keys = frame
+        fallback = full
+        fixed = LANDMARK_BOX_IN_CROP.get(source)
+        if 'fixed' in self.box_mode and fixed is not None:
+            fallback = (fixed[0] * w, fixed[1] * h, fixed[2] * w, fixed[3] * h)
+        if 'previous' not in self.box_mode:
+            return fallback
+        previous = self._previous.get(keys[k])
+        if previous is None or _iou(previous[0], boxes[k]) < 0.5:
+            return fallback
+        x0, y0 = boxes[k][:2]
+        lx0, ly0, lx1, ly1 = previous[1]
+        # not clipped to the crop: the landmarks may reach past it, as in the 2-pass refit
+        box = (lx0 - x0, ly0 - y0, lx1 - x0, ly1 - y0)
+        return box if box[2] - box[0] > 4 and box[3] - box[1] > 4 else fallback
 
     def call(self, face_images):
         """Convert a batch of face images to a batch of landmark coordinates.
@@ -360,17 +451,26 @@ class GetShapeFeatures(Processor):
             AssertionError: If an element of ``face_images`` is two-dimensional with a last
                 dimension of 3, which indicates that a single image was passed instead of a batch.
         """
-        ret_batch = []
-        for image in face_images:
+        frame, self._frame = self._frame, None
+        if frame is not None and len(frame[0]) != len(face_images):
+            frame = None
+        ret_batch, previous = [], {}
+        for k, image in enumerate(face_images):
             if len(image.shape) == 2 and image.shape[-1] == 3:
                 raise AssertionError(f"Probably not receiving a batch - could be a batch of images with the shape {image.shape} but that makes no sense.")
-            rect = dlib.rectangle(0, 0, image.shape[1], image.shape[0])
+            rect = dlib.rectangle(*(int(round(v)) for v in self._start_box(image, k, frame)))
             for _ in range(self.passes):
                 points = np.array([(p.x, p.y) for p in self.shape_predictor(image, rect).parts()])
                 (x0, y0), (x1, y1) = points.min(0), points.max(0)
                 rect = dlib.rectangle(int(x0), int(y0), int(x1), int(y1))
+            if frame is not None:
+                bx, by = frame[0][k][:2]
+                previous[frame[2][k]] = (frame[0][k], (x0 + bx, y0 + by, x1 + bx, y1 + by))
             # 'LipShape': only the lip landmarks (48-67)
             ret_batch.append(points[48:68] if self.architecture == 'LipShape' else points)
+        if frame is not None:
+            # faces missing in this frame start again from the fallback box
+            self._previous = previous
         return ret_batch
 
 

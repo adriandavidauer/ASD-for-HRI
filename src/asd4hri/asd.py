@@ -127,10 +127,13 @@ class ClassifyVVAD(Processor):
         max_consecutive_empty: Number of consecutive missing face images after which the
             buffer of an entity is cleared.
         shape_passes: dlib passes per face for the landmark models (``GetShapeFeatures``).
+        shape_box_mode: Start box of dlib's first pass for the landmark models, one of
+            ``Shape_Box_Modes`` (``GetShapeFeatures``, #105).
     """
     def __init__(self, architecture='CNN2Plus1D_Light',
                  stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5,
-                 timer=None, causal_mode='streaming', window_size=38, shape_passes=1):
+                 timer=None, causal_mode='streaming', window_size=38, shape_passes=1,
+                 shape_box_mode='none'):
         """Load the classifier and assemble the preprocessing, buffering and averaging steps.
 
         ``timer`` is an optional ``StageTimer`` that records the time of every step (#76).
@@ -165,7 +168,7 @@ class ClassifyVVAD(Processor):
         # works on a batch of face images, not on a batch of samples, so it runs before buffering
         if self.is_shape:
             self.preprocess = GetShapeFeatures(architecture=architecture.replace('Causal', ''),
-                                               passes=shape_passes)
+                                               passes=shape_passes, box_mode=shape_box_mode)
         else:
             # not normalized to [0, 1] because the model is trained on images in [0, 255]
             self.preprocess = PreprocessImages(input_size[1:3], normalize=False)
@@ -264,6 +267,8 @@ class ClassifyVVAD(Processor):
         """Clear the temporal state: the feature buffers and the prediction averaging window."""
         self.buffer_features.reset()
         self.buffer_predictions.reset()
+        if self.is_shape:
+            self.preprocess.reset()
         if self.causal and self.stream is not None:
             self.stream.reset()
             self.missed = {}
@@ -320,11 +325,13 @@ class ASD(Processor):
         window_size: Frames per prediction in the causal 'window' mode.
         shape_passes: dlib passes per face for the landmark models; 2 fits loose boxes better
             (``GetShapeFeatures``, #92).
+        shape_box_mode: Start box of dlib's first pass for the landmark models, one of
+            ``Shape_Box_Modes`` (``GetShapeFeatures``, #105).
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
                  profile=True, causal_mode='streaming', window_size=38, av_window=25,
-                 audio_fallback='noise', shape_passes=1):
+                 audio_fallback='noise', shape_passes=1, shape_box_mode='none'):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -344,6 +351,7 @@ class ASD(Processor):
         self.face_tracker = FaceTracker(approach=self.face_tracking_approach)
         #detection
         self.copy = pr.Copy()
+        self.detector_name = detector
         if detector == 'HaarCascade':
             self.detect = dt.HaarCascadeFrontalFace()
         elif detector == 'YuNet':
@@ -369,7 +377,7 @@ class ASD(Processor):
             weighted=weighted,
             architecture=architecture, max_consecutive_empty=max_consecutive_empty,
             timer=self.timer, causal_mode=causal_mode, window_size=window_size,
-            shape_passes=shape_passes,
+            shape_passes=shape_passes, shape_box_mode=shape_box_mode,
         )
         self.class_names = list(get_class_names('VVAD_LRS3'))
         corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.
@@ -382,7 +390,8 @@ class ASD(Processor):
                                    audio_fallback=audio_fallback, timer=self.timer)
             self.classifier = None
         else:
-            self.classifier = AddClassAndScoreToBoxes(ClassifyVVAD(**self.vvad_args), class_names=corrected_class_names, decision_threshold=decision_threshold)
+            self.vvad = ClassifyVVAD(**self.vvad_args)
+            self.classifier = AddClassAndScoreToBoxes(self.vvad, class_names=corrected_class_names, decision_threshold=decision_threshold)
         
 
         self.class_names.append('No Prediction yet')
@@ -418,6 +427,7 @@ class ASD(Processor):
         """
         timer = self.timer
         with timer.stage('frame'):
+            source = 'gt' if boxes2D is not None else self.detector_name
             if boxes2D is None:
                 # get the face boxes and crop the faces from the image
                 with timer.stage('detect'):
@@ -443,6 +453,9 @@ class ASD(Processor):
                     boxes2D = self.square(boxes2D)
                     boxes2D = self.clip(image, boxes2D)
                     cropped_images = self.crop(image, boxes2D)
+                if self.vvad.is_shape:
+                    # where the crops lie, for the start box of dlib (#105)
+                    self.vvad.preprocess.set_frame([b.coordinates for b in boxes2D], source, ids)
 
                 # call classifyVVAD for the whole batch of faces; it times its own steps
                 boxes2D = self.classifier(cropped_images, boxes2D, ids)
