@@ -46,6 +46,7 @@ from .processors import *
 from .timing import StageTimer, NULL_TIMER
 from .av import AV_PREFIX, AVClassifier, av_architectures
 from .models import StreamingFeatureLSTM, normalize_shape_frames
+from .vad import GATE_MODES, VAD_OPTIONS, VoiceActivity, gate
 
 # end file header
 __author__      = 'Adrian Auer'
@@ -320,11 +321,16 @@ class ASD(Processor):
         window_size: Frames per prediction in the causal 'window' mode.
         shape_passes: dlib passes per face for the landmark models; 2 fits loose boxes better
             (``GetShapeFeatures``, #92).
+        audio_gate: Voice activity detector whose per-frame speech probability gates every
+            face's score: 'none', 'webrtc' or 'silero' (``asd4hri.vad``, #103). Needs
+            ``set_audio`` and the frame timestamps.
+        gate_mode: How score and speech probability are combined, one of
+            ``asd4hri.vad.GATE_MODES``; see ``asd4hri.vad.gate``.
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
                  profile=True, causal_mode='streaming', window_size=38, av_window=25,
-                 audio_fallback='noise', shape_passes=1):
+                 audio_fallback='noise', shape_passes=1, audio_gate='none', gate_mode='product'):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -334,6 +340,12 @@ class ASD(Processor):
         super(ASD, self).__init__()
         self.timer = StageTimer(enabled=profile)
         self.av = None
+        if audio_gate not in VAD_OPTIONS:
+            raise ValueError(f'audio_gate must be one of {VAD_OPTIONS}, not {audio_gate}')
+        if gate_mode not in GATE_MODES:
+            raise ValueError(f'gate_mode must be one of {GATE_MODES}, not {gate_mode}')
+        self.vad = None if audio_gate == 'none' else VoiceActivity(audio_gate)
+        self.gate_mode = gate_mode
         self.annotate_output = annotate_output
         self.offsets = [0,0]
         self.colors = [[0, 255, 0], [255, 0, 0], [0, 0, 0]]
@@ -393,10 +405,38 @@ class ASD(Processor):
     def set_audio(self, audio, fps):
         """Give the audio-visual models the audio track (int16, 16 kHz mono) and frame rate.
 
-        Call once per video before the first frame. Ignored by the visual-only models.
+        Call once per video before the first frame. Used by the audio-visual models and the
+        audio gate; ignored otherwise.
         """
         if self.av is not None:
             self.av.set_audio(audio, fps)
+        if self.vad is not None:
+            self.vad.set_audio(audio)
+
+    @property
+    def needs_audio(self):
+        """Whether this pipeline uses the audio track (an AV model or the audio gate).
+
+        Returns:
+            bool: True if ``set_audio`` should be given the audio.
+        """
+        return self.av is not None or self.vad is not None
+
+    def _gate(self, boxes2D, timestamp):
+        """Gate the scores of all faces of the frame with its speech probability.
+
+        Args:
+            boxes2D: Boxes with ``score`` set (-1 for no prediction yet).
+            timestamp: Time of the frame in seconds.
+        """
+        with self.timer.stage('vad'):
+            speech = self.vad(timestamp)
+        if speech is None:
+            return
+        for box in boxes2D:
+            if box.score is not None and box.score >= 0:
+                box.score = float(gate(box.score, speech, self.gate_mode))
+                box.class_name = self.corrected_class_names[int(box.score > self.decision_threshold)]
 
     def call(self, image, boxes2D=None, ids=None, timestamp=None):
         """Detect faces in one frame and classify each of them as speaking or not speaking.
@@ -446,6 +486,9 @@ class ASD(Processor):
 
                 # call classifyVVAD for the whole batch of faces; it times its own steps
                 boxes2D = self.classifier(cropped_images, boxes2D, ids)
+
+            if self.vad is not None and timestamp is not None:
+                self._gate(boxes2D, timestamp)
 
             # only if flag is set
             if self.annotate_output:

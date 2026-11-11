@@ -58,6 +58,7 @@ RUN mkdir -p src/asd4hri && touch src/asd4hri/__init__.py \
 COPY src/ src/
 RUN pip install --no-deps -e . \
     && python src/initialize_models.py \
+    && python -c "from asd4hri.av import fetch; from asd4hri.vad import SILERO; fetch(SILERO)" \
     && chmod -R a+rX /opt/keras src/models
 
 # ── experiments ──────────────────────────────────────────────────────────────────────────────
@@ -84,11 +85,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     fi \
     && pip install --no-deps "cast-asd @ $CAST_ASD" moshi==0.2.12 \
     && pip install -e ".[av]" yt-dlp pandas h5py scikit-learn wget pytest \
-    && python -c "from asd4hri.av import AV_MODELS, weights_path; [weights_path(n) for n in AV_MODELS]" \
+    && python -c "from asd4hri.av import AV_MODELS, fetch, weights_path; \
+from asd4hri.vad import SILERO; [weights_path(n) for n in AV_MODELS]; fetch(SILERO)" \
     && chmod -R a+rX /opt/asd4hri
 
 # smoke test on the target architecture: the pipeline builds, every AV model loads its weights
 RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); \
+ASD(architecture='LipShapeCausal', audio_gate='silero'); ASD(architecture='LipShapeCausal', audio_gate='webrtc'); \
 from asd4hri.av import AV_MODELS, AVModel; from asd4hri.cast import CASTModel; \
 [CASTModel(n, device='cpu') if AV_MODELS[n].get('scene') else AVModel(n, device='cpu') for n in AV_MODELS]"
 

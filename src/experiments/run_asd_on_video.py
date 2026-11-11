@@ -194,7 +194,8 @@ def run_asd_on_video(video_path,
                     max_consecutive_empty: int = 2,
                     groundtruth=None, causal_mode='streaming', window=38,
                     av_window=25, audio_fallback='noise', use_audio=True,
-                    time_range=None, frame_crop=None, shape_passes=1):
+                    time_range=None, frame_crop=None, shape_passes=1,
+                     audio_gate='none', gate_mode='product'):
     """Run ASD on one video and write predictions + timing rows.
 
     Args:
@@ -220,6 +221,9 @@ def run_asd_on_video(video_path,
                             ignored by the other architectures.
         window:             frames per prediction in the causal 'window' mode.
         shape_passes:       dlib passes per face for the landmark models (#92).
+        audio_gate:         Voice activity detector that gates the scores (#103): 'none',
+                            'webrtc' or 'silero'.
+        gate_mode:          How the gate combines score and speech probability.
         time_range:         Optional ``(start_s, end_s)``: only frames in this range are
                             processed (e.g. AVA's annotated 15 minutes of a movie).
         groundtruth:        GT-box mode (#75): list of ``(timestamp, entity_id, (x1, y1, x2, y2))``
@@ -251,8 +255,8 @@ def run_asd_on_video(video_path,
     pipeline = ASD(stride=stride, averaging_window_size=averaging_window_size, architecture=architecture, decision_threshold=decision_threshold, weighted=weighted, max_consecutive_empty=max_consecutive_empty,
                    causal_mode=causal_mode, window_size=window,
                    av_window=av_window, audio_fallback=audio_fallback,
-                   shape_passes=shape_passes)
-    if pipeline.av is not None:
+                   shape_passes=shape_passes, audio_gate=audio_gate, gate_mode=gate_mode)
+    if pipeline.needs_audio:
         with pipeline.timer.stage('audio_decode'):
             audio = load_audio(video_path) if use_audio else None
         pipeline.set_audio(audio, native_fps)
