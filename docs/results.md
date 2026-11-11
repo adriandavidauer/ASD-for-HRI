@@ -19,6 +19,10 @@ release carries:
 | `benchmark.csv` | required: the table `run_benchmark` writes (`benchmark/benchmark.csv`) for the runs with that version's image, e.g. on the cluster |
 | `benchmark_pi.csv` | optional: the same table of the Raspberry Pi runs; it gives the Pi fps |
 
+A point gets a Pi fps only from a Pi run of the same version, dataset, architecture, settings
+and boxes. Without one it has no Pi value: it is left out of the Pi-timing views, and the page
+says how many runs have no Pi timing.
+
 When a release is published, the workflow `.github/workflows/results_chart.yml` downloads these
 assets from all `v*` releases (oldest first), builds the page with
 `python -m src.experiments.make_results_chart` and publishes it. If the CSVs are uploaded

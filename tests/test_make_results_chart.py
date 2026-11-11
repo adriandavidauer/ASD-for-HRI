@@ -88,3 +88,26 @@ def test_pi_csv_rows_are_pi_runs(tmp_path):
     data = build([('v0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html',
                  pi={'v0.0.0': tmp_path / 'pi.csv'})
     assert sorted(r['device'] for r in data['runs']) == ['gpu', 'pi']
+
+
+def test_pi_timing_only_from_the_same_configuration(tmp_path):
+    """A run gets Pi timing only from the Pi run of exactly its configuration.
+
+    A Pi run of another dataset, version or setting is not used.
+    """
+    pi_ms = {'stage_ms_per_frame': {'frame': 100.0}}
+    write_csv([_summary('LipShapeCausal'), _summary('LipShapeCausal', dataset='wasd'),
+               _summary('FaceShapeCausal'), _summary('CNN2Plus1D_Light')], tmp_path / 'a.csv')
+    write_csv([_summary('LipShapeCausal', **pi_ms),                      # matches unitalk Lip
+               _summary('FaceShapeCausal', dataset='ava', **pi_ms),      # other dataset
+               _summary('CNN2Plus1D_Light', stride=2, **pi_ms)], tmp_path / 'pi.csv')
+    write_csv([_summary('FaceShapeCausal')], tmp_path / 'b.csv')
+    data = build([('v0.0.0', tmp_path / 'a.csv'), ('v0.1.0', tmp_path / 'b.csv')],
+                 tmp_path / 'page.html', pi={'v0.0.0': tmp_path / 'pi.csv'})
+    timed = {(r['v'], r['dataset'], r['model']): r.get('pi', {}).get('ms')
+             for r in data['runs'] if r['device'] == 'gpu'}
+    assert timed == {('v0.0.0', 'unitalk', 'LipShapeCausal'): 100.0,
+                     ('v0.0.0', 'wasd', 'LipShapeCausal'): None,
+                     ('v0.0.0', 'unitalk', 'FaceShapeCausal'): None,
+                     ('v0.0.0', 'unitalk', 'CNN2Plus1D_Light'): None,
+                     ('v0.1.0', 'unitalk', 'FaceShapeCausal'): None}

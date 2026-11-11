@@ -14,9 +14,10 @@ self-contained HTML page (Plotly from a CDN, the data inline):
 A configuration is ``(dataset, model, boxes, variant)`` and is matched across versions by that
 key. Pi runs give the Pi fps of a configuration: they come from the version's
 ``benchmark_pi.csv`` (``--pi``), or are runs on an ``aarch64`` machine in ``benchmark.csv``.
-They usually cover only a few videos, so their accuracy isn't plotted. A Pi run is matched by
-``(dataset, architecture, settings, boxes)``; when the Pi ran another dataset (e.g. one AVA
-video), a Pi run with the same architecture, settings and boxes is used.
+They usually cover only a few videos, so their accuracy isn't plotted. A run gets the Pi
+timing only of a Pi run of the same version, dataset, architecture, settings and boxes; without
+one it has no Pi timing (it is left out of the Pi-timing views, and the page says how many runs
+that are). No other run stands in for a missing one.
 
 The version of a run is its ``version`` column (written by ``run_evaluation`` from the image's
 ``ASD4HRI_VERSION``) when present, otherwise the label given on the command line; a leading
@@ -199,6 +200,33 @@ def load(versions, pi=None):
     return runs
 
 
+def attach_pi(runs):
+    """Give every non-Pi run the timing of its Pi run, if there is one.
+
+    The Pi run must have the same version, dataset, architecture, boxes, variant and settings;
+    there is no fallback to another dataset or version.
+
+    Args:
+        runs: The runs (``load``); changed in place.
+
+    Returns:
+        list[dict]: The same runs; a matched run has ``pi = {'ms', 'stages', 'run'}``.
+    """
+    def key(r):
+        """Identity of a configuration on one device.
+
+        Returns:
+            tuple: The key.
+        """
+        return r['v'], r['dataset'], r['model'], r['boxes'], r['variant'], r['settings']
+    pi = {key(r): r for r in runs if r['device'] == 'pi'}
+    for r in runs:
+        if r['device'] != 'pi' and key(r) in pi:
+            p = pi[key(r)]
+            r['pi'] = {'ms': p['ms'], 'stages': p['stages'], 'run': p['run']}
+    return runs
+
+
 def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-for-HRI Results',
           pi=None):
     """Write the page.
@@ -216,7 +244,7 @@ def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-
     Returns:
         dict: The data embedded in the page.
     """
-    runs = load(versions, pi)
+    runs = attach_pi(load(versions, pi))
     order = []
     for v in [label for label, _ in versions] + [r['v'] for r in runs]:
         if v not in order and any(r['v'] == v for r in runs):

@@ -211,27 +211,21 @@ const colorOf = m => tok('--m' + ((mIndex(m) % 9) + 1));
 const symbolOf = r => proto(r) === 'gt' ? 'square' : 'circle';
 const shown = r => $(proto(r) === 'gt' ? 'show-gt' : 'show-det').checked;
 
-function piTiming(r, vi) {
-  // Pi run of the same (dataset, architecture, settings, boxes), else of the same architecture,
-  // settings and boxes on another dataset; in this or an earlier version
-  const same = p => p.model === r.model && p.boxes === r.boxes && p.variant === r.variant && p.settings === r.settings;
-  for (let i = vi; i >= 0; i--) {
-    const here = pi.filter(p => vIndex[p.v] === i && same(p));
-    const hit = here.find(p => p.dataset === r.dataset) || here[0];
-    if (hit) return hit;
-  }
-  return null;
+function piTiming(r) {
+  // the Pi run of exactly this version, dataset, architecture, settings and boxes (matched by the
+  // generator); no other run stands in for it
+  return r.pi || null;
 }
 function xOf(r, vi, axis) {
   // end-to-end frames per second of the run
-  const src = axis === 'gpu' ? r : piTiming(r, vi);
+  const src = axis === 'gpu' ? r : piTiming(r);
   return src && src.ms ? 1000 / src.ms : null;
 }
 const runsAt = vi => gpu.filter(r => vIndex[r.v] === vi && r.dataset === S.dataset);
 
 function defaultAxis() {
   const rs = runsAt(S.vi);
-  const withPi = rs.filter(r => piTiming(r, S.vi)).length;
+  const withPi = rs.filter(r => piTiming(r)).length;
   return rs.length && withPi / rs.length >= 0.5 ? 'pi' : 'gpu';
 }
 
@@ -419,11 +413,12 @@ function drawProgress() {
 
 function drawStages() {
   const vi = S.vi;
-  const rows = runsAt(vi).filter(shown).map(r => {
-    const p = S.axis === 'pi' ? piTiming(r, vi) : null;
-    const src = p || r;
-    return {r, src, dev: p ? 'Pi' : 'GPU', total: src.ms || 0};
-  }).filter(x => x.total).sort((a, b) => a.total - b.total);
+  const all = runsAt(vi).filter(shown);
+  const rows = all.map(r => {
+    const src = S.axis === 'pi' ? piTiming(r) : r;
+    return src && {r, src, dev: S.axis === 'pi' ? 'Pi' : 'GPU', total: src.ms || 0};
+  }).filter(x => x && x.total).sort((a, b) => a.total - b.total);
+  const missing = all.length - rows.length;
   const names = rows.map(x => `${label(x.r)}, ${proto(x.r) === 'gt' ? 'GT boxes' : 'full pipeline'} (${x.dev})`);
   const traces = STAGES.map(([id, raw, nm]) => ({
     type: 'bar', orientation: 'h', y: names,
@@ -444,7 +439,8 @@ function drawStages() {
   $('stages').style.height = Math.max(240, 80 + rows.length * 46) + 'px';
   Plotly.react('stages', traces, layout, CONF).then(() => Plotly.Plots.resize('stages'));
   $('stages-sub').textContent = `Per frame, ${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ` +
-    (S.axis === 'pi' ? 'Pi timing where it exists, otherwise GPU (marked in the labels).' : 'GPU timing.');
+    (S.axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing.') +
+    (missing ? ` ${missing} run${missing > 1 ? 's have' : ' has'} no ${S.axis === 'pi' ? 'Pi ' : ''}timing and ${missing > 1 ? 'are' : 'is'} not shown.` : '');
 }
 
 const COLS = [
