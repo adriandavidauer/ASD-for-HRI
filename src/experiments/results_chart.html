@@ -285,17 +285,78 @@ function drawScatter() {
     customdata: pts.map(p => [label(p.r), PROTO[proto(p.r)], p.r.settings, p.r.v]),
     hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.1f} ms/frame<br>version %{customdata[3]}<extra></extra>',
   });
+  // thin arrow from the GT-box square to the full-pipeline circle of the same model and audio setting
+  const arrows = [];
+  if ($('show-det').checked && $('show-gt').checked) {
+    for (const g of pts.filter(p => proto(p.r) === 'gt')) {
+      const d = pts.find(p => proto(p.r) === 'det' && p.r.model === g.r.model && p.r.variant === g.r.variant);
+      if (!d) continue;
+      arrows.push({x: Math.log10(d.x), y: d.y, ax: Math.log10(g.x), ay: g.y, xref: 'x', yref: 'y', axref: 'x', ayref: 'y',
+        text: '', showarrow: true, arrowhead: 2, arrowsize: 0.9, arrowwidth: 1, arrowcolor: colorOf(g.r.model),
+        opacity: 0.45, standoff: 7, startstandoff: 7});
+    }
+  }
+  S.scatterPts = pts; S.arrows = arrows;
   const layout = baseLayout({
+    annotations: arrows,
     xaxis: Object.assign(baseLayout().xaxis, {type: 'log', range: xRange(), tickvals: [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000],
       title: axTitle((axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine') + ', ms per frame (log)')}),
     yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
     transition: {duration: reduced ? 0 : 450, easing: 'cubic-in-out'},
   });
-  Plotly.react('scatter', traces, layout, CONF);
+  Plotly.react('scatter', traces, layout, CONF).then(placeLabels);
   $('front-caption').hidden = !showFront;
   const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
   $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. Up is better, left is faster. ${timing}` +
     (hidden ? ` ${hidden} run${hidden > 1 ? 's have' : ' has'} no ${axis === 'pi' ? 'Pi ' : ''}timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
+}
+
+// name labels next to the markers: right, left, above or below, the first spot that collides
+// with no marker and no label placed before; dropped when nothing fits (the hover still works)
+let measureCtx = null;
+function textWidth(t) {
+  measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+  measureCtx.font = `11px ${tok('--f-body')}`;
+  return measureCtx.measureText(t).width;
+}
+function placeLabels() {
+  const gd = $('scatter'), fl = gd._fullLayout;
+  if (!fl || !fl.xaxis || !S.scatterPts) return;
+  const xa = fl.xaxis, ya = fl.yaxis, W = fl._size.w, H = fl._size.h;
+  const P = S.scatterPts.map(p => ({p, x: xa.l2p(Math.log10(p.x)), y: ya.l2p(p.y)}));
+  const R = 7, GAP = 4, TH = 13;
+  const taken = P.map(q => [q.x - R, q.y - R, q.x + R, q.y + R]);
+  // the arrows too, as points every 3 px along each one
+  const along = [];
+  for (const a of S.arrows || []) {
+    const x0 = xa.l2p(a.ax), y0 = ya.l2p(a.ay), x1 = xa.l2p(a.x), y1 = ya.l2p(a.y);
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
+    for (let i = 0; i <= n; i++) along.push([x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n]);
+  }
+  const hit = b => b[0] < 0 || b[1] < 0 || b[2] > W || b[3] > H ||
+    taken.some(t => b[0] < t[2] && b[2] > t[0] && b[1] < t[3] && b[3] > t[1]) ||
+    along.some(([x, y]) => x > b[0] - 2 && x < b[2] + 2 && y > b[1] - 2 && y < b[3] + 2);
+  const labels = [];
+  for (const q of [...P].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const text = label(q.p.r), tw = textWidth(text);
+    const spots = [
+      {b: [q.x + R + GAP, q.y - TH / 2, q.x + R + GAP + tw, q.y + TH / 2], xanchor: 'left', yanchor: 'middle', xshift: R + GAP, yshift: 0},
+      {b: [q.x - R - GAP - tw, q.y - TH / 2, q.x - R - GAP, q.y + TH / 2], xanchor: 'right', yanchor: 'middle', xshift: -R - GAP, yshift: 0},
+      {b: [q.x - tw / 2, q.y - R - GAP - TH, q.x + tw / 2, q.y - R - GAP], xanchor: 'center', yanchor: 'bottom', xshift: 0, yshift: R + GAP},
+      {b: [q.x - tw / 2, q.y + R + GAP, q.x + tw / 2, q.y + R + GAP + TH], xanchor: 'center', yanchor: 'top', xshift: 0, yshift: -R - GAP},
+      {b: [q.x + R, q.y - R - TH, q.x + R + tw, q.y - R], xanchor: 'left', yanchor: 'bottom', xshift: R, yshift: R},
+      {b: [q.x - R - tw, q.y - R - TH, q.x - R, q.y - R], xanchor: 'right', yanchor: 'bottom', xshift: -R, yshift: R},
+      {b: [q.x + R, q.y + R, q.x + R + tw, q.y + R + TH], xanchor: 'left', yanchor: 'top', xshift: R, yshift: -R},
+      {b: [q.x - R - tw, q.y + R, q.x - R, q.y + R + TH], xanchor: 'right', yanchor: 'top', xshift: -R, yshift: -R},
+    ];
+    const s = spots.find(c => !hit(c.b));
+    if (!s) continue;
+    taken.push(s.b);
+    labels.push({x: Math.log10(q.p.x), y: q.p.y, xref: 'x', yref: 'y', text, showarrow: false,
+      xanchor: s.xanchor, yanchor: s.yanchor, xshift: s.xshift, yshift: s.yshift,
+      font: {size: 11, color: colorOf(q.p.r.model), family: tok('--f-body')}, captureevents: false});
+  }
+  Plotly.relayout(gd, {annotations: (S.arrows || []).concat(labels)});
 }
 
 function modelChips() {
@@ -304,7 +365,7 @@ function modelChips() {
 }
 function drawLegends() {
   const shapes = '<span><i class="sw ring"></i>Full pipeline</span><span><i class="sw sq ring"></i>GT boxes</span>';
-  $('legend').innerHTML = modelChips() + '<i class="sep"></i>' + shapes + '<span>faint line: earlier versions</span>';
+  $('legend').innerHTML = modelChips() + '<i class="sep"></i>' + shapes + '<span>faint line: earlier versions</span><span>arrow: GT boxes → full pipeline</span>';
   $('legend-progress').innerHTML = modelChips() + '<i class="sep"></i><span>● ─ Full pipeline</span><span>■ ┄ GT boxes</span>';
   $('legend-stages').innerHTML = STAGES.map(([id, , nm]) => `<span><i class="sw bar" style="background:var(--st-${id})"></i>${nm}</span>`).join('') +
     '<span><i class="sw bar" style="background:var(--st-other)"></i>Other</span>';
@@ -427,6 +488,8 @@ function init() {
   $('play').onclick = () => S.timer ? stop() : play();
   $('filter').oninput = drawTable; $('only-version').onchange = drawTable; $('copy').onclick = copyCsv;
   drawAll();
+  let resizeTimer = null;
+  new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { Plotly.Plots.resize('scatter').then(placeLabels); }, 150); }).observe($('scatter'));
   const redraw = () => drawAll();
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
   new MutationObserver(redraw).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
