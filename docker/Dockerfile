@@ -92,6 +92,14 @@ RUN python -c "from asd4hri.asd import ASD; ASD(architecture='LipShape'); \
 from asd4hri.av import AV_MODELS, AVModel; from asd4hri.cast import CASTModel; \
 [CASTModel(n, device='cpu') if AV_MODELS[n].get('scene') else AVModel(n, device='cpu') for n in AV_MODELS]"
 
+# version and commit of this build, written into every run's summary.json (run_evaluation.code_version,
+# #107). Set last so that a new commit doesn't invalidate the cached layers above.
+ARG ASD4HRI_VERSION=dev
+ARG ASD4HRI_COMMIT=
+ENV ASD4HRI_VERSION=${ASD4HRI_VERSION} ASD4HRI_COMMIT=${ASD4HRI_COMMIT}
+LABEL org.opencontainers.image.version="${ASD4HRI_VERSION}" \
+      org.opencontainers.image.revision="${ASD4HRI_COMMIT}"
+
 RUN mkdir -p /app/data && chmod 777 /app/data
 VOLUME ["/app/data"]
 ENTRYPOINT ["python", "-m", "src.experiments.run_evaluation"]
