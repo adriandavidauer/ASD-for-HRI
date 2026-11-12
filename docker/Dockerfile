@@ -66,7 +66,8 @@ ARG TARGETARCH
 # torch on amd64: the CUDA 12.6 build, because the default PyPI wheel (CUDA 13) only runs on
 # compute capability >= 7.5 and the cluster's Pascal (6.x) and V100 (7.0) GPUs need older kernels
 # (#93). torchvision (needed by pyasd) has to come from the same index, or its ops do not match
-# torch. On arm64 (Pi) the default PyPI wheels are the CPU builds.
+# torch. On arm64 (Pi) the CPU builds: the default PyPI wheel is a CUDA build for ARMv8.2+ cores
+# and dies with SIGILL on the Pi 4's Cortex-A72 (#112).
 # The [av] extra adds pyasd (TalkNet, LR-ASD, Light-ASD, LRX-ASD; FabuLight reuses Light-ASD)
 # at a pinned commit, and the pure-Python dependencies of CAST-ASD.
 # CAST-ASD, moshi (its Mimi audio encoder) and torchaudio are installed without their
@@ -80,7 +81,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 \
         && pip install --no-deps torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu126; \
     else \
-        pip install --no-deps torchaudio==2.11.0; \
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+        && pip install --no-deps torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu; \
     fi \
     && pip install --no-deps "cast-asd @ $CAST_ASD" moshi==0.2.12 \
     && pip install -e ".[av]" yt-dlp pandas h5py scikit-learn wget pytest \
