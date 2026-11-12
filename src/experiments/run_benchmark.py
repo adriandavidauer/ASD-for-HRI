@@ -6,8 +6,10 @@ scores to ``<data_dir>/benchmark/<run>/stats``; a run whose ``stats/summary.json
 skipped, so an interrupted benchmark continues where it stopped, and the same command can run on
 the cluster and on the Pi (results are kept apart by ``--tag``, e.g. ``gpu`` / ``pi``).
 
-At the end all ``summary.json`` files under ``<data_dir>/benchmark`` are collected into
-``benchmark.csv`` and ``benchmark.tex``.
+At the end the ``summary.json`` files under ``<data_dir>/benchmark`` are collected into one
+table. With ``--tag`` it holds only the runs of that tag and is written to ``benchmark_<tag>.csv``
+and ``benchmark_<tag>.tex``, so runs of different versions or machines in the same folder are
+never mixed; without a tag all runs go to ``benchmark.csv`` and ``benchmark.tex``.
 
 Example::
 
@@ -82,17 +84,20 @@ def build_command(args, dataset, architecture, boxes, run_dir):
     return cmd + list(args.extra)
 
 
-def collect(benchmark_dir):
-    """Read every ``*/stats/summary.json`` under ``benchmark_dir``.
+def collect(benchmark_dir, tag=''):
+    """Read the ``*/stats/summary.json`` files under ``benchmark_dir``.
 
     Args:
         benchmark_dir: The benchmark folder.
+        tag: Only the runs of this tag (folder name ``<tag>_...``); all runs if empty.
 
     Returns:
         list[dict]: One summary per run, with its folder name as ``run``.
     """
     rows = []
     for path in sorted(Path(benchmark_dir).glob('*/stats/summary.json')):
+        if tag and not path.parent.parent.name.startswith(f'{tag}_'):
+            continue
         with open(path) as f:
             summary = json.load(f)
         summary['run'] = path.parent.parent.name
@@ -173,7 +178,8 @@ def main(argv=None):
     argv = argv[:argv.index('--')] if '--' in argv else argv
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--data_dir', default='data')
-    p.add_argument('--tag', default='', help='Prefix for the run folders, e.g. gpu or pi')
+    p.add_argument('--tag', default='', help='Prefix for the run folders, e.g. gpu or pi; '
+                   'the table then holds only the runs of this tag')
     p.add_argument('--architectures', nargs='+', default=['CNN2Plus1D_Light'])
     p.add_argument('--datasets', nargs='+', default=['unitalk'],
                    choices=['ava', 'unitalk', 'wasd', 'easycom'])
@@ -203,11 +209,13 @@ def main(argv=None):
                     if subprocess.run(cmd).returncode != 0:
                         failed.append(run_dir.name)
 
-    rows = collect(benchmark_dir)
+    rows = collect(benchmark_dir, args.tag)
     if rows:
-        write_csv(rows, benchmark_dir / 'benchmark.csv')
-        write_latex(rows, benchmark_dir / 'benchmark.tex')
-        LOGGER.info('table: %s (%d runs)', benchmark_dir / 'benchmark.csv', len(rows))
+        # not with_suffix: a tag like v0.0.0 has dots of its own
+        table = str(benchmark_dir / (f'benchmark_{args.tag}' if args.tag else 'benchmark'))
+        write_csv(rows, table + '.csv')
+        write_latex(rows, table + '.tex')
+        LOGGER.info('table: %s.csv (%d runs)', table, len(rows))
     if failed:
         LOGGER.error('failed runs: %s', ', '.join(failed))
         raise SystemExit(1)

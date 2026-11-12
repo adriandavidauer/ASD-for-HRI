@@ -39,3 +39,17 @@ def test_done_runs_are_skipped_and_collected(tmp_path, caplog):
     assert 'ava_A_gt' in csv_text and '"{""OC"": 0.9}"' in csv_text
     tex = (tmp_path / 'benchmark' / 'benchmark.tex').read_text()
     assert r'90.0\%' in tex and r'\midrule' in tex and '--' in tex
+
+
+def test_tagged_table_holds_only_the_runs_of_its_tag(tmp_path):
+    """With --tag the table gets its own file and leaves out other tags' runs."""
+    for name in ('v0.0.0_ava_A_gt', 'v0.0.0-pi_ava_A_gt', 'cluster_ava_A_gt'):
+        stats = tmp_path / 'benchmark' / name / 'stats'
+        stats.mkdir(parents=True)
+        (stats / 'summary.json').write_text(json.dumps({'dataset': 'ava', 'map': 0.5}))
+    rb.main(['--data_dir', str(tmp_path), '--tag', 'v0.0.0', '--collect_only'])
+    csv_text = (tmp_path / 'benchmark' / 'benchmark_v0.0.0.csv').read_text()
+    assert 'v0.0.0_ava_A_gt' in csv_text
+    assert 'v0.0.0-pi' not in csv_text and 'cluster' not in csv_text
+    assert (tmp_path / 'benchmark' / 'benchmark_v0.0.0.tex').is_file()
+    assert not (tmp_path / 'benchmark' / 'benchmark.csv').exists()

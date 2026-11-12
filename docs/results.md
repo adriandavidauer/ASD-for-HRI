@@ -16,7 +16,7 @@ release carries:
 
 | Asset | Content |
 |---|---|
-| `benchmark.csv` | required: the table `run_benchmark` writes (`benchmark/benchmark.csv`) for the runs with that version's image, e.g. on the cluster |
+| `benchmark.csv` | required: the table `run_benchmark --tag <version>` writes (`benchmark/benchmark_<version>.csv`, renamed) for the runs with that version's image, e.g. on the cluster |
 | `benchmark_pi.csv` | optional: the same table of the Raspberry Pi runs; it gives the Pi fps |
 
 A point gets a Pi fps only from a Pi run of the same version, dataset, architecture, settings
