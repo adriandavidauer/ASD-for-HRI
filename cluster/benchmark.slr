@@ -49,6 +49,16 @@ mkdir -p "$DATA/logs" "$DATA/home"
 # line every task sees all GPUs of the node and runs on GPU 0, also when that GPU is someone else's
 export SINGULARITYENV_CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:?no GPU assigned by Slurm}
 echo "GPU: CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+# The libraries in the container see all cores of the node, not the CPUs Slurm gave this task, and
+# each starts that many threads; on a shared node they then fight over the few cores the task has.
+# Limit every thread pool to the task's CPUs (SINGULARITYENV_ because --containall drops the rest).
+THREADS=${SLURM_CPUS_PER_TASK:-8}
+for v in OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS TF_NUM_INTRAOP_THREADS \
+         OPENCV_FOR_THREADS_NUM; do
+  export "SINGULARITYENV_$v=$THREADS"
+done
+export SINGULARITYENV_TF_NUM_INTEROP_THREADS=2
+echo "CPU: $(lscpu | sed -n 's/^Model name: *//p'), $THREADS threads per library"
 singularity exec --nv --containall --home "$DATA/home" --bind "$DATA:/app/data" "$IMAGE" \
   bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --no_download \
     --tag $TAG --architectures $MODEL --datasets $DATASET --boxes $BOX"
