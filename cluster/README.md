@@ -77,23 +77,26 @@ Give every partition its own indices: two tasks of the same run would write into
 The log of every task starts with the CPU model of its node. FPS and the time per stage are only
 comparable between runs on the same partition.
 Paths and the run tag can be changed when submitting, for example
-`IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. A finished run is
+`IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. `MODELS="..."` runs
+only the given models; check the indices with `MODELS="..." bash cluster/benchmark.slr --list`. A finished run is
 skipped, so failed tasks can be resubmitted with the same command.
 
 Watch the jobs with `squeue -u $USER`; cancel them with `scancel <jobid>`.
 
 ## 4. Collect
 
-Every task also rewrites `benchmark/benchmark.csv`, and parallel tasks can overwrite each other's
-version. So when all tasks are done, build the table once more:
+Every task also rewrites the table of its tag, `benchmark/benchmark_<tag>.csv` (and `.tex`); it
+holds only the runs of that tag, so runs of other tags in the same folder are never mixed in.
+Parallel tasks can overwrite each other's version, so when all tasks are done, build it once more
+with the tag of the submission:
 
 ```bash
 singularity exec --containall --bind $(readlink -f ~/SCRATCH/asd4hri):/app/data \
     $(readlink -f ~/SCRATCH/images/asd4hri.sif) \
-    bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --collect_only"
+    bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --collect_only --tag cluster"
 ```
 
-To merge the cluster runs with the workstation runs, copy `benchmark/<run>/stats` from one side to
-the other and run the same `--collect_only` command there. The tag (`cluster`, `gpu`, `pi`) in the
-run name keeps the runs apart. The accuracy of a run does not depend on the machine, but FPS and
+The tag (`cluster`, `gpu`, `pi`, `v0.0.0`) is the first part of every run folder, so a new
+submission with another tag never overwrites earlier runs. Without `--tag`, `--collect_only` puts
+all runs of all tags into `benchmark/benchmark.csv`. The accuracy of a run does not depend on the machine, but FPS and
 the time per stage do.
