@@ -21,6 +21,10 @@ concurrency:
 jobs:
   docs:
     runs-on: ubuntu-latest
+    # runs that deploy share the gh-pages lock with results_chart.yml, so two pushes never race
+    concurrency:
+      group: ${{ (github.ref == 'refs/heads/main' || github.ref_type == 'tag') && 'gh-pages' || format('docs-build-{0}', github.ref) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
