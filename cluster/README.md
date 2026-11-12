@@ -61,7 +61,21 @@ sbatch --array=0 cluster/benchmark.slr       # one test task first
 sbatch --array=1-71%8 cluster/benchmark.slr  # then the rest, at most 8 at once
 ```
 
-Partition, account and time limit are set in the `#SBATCH` lines of `cluster/benchmark.slr`.
+Partition, account and time limit are set in the `#SBATCH` lines of `cluster/benchmark.slr`;
+options given to `sbatch` override them. Most of a run's time goes to the CPU stages (face
+detection, landmarks, cropping), and every task runs its videos one after another so that the
+times per stage stay comparable. A run therefore gets faster on a node with faster CPUs, and the
+whole benchmark by running more tasks at once, for example spread over several partitions:
+
+```bash
+sbatch -p gpu_titan  --array=1-35%10  cluster/benchmark.slr
+sbatch -p gpu_volta  --array=36-53%4  cluster/benchmark.slr
+sbatch -p gpu_ampere --array=54-71%4  cluster/benchmark.slr
+```
+
+Give every partition its own indices: two tasks of the same run would write into the same folder.
+The log of every task starts with the CPU model of its node. FPS and the time per stage are only
+comparable between runs on the same partition.
 Paths and the run tag can be changed when submitting, for example
 `IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. A finished run is
 skipped, so failed tasks can be resubmitted with the same command.
