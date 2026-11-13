@@ -1,0 +1,68 @@
+name: Results chart
+
+# Builds the interactive results page (#74) from the benchmark results of all v* releases:
+# every release carries benchmark.csv (required) and benchmark_pi.csv (optional, Pi timing) as
+# assets. The page is attached to the release as results.html and published on the docs site
+# under /results/. No result data is committed to main.
+#
+# A release published before its benchmark.csv is attached is skipped; run this workflow by
+# hand (workflow_dispatch) after uploading the CSV.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# shared with the docs deploy (docs.yml), so mike and this job never push gh-pages at once
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  chart:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # make_results_chart and release_results need only the standard library
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Collect the release results and build the page
+        id: collect
+        run: python -m src.experiments.release_results --repo "$GITHUB_REPOSITORY" -o results.html --workdir "$RUNNER_TEMP/release-results"
+
+      - name: Attach the page to the release
+        if: ${{ steps.collect.outputs.built == 'true' }}
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          LATEST_TAG: ${{ steps.collect.outputs.latest }}
+        run: |
+          tag="${RELEASE_TAG:-$LATEST_TAG}"
+          gh release upload "$tag" results.html --clobber --repo "$GITHUB_REPOSITORY"
+
+      # only results/index.html changes; mike's version folders and versions.json stay as they are
+      - name: Publish the page on the docs site
+        if: ${{ steps.collect.outputs.built == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1
+          pages="$RUNNER_TEMP/pages"
+          git worktree add -B gh-pages "$pages" origin/gh-pages
+          mkdir -p "$pages/results"
+          cp results.html "$pages/results/index.html"
+          cd "$pages"
+          git add results/index.html
+          if git diff --cached --quiet; then
+            echo "results page unchanged"
+          else
+            git commit -m "Update the results page (${GITHUB_SHA::7})"
+            git push origin gh-pages
+          fi

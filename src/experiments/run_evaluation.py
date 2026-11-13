@@ -76,6 +76,35 @@ def relative_to_data_dir(data_dir, path):
         raise ValueError(f'{path} is not inside --data_dir {data_dir}') from None
 
 
+def code_version():
+    """Version and commit of the code that runs, for the results of a run.
+
+    In a checkout the commit comes from git. In the Docker image there is no ``.git``; the image
+    build stores the release tag (or branch) and the commit in ``ASD4HRI_VERSION`` and
+    ``ASD4HRI_COMMIT`` (see ``docker/Dockerfile``), which then take over (#107).
+
+    Returns:
+        tuple: ``(version, commit)``. ``version`` is ``ASD4HRI_VERSION`` if set, else the package
+        version with a ``+dev`` suffix; ``commit`` is the short commit hash or None.
+    """
+    import subprocess
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as package_version
+    try:
+        commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True,
+                                text=True, cwd=Path(__file__).parent).stdout.strip() or None
+    except OSError:
+        commit = None
+    commit = commit or (os.environ.get('ASD4HRI_COMMIT') or '')[:7] or None
+    version = os.environ.get('ASD4HRI_VERSION')
+    if not version:
+        try:
+            version = package_version('asd4hri') + '+dev'
+        except PackageNotFoundError:
+            version = None
+    return version, commit
+
+
 def run_info(args):
     """Describe the run for ``summary.json``: config, machine and code version.
 
@@ -86,12 +115,7 @@ def run_info(args):
         dict: The description.
     """
     import platform
-    import subprocess
-    try:
-        commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True,
-                                text=True, cwd=Path(__file__).parent).stdout.strip() or None
-    except OSError:
-        commit = None
+    version, commit = code_version()
     return {'dataset': args.dataset, 'split': args.split, 'architecture': args.architecture,
             'boxes': args.boxes, 'stride': int(args.stride),
             'av_window': args.av_window, 'audio_fallback': args.audio_fallback,
@@ -99,7 +123,7 @@ def run_info(args):
             'causal_mode': args.causal_mode, 'window': args.window,
             'shape_passes': getattr(args, 'shape_passes', 1),
             'shape_start_box': getattr(args, 'shape_start_box', 'none'), 'host': platform.node(),
-            'machine': platform.machine(), 'git_commit': commit,
+            'machine': platform.machine(), 'version': version, 'git_commit': commit,
             'started_at': datetime.now().isoformat(timespec='seconds')}
 
 

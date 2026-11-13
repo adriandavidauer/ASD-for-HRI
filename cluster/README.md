@@ -61,25 +61,42 @@ sbatch --array=0 cluster/benchmark.slr       # one test task first
 sbatch --array=1-71%8 cluster/benchmark.slr  # then the rest, at most 8 at once
 ```
 
-Partition, account and time limit are set in the `#SBATCH` lines of `cluster/benchmark.slr`.
+Partition, account and time limit are set in the `#SBATCH` lines of `cluster/benchmark.slr`;
+options given to `sbatch` override them. Most of a run's time goes to the CPU stages (face
+detection, landmarks, cropping), and every task runs its videos one after another so that the
+times per stage stay comparable. A run therefore gets faster on a node with faster CPUs, and the
+whole benchmark by running more tasks at once, for example spread over several partitions:
+
+```bash
+sbatch -p gpu_titan  --array=1-35%10  cluster/benchmark.slr
+sbatch -p gpu_volta  --array=36-53%4  cluster/benchmark.slr
+sbatch -p gpu_ampere --array=54-71%4  cluster/benchmark.slr
+```
+
+Give every partition its own indices: two tasks of the same run would write into the same folder.
+The log of every task starts with the CPU model of its node. FPS and the time per stage are only
+comparable between runs on the same partition.
 Paths and the run tag can be changed when submitting, for example
-`IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. A finished run is
+`IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. `MODELS="..."` runs
+only the given models; check the indices with `MODELS="..." bash cluster/benchmark.slr --list`. A finished run is
 skipped, so failed tasks can be resubmitted with the same command.
 
 Watch the jobs with `squeue -u $USER`; cancel them with `scancel <jobid>`.
 
 ## 4. Collect
 
-Every task also rewrites `benchmark/benchmark.csv`, and parallel tasks can overwrite each other's
-version. So when all tasks are done, build the table once more:
+Every task also rewrites the table of its tag, `benchmark/benchmark_<tag>.csv` (and `.tex`); it
+holds only the runs of that tag, so runs of other tags in the same folder are never mixed in.
+Parallel tasks can overwrite each other's version, so when all tasks are done, build it once more
+with the tag of the submission:
 
 ```bash
 singularity exec --containall --bind $(readlink -f ~/SCRATCH/asd4hri):/app/data \
     $(readlink -f ~/SCRATCH/images/asd4hri.sif) \
-    bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --collect_only"
+    bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --collect_only --tag cluster"
 ```
 
-To merge the cluster runs with the workstation runs, copy `benchmark/<run>/stats` from one side to
-the other and run the same `--collect_only` command there. The tag (`cluster`, `gpu`, `pi`) in the
-run name keeps the runs apart. The accuracy of a run does not depend on the machine, but FPS and
+The tag (`cluster`, `gpu`, `pi`, `v0.0.0`) is the first part of every run folder, so a new
+submission with another tag never overwrites earlier runs. Without `--tag`, `--collect_only` puts
+all runs of all tags into `benchmark/benchmark.csv`. The accuracy of a run does not depend on the machine, but FPS and
 the time per stage do.
