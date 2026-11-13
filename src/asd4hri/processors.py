@@ -45,6 +45,35 @@ from .retinaface_onnx import PriorBox, decode, py_cpu_nms
 __author__      = 'Adrian Auer'
 
 URL = 'https://github.com/adriandavidauer/ASD-for-HRI/releases/download/models/'
+# SHA-256 of every file of the ``models`` release: a download is checked against it, and a cached
+# file with another hash is downloaded again. A changed model gets a new file name, never a new
+# upload under the old name, so a version of this code always runs with the same weights.
+MODEL_SHA256 = {
+    'paz_LipShape_0.8958.keras': '2e25c37c91e47aefc7b203cedbe55a77655c6f382878df3c11f64dbd1c1e2ffd',
+    'faceFeatureModel.keras': '11c29f1c1ca58e40e2e8db48389e05c1ad63bb73115af7e23656398eb39838e7',
+    'LipShapeCausal.keras': 'd6d09013f60da99f4c2eaec94b17c0f20ad75fd6d284b7cfe60f77d6f006fa78',
+    'FaceShapeCausal.keras': 'a4054fe2a9b0feb6f19ce0c739b408af0a4089e9437669aab5cf5fba0441aa22',
+    'LipShapeCausal_ava.keras': 'e97730d486fdd780b530d08f99736d519254e22486c9e43052a706bd313a8fff',
+    'FaceShapeCausal_ava.keras': '20d0476772a0f73c23ebadf154c2ef1581242dfe73c670c058595a0f28902fa7',
+    'face_detection_yunet_2026may.onnx':
+        'ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0',
+    'retinaface_resnet50.onnx': 'ba5fbd7ac13cc1e1a80fa340d353e72e4d31404a5276b54b96e6f999cc3b100c',
+}
+
+
+def download_model(filename):
+    """Download one file of the ``models`` release to ``src/models`` unless it is there already.
+
+    Args:
+        filename: Name of the release asset, a key of ``MODEL_SHA256``.
+
+    Returns:
+        str: Local path of the file.
+    """
+    return get_file(filename, URL + filename, file_hash=MODEL_SHA256[filename],
+                    hash_algorithm='sha256',
+                    cache_subdir=str(Path(__file__).absolute().parent.parent / 'models'))
+
 FaceTracking_Options = ['sort', 'face_recognition']
 class DownloadProgressBar(tqdm):
     """``tqdm`` progress bar that can be used as a ``urllib.request.urlretrieve`` report hook."""
@@ -324,6 +353,16 @@ class NormalizeShapeSample(Processor):
                 output_list.append(sample)
         return output_list
 
+# Start boxes of dlib's first pass, as fractions ``(x0, y0, x1, y1)`` of the face crop: where
+# the 2-pass landmarks typically lie in crops of that box source (median over AVA train,
+# ``src/model_training/estimate_landmark_box.py``, #105). Only worth it for loose boxes:
+# AVA val GT 39.7 -> 51.6 mAP, while UniTalk GT and YuNet boxes are better without.
+SHAPE_START_BOXES = {
+    'none': None,
+    'ava_gt': (0.150, 0.285, 0.873, 0.994),
+}
+
+
 class GetShapeFeatures(Processor):
     """Extract facial landmark (shape) features from a batch of cropped RGB faces with dlib.
 
@@ -332,14 +371,30 @@ class GetShapeFeatures(Processor):
             value returns all 68 landmarks.
         shape_predictor_path: Path to a dlib shape predictor. If None, the 68 face landmark
             predictor is downloaded if needed and used.
+        passes: Number of dlib passes. The first pass fits the landmarks in the whole crop; each
+            further pass fits them again in the bounding box of the previous landmarks. dlib
+            expects the tight box of its own face detector, so a second pass helps with loose
+            boxes such as AVA's GT boxes (#92); it doubles the cost.
+        start_box: Box of the first pass, a key of ``SHAPE_START_BOXES``: 'none' for the whole
+            crop, or the typical landmark box of a box source (e.g. 'ava_gt'), which gives the
+            effect of a second pass for free (#105).
     """
-    def __init__(self, architecture='FaceShape', shape_predictor_path=None):
-        """Load the dlib shape predictor."""
+    def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1,
+                 start_box='none'):
+        """Load the dlib shape predictor.
+
+        Raises:
+            ValueError: If ``start_box`` is unknown.
+        """
         super(GetShapeFeatures, self).__init__()
         if shape_predictor_path is None:
             shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
         self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
         self.architecture = architecture
+        self.passes = passes
+        if start_box not in SHAPE_START_BOXES:
+            raise ValueError(f'start_box must be one of {list(SHAPE_START_BOXES)}')
+        self.start_box = SHAPE_START_BOXES[start_box]
 
     def call(self, face_images):
         """Convert a batch of face images to a batch of landmark coordinates.
@@ -359,13 +414,18 @@ class GetShapeFeatures(Processor):
         for image in face_images:
             if len(image.shape) == 2 and image.shape[-1] == 3:
                 raise AssertionError(f"Probably not receiving a batch - could be a batch of images with the shape {image.shape} but that makes no sense.")
-            shape = self.shape_predictor(image, dlib.rectangle(
-                    0, 0, image.shape[1], image.shape[0]))
-            if self.architecture == 'LipShape':
-                # return only lip landmarks (48-67)
-                ret_batch.append(np.array([(p.x, p.y) for p in shape.parts()[48:68]]))
+            h, w = image.shape[:2]
+            if self.start_box is None:
+                rect = dlib.rectangle(0, 0, w, h)
             else:
-                ret_batch.append(np.array([(p.x, p.y) for p in shape.parts()]))
+                x0, y0, x1, y1 = self.start_box
+                rect = dlib.rectangle(round(x0 * w), round(y0 * h), round(x1 * w), round(y1 * h))
+            for _ in range(self.passes):
+                points = np.array([(p.x, p.y) for p in self.shape_predictor(image, rect).parts()])
+                (x0, y0), (x1, y1) = points.min(0), points.max(0)
+                rect = dlib.rectangle(int(x0), int(y0), int(x1), int(y1))
+            # 'LipShape': only the lip landmarks (48-67)
+            ret_batch.append(points[48:68] if self.architecture == 'LipShape' else points)
         return ret_batch
 
 
@@ -632,7 +692,7 @@ class FaceDetectorYN(Processor):
         super(FaceDetectorYN, self).__init__(name=name)
         if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'):
             filename = 'face_detection_yunet_2026may.onnx'
-            get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+            download_model(filename)
         self.detector = cv2.FaceDetectorYN.create(model=model_path,
             config="",
             input_size=input_size,
@@ -700,7 +760,7 @@ class FaceDetectorRetinaFace(Processor):
         super(FaceDetectorRetinaFace, self).__init__(name=name)
         if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'retinaface_resnet50.onnx'):
             filename = 'retinaface_resnet50.onnx'
-            get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+            download_model(filename)
         self.draw = draw
         self.color = color
         self.class_name = class_name

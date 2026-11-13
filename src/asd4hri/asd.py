@@ -53,10 +53,13 @@ __author__      = 'Adrian Auer'
 
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape',
-                        'LipShapeCausal', 'FaceShapeCausal']
+                        'LipShapeCausal', 'FaceShapeCausal',
+                        'LipShapeCausal_ava', 'FaceShapeCausal_ava']
 
-# Causal landmark models (#45): one prediction per frame from that frame and the frames before
-Causal_Architectures = ['LipShapeCausal', 'FaceShapeCausal']
+# Causal landmark models (#45): one prediction per frame from that frame and the frames before.
+# The ``_ava`` ones are fine-tuned on AVA-ActiveSpeaker (#92).
+Causal_Architectures = ['LipShapeCausal', 'FaceShapeCausal',
+                        'LipShapeCausal_ava', 'FaceShapeCausal_ava']
 Causal_Modes = ['streaming', 'window']
 
 FaceDetector_Options = ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YOLOv10-Face']
@@ -88,16 +91,16 @@ def load_vvad_classifier(architecture):
         return (CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture)), (38, 96, 96, 3))
     elif architecture in Causal_Architectures:
         filename = f'{architecture}.keras'
-        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        download_model(filename)
         num_landmarks = 20 if architecture.startswith('Lip') else 68
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / filename)), (None, num_landmarks, 2))
     elif architecture == 'LipShape':
         filename = 'paz_LipShape_0.8958.keras'
-        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        download_model(filename)
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras')), (38, 20, 2))
     elif architecture == 'FaceShape':
         filename = 'faceFeatureModel.keras'
-        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        download_model(filename)
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras')), (38, 68, 2))
     else:
         raise ValueError(f"Unsupported architecture: {architecture}. Supported architectures are: {Architecture_Options}")
@@ -126,10 +129,14 @@ class ClassifyVVAD(Processor):
             is used.
         max_consecutive_empty: Number of consecutive missing face images after which the
             buffer of an entity is cleared.
+        shape_passes: dlib passes per face for the landmark models (``GetShapeFeatures``).
+        shape_start_box: Box of dlib's first pass, a key of ``SHAPE_START_BOXES``
+            (``GetShapeFeatures``, #105).
     """
     def __init__(self, architecture='CNN2Plus1D_Light',
                  stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5,
-                 timer=None, causal_mode='streaming', window_size=38):
+                 timer=None, causal_mode='streaming', window_size=38, shape_passes=1,
+                 shape_start_box='none'):
         """Load the classifier and assemble the preprocessing, buffering and averaging steps.
 
         ``timer`` is an optional ``StageTimer`` that records the time of every step (#76).
@@ -163,7 +170,11 @@ class ClassifyVVAD(Processor):
 
         # works on a batch of face images, not on a batch of samples, so it runs before buffering
         if self.is_shape:
-            self.preprocess = GetShapeFeatures(architecture=architecture.replace('Causal', ''))
+            # 'LipShape' selects the 20 lip points, also for LipShapeCausal and LipShapeCausal_ava
+            shape = 'LipShape' if architecture.startswith('LipShape') else 'FaceShape'
+            self.preprocess = GetShapeFeatures(architecture=shape,
+                                               passes=shape_passes,
+                                               start_box=shape_start_box)
         else:
             # not normalized to [0, 1] because the model is trained on images in [0, 255]
             self.preprocess = PreprocessImages(input_size[1:3], normalize=False)
@@ -316,11 +327,15 @@ class ASD(Processor):
             model on the last ``window_size`` frames. Both predict every frame with zero
             look-ahead (#45).
         window_size: Frames per prediction in the causal 'window' mode.
+        shape_passes: dlib passes per face for the landmark models; 2 fits loose boxes better
+            (``GetShapeFeatures``, #92).
+        shape_start_box: Box of dlib's first pass for the landmark models; 'ava_gt' fits AVA's
+            loose GT boxes (``GetShapeFeatures``, #105).
     """
     def __init__(self, architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5,
                  weighted= True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort',
                  profile=True, causal_mode='streaming', window_size=38, av_window=25,
-                 audio_fallback='noise'):
+                 audio_fallback='noise', shape_passes=1, shape_start_box='none'):
         """Build the face detection, cropping and classification steps.
 
         Raises:
@@ -364,7 +379,8 @@ class ASD(Processor):
             averaging_window_size=averaging_window_size,
             weighted=weighted,
             architecture=architecture, max_consecutive_empty=max_consecutive_empty,
-            timer=self.timer, causal_mode=causal_mode, window_size=window_size
+            timer=self.timer, causal_mode=causal_mode, window_size=window_size,
+            shape_passes=shape_passes, shape_start_box=shape_start_box,
         )
         self.class_names = list(get_class_names('VVAD_LRS3'))
         corrected_class_names = [self.class_names[1], self.class_names[0]] # in PAZ the order is speaking, not-speaking but we need it the other way around.

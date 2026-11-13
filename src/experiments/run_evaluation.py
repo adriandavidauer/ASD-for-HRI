@@ -120,7 +120,9 @@ def run_info(args):
             'boxes': args.boxes, 'stride': int(args.stride),
             'av_window': args.av_window, 'audio_fallback': args.audio_fallback,
             'audio': not args.no_audio,
-            'causal_mode': args.causal_mode, 'window': args.window, 'host': platform.node(),
+            'causal_mode': args.causal_mode, 'window': args.window,
+            'shape_passes': getattr(args, 'shape_passes', 1),
+            'shape_start_box': getattr(args, 'shape_start_box', 'none'), 'host': platform.node(),
             'machine': platform.machine(), 'version': version, 'git_commit': commit,
             'started_at': datetime.now().isoformat(timespec='seconds')}
 
