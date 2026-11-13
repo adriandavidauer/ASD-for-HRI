@@ -677,114 +677,17 @@ def test_GetShapeFeatures_second_pass_refits_in_the_landmark_box(monkeypatch):
     assert np.array_equal(GetShapeFeatures('LipShape', passes=2)([image])[0], second[48:68])
 
 
-def _spy_rects(features):
-    """Make ``features`` record the rectangles it gives dlib.
-
-    Returns:
-        list: The recorded rectangles, filled on every call.
-    """
-    rects, predictor = [], features.shape_predictor
-
-    class Spy:
-        """Records the rectangles given to the dlib shape predictor."""
-
-        def __call__(self, img, rect):
-            """Record ``rect`` and run dlib.
-
-            Returns:
-                dlib.full_object_detection: The landmarks.
-            """
-            rects.append(rect)
-            return predictor(img, rect)
-    features.shape_predictor = Spy()
-    return rects
-
-
-def _face_crop():
-    """A 300x300 RGB crop with a face.
-
-    Returns:
-        np.ndarray: The crop.
-    """
-    image = cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg'))
-    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)[:300, :300]
-
-
-def test_GetShapeFeatures_box_mode_none_ignores_the_frame():
-    """'none' (the default) always starts in the whole crop, also after set_frame (#105)."""
+def test_GetShapeFeatures_start_box_sets_the_box_of_the_first_pass(monkeypatch):
+    """'none' starts in the whole crop, 'ava_gt' in its fractions of the crop (#105)."""
     import dlib
-    crop = _face_crop()
-    features = GetShapeFeatures()
-    assert features.box_mode == 'none'
-    rects = _spy_rects(features)
-    features.set_frame([(100, 50, 400, 350)], 'gt')
-    features([crop])
-    features([crop])
-    assert rects == [dlib.rectangle(0, 0, 300, 300)] * 2
+    image = cv2.cvtColor(cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg')),
+                         cv2.COLOR_BGR2RGB)[:300, :200]
+    for start_box, expected in [('none', dlib.rectangle(0, 0, 200, 300)),
+                                ('ava_gt', dlib.rectangle(30, 85, 175, 298))]:
+        features = GetShapeFeatures(start_box=start_box)
+        rects, predictor = [], features.shape_predictor
+        features.shape_predictor = lambda img, rect: (rects.append(rect), predictor(img, rect))[1]
+        assert features([image])[0].shape == (68, 2)
+        assert rects == [expected]
     with pytest.raises(ValueError):
-        GetShapeFeatures(box_mode='bogus')
-
-
-def test_GetShapeFeatures_fixed_box_mode_starts_in_the_typical_landmark_box():
-    """'fixed' scales the box of the source into the crop; an unknown source uses the crop."""
-    import dlib
-    crop = _face_crop()
-    features = GetShapeFeatures(box_mode='fixed')
-    rects = _spy_rects(features)
-    features.set_frame([(0, 0, 300, 300)], 'gt')
-    features([crop])
-    x0, y0, x1, y1 = LANDMARK_BOX_IN_CROP['gt']
-    assert rects[-1] == dlib.rectangle(round(x0 * 300), round(y0 * 300), round(x1 * 300),
-                                       round(y1 * 300))
-    features.set_frame([(0, 0, 300, 300)], 'no such detector')
-    features([crop])
-    assert rects[-1] == dlib.rectangle(0, 0, 300, 300)
-    features([crop])            # without set_frame: whole crop
-    assert rects[-1] == dlib.rectangle(0, 0, 300, 300)
-
-
-def test_GetShapeFeatures_previous_box_mode_follows_the_track():
-    """'previous' starts in the last landmark box of the same key, moved into the new crop."""
-    import dlib
-    crop = _face_crop()
-    features = GetShapeFeatures(box_mode='previous')
-    rects = _spy_rects(features)
-    features.set_frame([(100, 50, 400, 350)], 'gt', keys=['a'])
-    first = features([crop])[0]
-    assert rects[-1] == dlib.rectangle(0, 0, 300, 300)          # first frame: whole crop
-    (x0, y0), (x1, y1) = first.min(0), first.max(0)
-    # the crop moved by (10, 5): the landmark box of frame 1 lies 10/5 px further up-left
-    features.set_frame([(110, 55, 410, 355)], 'gt', keys=['a'])
-    features([crop])
-    assert rects[-1] == dlib.rectangle(int(x0) - 10, int(y0) - 5, int(x1) - 10, int(y1) - 5)
-    # another key, or a jump of the crop, starts again from the whole crop
-    features.set_frame([(110, 55, 410, 355)], 'gt', keys=['b'])
-    features([crop])
-    assert rects[-1] == dlib.rectangle(0, 0, 300, 300)
-    features.set_frame([(110, 55, 410, 355)], 'gt', keys=['a'])   # 'a' was missing: forgotten
-    features([crop])
-    assert rects[-1] == dlib.rectangle(0, 0, 300, 300)
-    features.set_frame([(400, 55, 700, 355)], 'gt', keys=['a'])   # jump (IoU < 0.5)
-    features([crop])
-    assert rects[-1] == dlib.rectangle(0, 0, 300, 300)
-
-
-def test_GetShapeFeatures_fixed_and_previous_falls_back_to_fixed():
-    """'fixed+previous' uses the fixed box where 'previous' has nothing, else the track."""
-    import dlib
-    crop = _face_crop()
-    features = GetShapeFeatures(box_mode='fixed+previous')
-    rects = _spy_rects(features)
-    features.set_frame([(0, 0, 300, 300)], 'gt')
-    first = features([crop])[0]
-    x0, y0, x1, y1 = LANDMARK_BOX_IN_CROP['gt']
-    assert rects[-1] == dlib.rectangle(round(x0 * 300), round(y0 * 300), round(x1 * 300),
-                                       round(y1 * 300))
-    features.set_frame([(0, 0, 300, 300)], 'gt')
-    features([crop])
-    (x0, y0), (x1, y1) = first.min(0), first.max(0)
-    assert rects[-1] == dlib.rectangle(int(x0), int(y0), int(x1), int(y1))
-    features.reset()
-    features.set_frame([(0, 0, 300, 300)], 'gt')
-    features([crop])
-    assert rects[-1].left() == round(LANDMARK_BOX_IN_CROP['gt'][0] * 300)
+        GetShapeFeatures(start_box='bogus')

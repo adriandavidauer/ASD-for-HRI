@@ -70,11 +70,9 @@ def build_parser():
     p.add_argument('--shape_passes', type=int, default=1,
                    help='dlib passes per face for the landmark models; 2 fits loose boxes '
                         'better (#92)')
-    p.add_argument('--shape_box_mode', default='none',
-                   choices=['none', 'fixed', 'previous', 'fixed+previous'],
-                   help="Start box of dlib's first pass for the landmark models: the whole crop, "
-                        'the typical landmark box of the box source, the previous frame\'s '
-                        'landmarks, or both (#105)')
+    p.add_argument('--shape_start_box', default='none', choices=['none', 'ava_gt'],
+                   help="Box of dlib's first pass for the landmark models: the whole crop, or "
+                        "the typical landmark box of AVA's GT boxes (#105)")
     p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
                    help='Face boxes to classify: the face detector (end-to-end protocol) or the '
                         'ground-truth boxes (literature protocol, detector skipped); see #75')
@@ -272,7 +270,7 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 causal_mode=getattr(args, 'causal_mode', 'streaming'),
                 window=getattr(args, 'window', 38),
                 shape_passes=getattr(args, 'shape_passes', 1),
-                shape_box_mode=getattr(args, 'shape_box_mode', 'none'),
+                shape_start_box=getattr(args, 'shape_start_box', 'none'),
                 time_range=annotated_range(all_gt.get(vid)),
                 frame_crop=_frame_crop(args.dataset, video_path)
             )

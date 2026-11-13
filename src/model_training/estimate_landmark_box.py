@@ -1,8 +1,8 @@
 """Estimate where dlib's landmarks lie in the face crop, per box source (#105).
 
-The result is ``LANDMARK_BOX_IN_CROP`` in ``asd4hri.processors``: the median tight box of the
-2-pass landmarks as fractions ``(x0, y0, x1, y1)`` of the square crop. ``GetShapeFeatures``
-with ``box_mode='fixed'`` starts dlib there instead of in the whole crop.
+The result goes into ``SHAPE_START_BOXES`` in ``asd4hri.processors``: the median tight box of
+the 2-pass landmarks as fractions ``(x0, y0, x1, y1)`` of the square crop.
+``GetShapeFeatures(start_box=...)`` starts dlib there instead of in the whole crop.
 
 * GT boxes: from the ``.npz`` files of ``extract_ava_landmarks --passes 2``.
 * A detector: runs the detector, the pipeline's square/clip/crop and 2-pass dlib on frames
