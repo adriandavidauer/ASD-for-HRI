@@ -53,10 +53,13 @@ __author__      = 'Adrian Auer'
 
 Architecture_Options = ['VVAD-LRS3-LSTM', 'CNN2Plus1D', 'CNN2Plus1D_Filters', 'CNN2Plus1D_Layers',
                         'CNN2Plus1D_Light', 'LipShape', 'FaceShape',
-                        'LipShapeCausal', 'FaceShapeCausal']
+                        'LipShapeCausal', 'FaceShapeCausal',
+                        'LipShapeCausal_ava', 'FaceShapeCausal_ava']
 
-# Causal landmark models (#45): one prediction per frame from that frame and the frames before
-Causal_Architectures = ['LipShapeCausal', 'FaceShapeCausal']
+# Causal landmark models (#45): one prediction per frame from that frame and the frames before.
+# The ``_ava`` ones are fine-tuned on AVA-ActiveSpeaker (#92).
+Causal_Architectures = ['LipShapeCausal', 'FaceShapeCausal',
+                        'LipShapeCausal_ava', 'FaceShapeCausal_ava']
 Causal_Modes = ['streaming', 'window']
 
 FaceDetector_Options = ['YuNet', 'HaarCascade', 'RetinaFace', 'InsightFace', 'YOLOv10-Face']
@@ -88,16 +91,16 @@ def load_vvad_classifier(architecture):
         return (CNN2Plus1D(weights='VVAD_LRS3', architecture=str(architecture)), (38, 96, 96, 3))
     elif architecture in Causal_Architectures:
         filename = f'{architecture}.keras'
-        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        download_model(filename)
         num_landmarks = 20 if architecture.startswith('Lip') else 68
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / filename)), (None, num_landmarks, 2))
     elif architecture == 'LipShape':
         filename = 'paz_LipShape_0.8958.keras'
-        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        download_model(filename)
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'paz_LipShape_0.8958.keras')), (38, 20, 2))
     elif architecture == 'FaceShape':
         filename = 'faceFeatureModel.keras'
-        get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+        download_model(filename)
         return (load_model(str(Path(__file__).absolute().parent.parent / "models" / 'faceFeatureModel.keras')), (38, 68, 2))
     else:
         raise ValueError(f"Unsupported architecture: {architecture}. Supported architectures are: {Architecture_Options}")
@@ -167,7 +170,9 @@ class ClassifyVVAD(Processor):
 
         # works on a batch of face images, not on a batch of samples, so it runs before buffering
         if self.is_shape:
-            self.preprocess = GetShapeFeatures(architecture=architecture.replace('Causal', ''),
+            # 'LipShape' selects the 20 lip points, also for LipShapeCausal and LipShapeCausal_ava
+            shape = 'LipShape' if architecture.startswith('LipShape') else 'FaceShape'
+            self.preprocess = GetShapeFeatures(architecture=shape,
                                                passes=shape_passes,
                                                start_box=shape_start_box)
         else:

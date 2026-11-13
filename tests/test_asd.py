@@ -191,7 +191,8 @@ def test_face_detectors_take_rgb(detector_class):
     assert scores_rgb != scores_bgr
 
 
-@pytest.mark.parametrize('architecture', ['LipShapeCausal', 'FaceShapeCausal'])
+@pytest.mark.parametrize('architecture', ['LipShapeCausal', 'FaceShapeCausal',
+                                          'LipShapeCausal_ava', 'FaceShapeCausal_ava'])
 @pytest.mark.parametrize('causal_mode', ['streaming', 'window'])
 def test_causal_architectures_predict_from_the_first_frame(architecture, causal_mode):
     """Causal models give a score for every face from its very first frame (#45)."""
@@ -216,3 +217,20 @@ def test_causal_streaming_equals_window_while_window_not_full():
     for face in faces:
         s, w = stream([face], ids=['a']), window([face], ids=['a'])
     assert s[0] == pytest.approx(w[0], abs=1e-4)
+
+
+@pytest.mark.parametrize('architecture, shape, points', [
+    ('LipShapeCausal_ava', 'LipShape', 20), ('FaceShapeCausal_ava', 'FaceShape', 68)])
+def test_ava_models_get_the_landmarks_they_were_trained_on(architecture, shape, points):
+    """The fine-tuned models (#92) take the lip or face points like the models they come from."""
+    vvad = ClassifyVVAD(architecture=architecture, averaging_window_size=1)
+    assert vvad.preprocess.architecture == shape
+    assert vvad.classifier.input_shape[-2] == points
+
+
+def test_every_release_model_is_pinned_by_hash():
+    """Every file the code downloads from the models release has a SHA-256 (#107)."""
+    from asd4hri.processors import MODEL_SHA256
+    for architecture in Causal_Architectures:
+        assert f'{architecture}.keras' in MODEL_SHA256
+    assert all(len(h) == 64 for h in MODEL_SHA256.values())

@@ -17,8 +17,9 @@ Usage (from the repo root, in the image)::
 
     python -m src.model_training.extract_ava_landmarks /Data/data/ava_train out/ --workers 8
 
-The default of 2 dlib passes matches the released ``*_ava`` weights; the pipeline must then
-run with ``--shape_passes 2`` as well.
+The default of 2 dlib passes is what the released ``*_ava`` weights were trained on. In the
+pipeline they run with the default of one pass: only on AVA's loose GT boxes does a second pass
+(or ``--shape_start_box ava_gt``) help, see #105.
 """
 
 import argparse

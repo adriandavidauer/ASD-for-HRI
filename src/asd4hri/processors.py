@@ -45,6 +45,35 @@ from .retinaface_onnx import PriorBox, decode, py_cpu_nms
 __author__      = 'Adrian Auer'
 
 URL = 'https://github.com/adriandavidauer/ASD-for-HRI/releases/download/models/'
+# SHA-256 of every file of the ``models`` release: a download is checked against it, and a cached
+# file with another hash is downloaded again. A changed model gets a new file name, never a new
+# upload under the old name, so a version of this code always runs with the same weights.
+MODEL_SHA256 = {
+    'paz_LipShape_0.8958.keras': '2e25c37c91e47aefc7b203cedbe55a77655c6f382878df3c11f64dbd1c1e2ffd',
+    'faceFeatureModel.keras': '11c29f1c1ca58e40e2e8db48389e05c1ad63bb73115af7e23656398eb39838e7',
+    'LipShapeCausal.keras': 'd6d09013f60da99f4c2eaec94b17c0f20ad75fd6d284b7cfe60f77d6f006fa78',
+    'FaceShapeCausal.keras': 'a4054fe2a9b0feb6f19ce0c739b408af0a4089e9437669aab5cf5fba0441aa22',
+    'LipShapeCausal_ava.keras': 'e97730d486fdd780b530d08f99736d519254e22486c9e43052a706bd313a8fff',
+    'FaceShapeCausal_ava.keras': '20d0476772a0f73c23ebadf154c2ef1581242dfe73c670c058595a0f28902fa7',
+    'face_detection_yunet_2026may.onnx':
+        'ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0',
+    'retinaface_resnet50.onnx': 'ba5fbd7ac13cc1e1a80fa340d353e72e4d31404a5276b54b96e6f999cc3b100c',
+}
+
+
+def download_model(filename):
+    """Download one file of the ``models`` release to ``src/models`` unless it is there already.
+
+    Args:
+        filename: Name of the release asset, a key of ``MODEL_SHA256``.
+
+    Returns:
+        str: Local path of the file.
+    """
+    return get_file(filename, URL + filename, file_hash=MODEL_SHA256[filename],
+                    hash_algorithm='sha256',
+                    cache_subdir=str(Path(__file__).absolute().parent.parent / 'models'))
+
 FaceTracking_Options = ['sort', 'face_recognition']
 class DownloadProgressBar(tqdm):
     """``tqdm`` progress bar that can be used as a ``urllib.request.urlretrieve`` report hook."""
@@ -663,7 +692,7 @@ class FaceDetectorYN(Processor):
         super(FaceDetectorYN, self).__init__(name=name)
         if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'face_detection_yunet_2026may.onnx'):
             filename = 'face_detection_yunet_2026may.onnx'
-            get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+            download_model(filename)
         self.detector = cv2.FaceDetectorYN.create(model=model_path,
             config="",
             input_size=input_size,
@@ -731,7 +760,7 @@ class FaceDetectorRetinaFace(Processor):
         super(FaceDetectorRetinaFace, self).__init__(name=name)
         if model_path == str(Path(__file__).absolute().parent.parent / "models" / 'retinaface_resnet50.onnx'):
             filename = 'retinaface_resnet50.onnx'
-            get_file(filename, URL + filename, cache_subdir=str(Path(__file__).absolute().parent.parent / "models" ))
+            download_model(filename)
         self.draw = draw
         self.color = color
         self.class_name = class_name
