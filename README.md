@@ -3,7 +3,7 @@
 <!-- badges:start -->
 [![Ruff linting issues](https://img.shields.io/badge/Ruff%20linting%20issues-41%20issues-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/43417580105)
 [![Docstring coverage](https://img.shields.io/badge/Docstring%20coverage-94.2%25-brightgreen)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/43417580105)
-[![Test coverage](https://img.shields.io/badge/Test%20coverage-73%25-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/43399798619)
+[![Test coverage](https://img.shields.io/badge/Test%20coverage-73%25-yellow)](https://github.com/adriandavidauer/ASD-for-HRI/actions/runs/43417579719)
 <!-- badges:end -->
 
 A scalable Active Speaker Detection for Human-Robot Interaction
