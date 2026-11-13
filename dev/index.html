@@ -645,10 +645,10 @@ Keras 3 and TensorFlow, and is evaluated on the UniTalk and AVA ActiveSpeaker da
 <h2 id="how-it-works">How it works</h2>
 <p>Everything is a chain of PAZ processors:</p>
 <ol>
-<li><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38, av_window=25, audio_fallback='noise')" href="api/asd/#asd4hri.asd.ASD"><code>ASD</code></a> is the per-frame entry point. It detects the faces (YuNet by default,
+<li><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38, av_window=25, audio_fallback='noise', shape_passes=1, shape_start_box='none')" href="api/asd/#asd4hri.asd.ASD"><code>ASD</code></a> is the per-frame entry point. It detects the faces (YuNet by default,
    or RetinaFace or a Haar cascade), squares, clips and crops their boxes, and writes a
    <code>class_name</code> and a <code>score</code> into each box.</li>
-<li><a class="autorefs autorefs-internal" title="ClassifyVVAD(architecture='CNN2Plus1D_Light', stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5, timer=None, causal_mode='streaming', window_size=38)" href="api/asd/#asd4hri.asd.ClassifyVVAD"><code>ClassifyVVAD</code></a> is the temporal part. It preprocesses every face
+<li><a class="autorefs autorefs-internal" title="ClassifyVVAD(architecture='CNN2Plus1D_Light', stride=38, averaging_window_size=2, weighted=False, max_consecutive_empty=5, timer=None, causal_mode='streaming', window_size=38, shape_passes=1, shape_start_box='none')" href="api/asd/#asd4hri.asd.ClassifyVVAD"><code>ClassifyVVAD</code></a> is the temporal part. It preprocesses every face
    (resizing for the image models, dlib landmarks for <code>LipShape</code> and <code>FaceShape</code>), buffers the
    last 38 frames of every face with <a class="autorefs autorefs-internal" title="BufferFeatures(input_size, stride=25, max_consecutive_empty=5, return_incomplete_samples=False)" href="api/processors/#asd4hri.processors.BufferFeatures"><code>BufferFeatures</code></a>, runs
    the model every <code>stride</code> frames and averages the last predictions.</li>

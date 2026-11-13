@@ -856,7 +856,7 @@
 
 
 <h2 id="asd4hri.asd.ClassifyVVAD" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">ClassifyVVAD</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">ClassifyVVAD</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">timer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">shape_passes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape_start_box</span><span class="o">=</span><span class="s1">'none'</span><span class="p">)</span></code>
 
 </h2>
 
@@ -969,6 +969,37 @@ buffer of an entity is cleared.</p>
                   <code>5</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>shape_passes</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>dlib passes per face for the landmark models (<code>GetShapeFeatures</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>shape_start_box</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Box of dlib's first pass, a key of <code>SHAPE_START_BOXES</code>
+(<code>GetShapeFeatures</code>, #105).</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;none&#39;</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -985,13 +1016,7 @@ Asserts that <code>architecture</code> is in <code>Architecture_Options</code>.<
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">130</span>
-<span class="normal">131</span>
-<span class="normal">132</span>
-<span class="normal">133</span>
-<span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">136</span>
 <span class="normal">137</span>
 <span class="normal">138</span>
 <span class="normal">139</span>
@@ -1037,9 +1062,21 @@ Asserts that <code>architecture</code> is in <code>Architecture_Options</code>.<
 <span class="normal">179</span>
 <span class="normal">180</span>
 <span class="normal">181</span>
-<span class="normal">182</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span>
+<span class="normal">182</span>
+<span class="normal">183</span>
+<span class="normal">184</span>
+<span class="normal">185</span>
+<span class="normal">186</span>
+<span class="normal">187</span>
+<span class="normal">188</span>
+<span class="normal">189</span>
+<span class="normal">190</span>
+<span class="normal">191</span>
+<span class="normal">192</span>
+<span class="normal">193</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span>
              <span class="n">stride</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
-             <span class="n">timer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">):</span>
+             <span class="n">timer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">shape_passes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+             <span class="n">shape_start_box</span><span class="o">=</span><span class="s1">'none'</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Load the classifier and assemble the preprocessing, buffering and averaging steps.</span>
 
 <span class="sd">    ``timer`` is an optional ``StageTimer`` that records the time of every step (#76).</span>
@@ -1073,7 +1110,11 @@ Asserts that <code>architecture</code> is in <code>Architecture_Options</code>.<
 
     <span class="c1"># works on a batch of face images, not on a batch of samples, so it runs before buffering</span>
     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_shape</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">preprocess</span> <span class="o">=</span> <span class="n">GetShapeFeatures</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="n">architecture</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">'Causal'</span><span class="p">,</span> <span class="s1">''</span><span class="p">))</span>
+        <span class="c1"># 'LipShape' selects the 20 lip points, also for LipShapeCausal and LipShapeCausal_ava</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="s1">'LipShape'</span> <span class="k">if</span> <span class="n">architecture</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">'LipShape'</span><span class="p">)</span> <span class="k">else</span> <span class="s1">'FaceShape'</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">preprocess</span> <span class="o">=</span> <span class="n">GetShapeFeatures</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+                                           <span class="n">passes</span><span class="o">=</span><span class="n">shape_passes</span><span class="p">,</span>
+                                           <span class="n">start_box</span><span class="o">=</span><span class="n">shape_start_box</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="c1"># not normalized to [0, 1] because the model is trained on images in [0, 255]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">preprocess</span> <span class="o">=</span> <span class="n">PreprocessImages</span><span class="p">(</span><span class="n">input_size</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -1191,18 +1232,7 @@ available yet.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">184</span>
-<span class="normal">185</span>
-<span class="normal">186</span>
-<span class="normal">187</span>
-<span class="normal">188</span>
-<span class="normal">189</span>
-<span class="normal">190</span>
-<span class="normal">191</span>
-<span class="normal">192</span>
-<span class="normal">193</span>
-<span class="normal">194</span>
-<span class="normal">195</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">195</span>
 <span class="normal">196</span>
 <span class="normal">197</span>
 <span class="normal">198</span>
@@ -1222,7 +1252,18 @@ available yet.</p>
 <span class="normal">212</span>
 <span class="normal">213</span>
 <span class="normal">214</span>
-<span class="normal">215</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">215</span>
+<span class="normal">216</span>
+<span class="normal">217</span>
+<span class="normal">218</span>
+<span class="normal">219</span>
+<span class="normal">220</span>
+<span class="normal">221</span>
+<span class="normal">222</span>
+<span class="normal">223</span>
+<span class="normal">224</span>
+<span class="normal">225</span>
+<span class="normal">226</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">images</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Classify a batch of face images, one per entity.</span>
 
 <span class="sd">    Args:</span>
@@ -1276,13 +1317,13 @@ available yet.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">261</span>
-<span class="normal">262</span>
-<span class="normal">263</span>
-<span class="normal">264</span>
-<span class="normal">265</span>
-<span class="normal">266</span>
-<span class="normal">267</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">272</span>
+<span class="normal">273</span>
+<span class="normal">274</span>
+<span class="normal">275</span>
+<span class="normal">276</span>
+<span class="normal">277</span>
+<span class="normal">278</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Clear the temporal state: the feature buffers and the prediction averaging window."""</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">buffer_features</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">buffer_predictions</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
@@ -1308,7 +1349,7 @@ available yet.</p>
 
 
 <h2 id="asd4hri.asd.ASD" class="doc doc-heading">
-              <code class="highlight language-python"><span class="n">ASD</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">annotate_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">detector</span><span class="o">=</span><span class="s1">'YuNet'</span><span class="p">,</span> <span class="n">input_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">face_tracking_approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">av_window</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">audio_fallback</span><span class="o">=</span><span class="s1">'noise'</span><span class="p">)</span></code>
+              <code class="highlight language-python"><span class="n">ASD</span><span class="p">(</span><span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">weighted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">annotate_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">detector</span><span class="o">=</span><span class="s1">'YuNet'</span><span class="p">,</span> <span class="n">input_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">face_tracking_approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">av_window</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">audio_fallback</span><span class="o">=</span><span class="s1">'noise'</span><span class="p">,</span> <span class="n">shape_passes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape_start_box</span><span class="o">=</span><span class="s1">'none'</span><span class="p">)</span></code>
 
 </h2>
 
@@ -1586,6 +1627,38 @@ look-ahead (#45).</p>
                   <code>38</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>shape_passes</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>dlib passes per face for the landmark models; 2 fits loose boxes better
+(<code>GetShapeFeatures</code>, #92).</p>
+              </div>
+            </td>
+            <td>
+                  <code>1</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>shape_start_box</code>
+            </td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Box of dlib's first pass for the landmark models; 'ava_gt' fits AVA's
+loose GT boxes (<code>GetShapeFeatures</code>, #105).</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;none&#39;</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1633,22 +1706,7 @@ look-ahead (#45).</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">320</span>
-<span class="normal">321</span>
-<span class="normal">322</span>
-<span class="normal">323</span>
-<span class="normal">324</span>
-<span class="normal">325</span>
-<span class="normal">326</span>
-<span class="normal">327</span>
-<span class="normal">328</span>
-<span class="normal">329</span>
-<span class="normal">330</span>
-<span class="normal">331</span>
-<span class="normal">332</span>
-<span class="normal">333</span>
-<span class="normal">334</span>
-<span class="normal">335</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">335</span>
 <span class="normal">336</span>
 <span class="normal">337</span>
 <span class="normal">338</span>
@@ -1699,10 +1757,26 @@ look-ahead (#45).</p>
 <span class="normal">383</span>
 <span class="normal">384</span>
 <span class="normal">385</span>
-<span class="normal">386</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+<span class="normal">386</span>
+<span class="normal">387</span>
+<span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span>
+<span class="normal">392</span>
+<span class="normal">393</span>
+<span class="normal">394</span>
+<span class="normal">395</span>
+<span class="normal">396</span>
+<span class="normal">397</span>
+<span class="normal">398</span>
+<span class="normal">399</span>
+<span class="normal">400</span>
+<span class="normal">401</span>
+<span class="normal">402</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">decision_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
              <span class="n">weighted</span><span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">annotate_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">detector</span><span class="o">=</span><span class="s1">'YuNet'</span><span class="p">,</span> <span class="n">input_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">face_tracking_approach</span><span class="o">=</span><span class="s1">'sort'</span><span class="p">,</span>
              <span class="n">profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="s1">'streaming'</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">av_window</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
-             <span class="n">audio_fallback</span><span class="o">=</span><span class="s1">'noise'</span><span class="p">):</span>
+             <span class="n">audio_fallback</span><span class="o">=</span><span class="s1">'noise'</span><span class="p">,</span> <span class="n">shape_passes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">shape_start_box</span><span class="o">=</span><span class="s1">'none'</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Build the face detection, cropping and classification steps.</span>
 
 <span class="sd">    Raises:</span>
@@ -1746,7 +1820,8 @@ look-ahead (#45).</p>
         <span class="n">averaging_window_size</span><span class="o">=</span><span class="n">averaging_window_size</span><span class="p">,</span>
         <span class="n">weighted</span><span class="o">=</span><span class="n">weighted</span><span class="p">,</span>
         <span class="n">architecture</span><span class="o">=</span><span class="n">architecture</span><span class="p">,</span> <span class="n">max_consecutive_empty</span><span class="o">=</span><span class="n">max_consecutive_empty</span><span class="p">,</span>
-        <span class="n">timer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="n">causal_mode</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="n">window_size</span>
+        <span class="n">timer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">timer</span><span class="p">,</span> <span class="n">causal_mode</span><span class="o">=</span><span class="n">causal_mode</span><span class="p">,</span> <span class="n">window_size</span><span class="o">=</span><span class="n">window_size</span><span class="p">,</span>
+        <span class="n">shape_passes</span><span class="o">=</span><span class="n">shape_passes</span><span class="p">,</span> <span class="n">shape_start_box</span><span class="o">=</span><span class="n">shape_start_box</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">get_class_names</span><span class="p">(</span><span class="s1">'VVAD_LRS3'</span><span class="p">))</span>
     <span class="n">corrected_class_names</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="c1"># in PAZ the order is speaking, not-speaking but we need it the other way around.</span>
@@ -1799,13 +1874,13 @@ look-ahead (#45).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">388</span>
-<span class="normal">389</span>
-<span class="normal">390</span>
-<span class="normal">391</span>
-<span class="normal">392</span>
-<span class="normal">393</span>
-<span class="normal">394</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio</span><span class="p">,</span> <span class="n">fps</span><span class="p">):</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">404</span>
+<span class="normal">405</span>
+<span class="normal">406</span>
+<span class="normal">407</span>
+<span class="normal">408</span>
+<span class="normal">409</span>
+<span class="normal">410</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">set_audio</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">audio</span><span class="p">,</span> <span class="n">fps</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Give the audio-visual models the audio track (int16, 16 kHz mono) and frame rate.</span>
 
 <span class="sd">    Call once per video before the first frame. Ignored by the visual-only models.</span>
@@ -1937,23 +2012,7 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">396</span>
-<span class="normal">397</span>
-<span class="normal">398</span>
-<span class="normal">399</span>
-<span class="normal">400</span>
-<span class="normal">401</span>
-<span class="normal">402</span>
-<span class="normal">403</span>
-<span class="normal">404</span>
-<span class="normal">405</span>
-<span class="normal">406</span>
-<span class="normal">407</span>
-<span class="normal">408</span>
-<span class="normal">409</span>
-<span class="normal">410</span>
-<span class="normal">411</span>
-<span class="normal">412</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">412</span>
 <span class="normal">413</span>
 <span class="normal">414</span>
 <span class="normal">415</span>
@@ -1990,7 +2049,23 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 <span class="normal">446</span>
 <span class="normal">447</span>
 <span class="normal">448</span>
-<span class="normal">449</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">449</span>
+<span class="normal">450</span>
+<span class="normal">451</span>
+<span class="normal">452</span>
+<span class="normal">453</span>
+<span class="normal">454</span>
+<span class="normal">455</span>
+<span class="normal">456</span>
+<span class="normal">457</span>
+<span class="normal">458</span>
+<span class="normal">459</span>
+<span class="normal">460</span>
+<span class="normal">461</span>
+<span class="normal">462</span>
+<span class="normal">463</span>
+<span class="normal">464</span>
+<span class="normal">465</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Detect faces in one frame and classify each of them as speaking or not speaking.</span>
 
 <span class="sd">    Args:</span>
@@ -2070,7 +2145,7 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38, av_window=25, audio_fallback='noise') (asd4hri.asd.ASD)" href="#asd4hri.asd.ASD">ASD</a></code></p>
+              Bases: <code><a class="autorefs autorefs-internal" title="ASD(architecture='CNN2Plus1D_Light', stride=2, averaging_window_size=3, decision_threshold=0.5, weighted=True, max_consecutive_empty=2, annotate_output=False, detector='YuNet', input_size=None, face_tracking_approach='sort', profile=True, causal_mode='streaming', window_size=38, av_window=25, audio_fallback='noise', shape_passes=1, shape_start_box='none') (asd4hri.asd.ASD)" href="#asd4hri.asd.ASD">ASD</a></code></p>
 
 
 
@@ -2110,18 +2185,18 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">453</span>
-<span class="normal">454</span>
-<span class="normal">455</span>
-<span class="normal">456</span>
-<span class="normal">457</span>
-<span class="normal">458</span>
-<span class="normal">459</span>
-<span class="normal">460</span>
-<span class="normal">461</span>
-<span class="normal">462</span>
-<span class="normal">463</span>
-<span class="normal">464</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">469</span>
+<span class="normal">470</span>
+<span class="normal">471</span>
+<span class="normal">472</span>
+<span class="normal">473</span>
+<span class="normal">474</span>
+<span class="normal">475</span>
+<span class="normal">476</span>
+<span class="normal">477</span>
+<span class="normal">478</span>
+<span class="normal">479</span>
+<span class="normal">480</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
              <span class="n">average_type</span><span class="o">=</span><span class="s1">'weighted'</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">colors</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">min_frames</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">patience</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Fail on construction because the class is deprecated.</span>
 
@@ -2254,10 +2329,7 @@ shape of one sample expected by the model, e.g. <code>(38, 96, 96, 3)</code> for
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 67</span>
-<span class="normal"> 68</span>
-<span class="normal"> 69</span>
-<span class="normal"> 70</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 70</span>
 <span class="normal"> 71</span>
 <span class="normal"> 72</span>
 <span class="normal"> 73</span>
@@ -2290,7 +2362,10 @@ shape of one sample expected by the model, e.g. <code>(38, 96, 96, 3)</code> for
 <span class="normal">100</span>
 <span class="normal">101</span>
 <span class="normal">102</span>
-<span class="normal">103</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_vvad_classifier</span><span class="p">(</span><span class="n">architecture</span><span class="p">):</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span>
+<span class="normal">106</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">load_vvad_classifier</span><span class="p">(</span><span class="n">architecture</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Load the Keras classifier model for the given architecture.</span>
 
 <span class="sd">    The ``LipShape`` and ``FaceShape`` weights are downloaded to ``src/models`` on first use.</span>
@@ -2314,16 +2389,16 @@ shape of one sample expected by the model, e.g. <code>(38, 96, 96, 3)</code> for
         <span class="k">return</span> <span class="p">(</span><span class="n">CNN2Plus1D</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="s1">'VVAD_LRS3'</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">architecture</span><span class="p">)),</span> <span class="p">(</span><span class="mi">38</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
     <span class="k">elif</span> <span class="n">architecture</span> <span class="ow">in</span> <span class="n">Causal_Architectures</span><span class="p">:</span>
         <span class="n">filename</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="n">architecture</span><span class="si">}</span><span class="s1">.keras'</span>
-        <span class="n">get_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">URL</span> <span class="o">+</span> <span class="n">filename</span><span class="p">,</span> <span class="n">cache_subdir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="p">))</span>
+        <span class="n">download_model</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
         <span class="n">num_landmarks</span> <span class="o">=</span> <span class="mi">20</span> <span class="k">if</span> <span class="n">architecture</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">'Lip'</span><span class="p">)</span> <span class="k">else</span> <span class="mi">68</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">load_model</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="o">/</span> <span class="n">filename</span><span class="p">)),</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">num_landmarks</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
     <span class="k">elif</span> <span class="n">architecture</span> <span class="o">==</span> <span class="s1">'LipShape'</span><span class="p">:</span>
         <span class="n">filename</span> <span class="o">=</span> <span class="s1">'paz_LipShape_0.8958.keras'</span>
-        <span class="n">get_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">URL</span> <span class="o">+</span> <span class="n">filename</span><span class="p">,</span> <span class="n">cache_subdir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="p">))</span>
+        <span class="n">download_model</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">load_model</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="o">/</span> <span class="s1">'paz_LipShape_0.8958.keras'</span><span class="p">)),</span> <span class="p">(</span><span class="mi">38</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
     <span class="k">elif</span> <span class="n">architecture</span> <span class="o">==</span> <span class="s1">'FaceShape'</span><span class="p">:</span>
         <span class="n">filename</span> <span class="o">=</span> <span class="s1">'faceFeatureModel.keras'</span>
-        <span class="n">get_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">URL</span> <span class="o">+</span> <span class="n">filename</span><span class="p">,</span> <span class="n">cache_subdir</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="p">))</span>
+        <span class="n">download_model</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">load_model</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"models"</span> <span class="o">/</span> <span class="s1">'faceFeatureModel.keras'</span><span class="p">)),</span> <span class="p">(</span><span class="mi">38</span><span class="p">,</span> <span class="mi">68</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unsupported architecture: </span><span class="si">{</span><span class="n">architecture</span><span class="si">}</span><span class="s2">. Supported architectures are: </span><span class="si">{</span><span class="n">Architecture_Options</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
