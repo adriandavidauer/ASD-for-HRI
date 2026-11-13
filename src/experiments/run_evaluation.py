@@ -97,7 +97,8 @@ def run_info(args):
             'av_window': args.av_window, 'audio_fallback': args.audio_fallback,
             'audio': not args.no_audio,
             'causal_mode': args.causal_mode, 'window': args.window,
-            'shape_passes': getattr(args, 'shape_passes', 1), 'host': platform.node(),
+            'shape_passes': getattr(args, 'shape_passes', 1),
+            'shape_start_box': getattr(args, 'shape_start_box', 'none'), 'host': platform.node(),
             'machine': platform.machine(), 'git_commit': commit,
             'started_at': datetime.now().isoformat(timespec='seconds')}
 

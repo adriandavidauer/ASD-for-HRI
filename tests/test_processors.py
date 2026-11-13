@@ -675,3 +675,19 @@ def test_GetShapeFeatures_second_pass_refits_in_the_landmark_box(monkeypatch):
     (x0, y0), (x1, y1) = first.min(0), first.max(0)
     assert rects[1] == dlib.rectangle(int(x0), int(y0), int(x1), int(y1))
     assert np.array_equal(GetShapeFeatures('LipShape', passes=2)([image])[0], second[48:68])
+
+
+def test_GetShapeFeatures_start_box_sets_the_box_of_the_first_pass(monkeypatch):
+    """'none' starts in the whole crop, 'ava_gt' in its fractions of the crop (#105)."""
+    import dlib
+    image = cv2.cvtColor(cv2.imread(str(Path(__file__).parent / 'researcher_faces.jpeg')),
+                         cv2.COLOR_BGR2RGB)[:300, :200]
+    for start_box, expected in [('none', dlib.rectangle(0, 0, 200, 300)),
+                                ('ava_gt', dlib.rectangle(30, 85, 175, 298))]:
+        features = GetShapeFeatures(start_box=start_box)
+        rects, predictor = [], features.shape_predictor
+        features.shape_predictor = lambda img, rect: (rects.append(rect), predictor(img, rect))[1]
+        assert features([image])[0].shape == (68, 2)
+        assert rects == [expected]
+    with pytest.raises(ValueError):
+        GetShapeFeatures(start_box='bogus')

@@ -324,6 +324,16 @@ class NormalizeShapeSample(Processor):
                 output_list.append(sample)
         return output_list
 
+# Start boxes of dlib's first pass, as fractions ``(x0, y0, x1, y1)`` of the face crop: where
+# the 2-pass landmarks typically lie in crops of that box source (median over AVA train,
+# ``src/model_training/estimate_landmark_box.py``, #105). Only worth it for loose boxes:
+# AVA val GT 39.7 -> 51.6 mAP, while UniTalk GT and YuNet boxes are better without.
+SHAPE_START_BOXES = {
+    'none': None,
+    'ava_gt': (0.150, 0.285, 0.873, 0.994),
+}
+
+
 class GetShapeFeatures(Processor):
     """Extract facial landmark (shape) features from a batch of cropped RGB faces with dlib.
 
@@ -336,15 +346,26 @@ class GetShapeFeatures(Processor):
             further pass fits them again in the bounding box of the previous landmarks. dlib
             expects the tight box of its own face detector, so a second pass helps with loose
             boxes such as AVA's GT boxes (#92); it doubles the cost.
+        start_box: Box of the first pass, a key of ``SHAPE_START_BOXES``: 'none' for the whole
+            crop, or the typical landmark box of a box source (e.g. 'ava_gt'), which gives the
+            effect of a second pass for free (#105).
     """
-    def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1):
-        """Load the dlib shape predictor."""
+    def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1,
+                 start_box='none'):
+        """Load the dlib shape predictor.
+
+        Raises:
+            ValueError: If ``start_box`` is unknown.
+        """
         super(GetShapeFeatures, self).__init__()
         if shape_predictor_path is None:
             shape_predictor_path = SHAPE_PREDICTOR_68_FACE_LANDMARKS()
         self.shape_predictor = dlib.shape_predictor(str(shape_predictor_path))
         self.architecture = architecture
         self.passes = passes
+        if start_box not in SHAPE_START_BOXES:
+            raise ValueError(f'start_box must be one of {list(SHAPE_START_BOXES)}')
+        self.start_box = SHAPE_START_BOXES[start_box]
 
     def call(self, face_images):
         """Convert a batch of face images to a batch of landmark coordinates.
@@ -364,7 +385,12 @@ class GetShapeFeatures(Processor):
         for image in face_images:
             if len(image.shape) == 2 and image.shape[-1] == 3:
                 raise AssertionError(f"Probably not receiving a batch - could be a batch of images with the shape {image.shape} but that makes no sense.")
-            rect = dlib.rectangle(0, 0, image.shape[1], image.shape[0])
+            h, w = image.shape[:2]
+            if self.start_box is None:
+                rect = dlib.rectangle(0, 0, w, h)
+            else:
+                x0, y0, x1, y1 = self.start_box
+                rect = dlib.rectangle(round(x0 * w), round(y0 * h), round(x1 * w), round(y1 * h))
             for _ in range(self.passes):
                 points = np.array([(p.x, p.y) for p in self.shape_predictor(image, rect).parts()])
                 (x0, y0), (x1, y1) = points.min(0), points.max(0)
