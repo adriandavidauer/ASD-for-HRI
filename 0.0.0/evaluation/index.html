@@ -1,0 +1,1134 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A scalable Active Speaker Detection for Human-Robot Interaction">
+      
+      
+      
+        <link rel="canonical" href="https://adriandavidauer.github.io/ASD-for-HRI/0.0.0/evaluation/">
+      
+      
+        <link rel="prev" href="../usage/">
+      
+      
+        <link rel="next" href="../results/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+    
+    
+      
+        <title>Evaluation - ASD-for-HRI</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#evaluation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ASD-for-HRI" class="md-header__button md-logo" aria-label="ASD-for-HRI" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ASD-for-HRI
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Evaluation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/adriandavidauer/ASD-for-HRI" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    adriandavidauer/ASD-for-HRI
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ASD-for-HRI" class="md-nav__button md-logo" aria-label="ASD-for-HRI" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ASD-for-HRI
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/adriandavidauer/ASD-for-HRI" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    adriandavidauer/ASD-for-HRI
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation and usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-predictions-docker-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Predictions - Docker (GPU)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-evaluation-srcexperimentsrun_evaluationpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full evaluation - src/experiments/run_evaluation.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full evaluation - src/experiments/run_evaluation.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#benchmark-all-models-x-datasets-x-protocols" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Benchmark: all models x datasets x protocols
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wasd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WASD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#easycom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EasyCom
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#comparable-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparable metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-the-time-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the time goes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#individual-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Individual steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/asd/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    asd4hri.asd
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/processors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    asd4hri.processors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/retinaface_onnx/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    asd4hri.retinaface_onnx
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    asd4hri.models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-predictions-docker-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Predictions - Docker (GPU)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-evaluation-srcexperimentsrun_evaluationpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full evaluation - src/experiments/run_evaluation.py
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full evaluation - src/experiments/run_evaluation.py">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#benchmark-all-models-x-datasets-x-protocols" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Benchmark: all models x datasets x protocols
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#wasd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WASD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#easycom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EasyCom
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#comparable-metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparable metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-the-time-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the time goes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#individual-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Individual steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="evaluation">Evaluation</h1>
+<p>The evaluation runs the ASD pipeline over the UniTalk or AVA ActiveSpeaker videos and scores the
+predictions against the ground truth.</p>
+<p>Evaluation script runs inside the GPU Docker image, which runs Predictions and stats calculation. The individual steps can also be run on their own (see <em>Individual steps</em> below). All
+commands are issued from the repository root.</p>
+<h3 id="1-predictions-docker-gpu">1. Predictions - Docker (GPU)</h3>
+<p>Build relative to the build context that is provided in the build command, in this case it is '.' (repository root) — the Dockerfile lives in <code>docker/</code> but its <code>COPY</code> paths are relative:</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>build<span class="w"> </span>-f<span class="w"> </span>docker/Dockerfile_GPU<span class="w"> </span>--build-arg<span class="w"> </span><span class="nv">USER_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="k">)</span><span class="w"> </span>--build-arg<span class="w"> </span><span class="nv">USER_GID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-g<span class="k">)</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-t<span class="w"> </span>unitalk-gpu_buffer<span class="w"> </span>.
+</code></pre></div>
+<p>The container runs as a non-root user with the uid/gid given at build time, so the results it
+writes to the mounted data directory belong to you. Without the build args it uses 1000:1000. The
+mounted directory must be writable by that user.</p>
+<h3 id="full-evaluation-srcexperimentsrun_evaluationpy">Full evaluation - <code>src/experiments/run_evaluation.py</code></h3>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>run<span class="w"> </span>-d<span class="w"> </span>--gpus<span class="w"> </span>all<span class="w"> </span>-v<span class="w"> </span>/Data/data:/app/data<span class="w"> </span>unitalk-gpu_buffer<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--data_dir<span class="w"> </span>/app/data<span class="w"> </span>--no_download<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--predictions_dir<span class="w"> </span>predictions_cnn1d_scores<span class="w"> </span>--architecture<span class="w"> </span>CNN2Plus1D
+</code></pre></div>
+<ul>
+<li><code>-v /Data/data:/app/data</code> mounts the host data directory where the pipeline expects it.</li>
+<li>Follow a detached run with <code>docker logs -f &lt;container&gt;</code>.</li>
+</ul>
+<p>Everything after the image name is forwarded to the entrypoint
+(<code>python -m src.experiments.run_evaluation</code>) and <em>replaces</em> the image's default <code>CMD</code>, so repeat
+<code>--data_dir</code>. Prediction flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--data_dir</code></td>
+<td>Root data directory, i.e. the mount point (default <code>data</code>)</td>
+</tr>
+<tr>
+<td><code>--dataset {unitalk,ava,wasd,easycom}</code></td>
+<td>Dataset to run over (default <code>unitalk</code>)</td>
+</tr>
+<tr>
+<td><code>--split</code></td>
+<td>Dataset split, UniTalk only (default <code>val</code>)</td>
+</tr>
+<tr>
+<td><code>--no_download</code></td>
+<td>Never fetch videos; skip the ones missing on disk</td>
+</tr>
+<tr>
+<td><code>--video &lt;id&gt;</code></td>
+<td>Run a single video only</td>
+</tr>
+<tr>
+<td><code>--predictions_dir</code></td>
+<td>Output folder, resolved <strong>relative to <code>--data_dir</code></strong> (default <code>predictions</code>)</td>
+</tr>
+<tr>
+<td><code>--architecture</code></td>
+<td>Model to use (default <code>CNN2Plus1D_Light</code>)</td>
+</tr>
+<tr>
+<td><code>--stride</code></td>
+<td>Frames between predictions</td>
+</tr>
+<tr>
+<td><code>--boxes {detector,gt}</code></td>
+<td>Classify the detected faces (end-to-end, default) or the ground-truth face boxes (literature protocol); see <em>Comparable metrics</em></td>
+</tr>
+<tr>
+<td><code>-v</code></td>
+<td>Also log INFO to the console</td>
+</tr>
+</tbody>
+</table>
+<p>Stats flags:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--groundtruth_csv</code></td>
+<td>Ground-truth CSV, relative to <code>--data_dir</code> (default <code>csv/val_orig.csv</code> for UniTalk, <code>ava/annotations/ava_val_groundtruth.csv</code> for AVA)</td>
+</tr>
+<tr>
+<td><code>--stats_dir</code></td>
+<td>Stats output folder, relative to <code>--data_dir</code> (default <code>stats/&lt;predictions_dir&gt;</code>)</td>
+</tr>
+<tr>
+<td><code>--iou_threshold</code></td>
+<td>Minimum IoU for a box match (default <code>0.5</code>)</td>
+</tr>
+<tr>
+<td><code>--timestamp_tolerance_ms</code></td>
+<td>Max prediction/GT frame offset in ms (default <code>20</code>)</td>
+</tr>
+<tr>
+<td><code>--workers</code></td>
+<td>Parallel scoring processes (default: all CPUs)</td>
+</tr>
+<tr>
+<td><code>--skip_stats</code></td>
+<td>Stop after predictions</td>
+</tr>
+</tbody>
+</table>
+<p>Architectures: <code>VVAD-LRS3-LSTM</code>, <code>CNN2Plus1D</code>, <code>CNN2Plus1D_Filters</code>, <code>CNN2Plus1D_Layers</code>,
+<code>CNN2Plus1D_Light</code>, <code>LipShape</code>, <code>FaceShape</code>, <code>LipShapeCausal</code>, <code>FaceShapeCausal</code>.</p>
+<p><code>LipShapeCausal</code> / <code>FaceShapeCausal</code> (#45) predict <strong>every frame from that frame and the frames
+before it</strong> (zero look-ahead), from the first frame of a face on. <code>--causal_mode streaming</code>
+(default) keeps one LSTM state per face and costs one step per frame; <code>--causal_mode window</code>
+re-runs the model on the last <code>--window</code> frames (default 38). Retrain them with
+<code>python -m src.model_training.train_causal_shape /Data/lipFeatures.h5 -f LipShape -o out/</code>.</p>
+<p>Audio-visual baselines (#40, #80; <code>pip install -e '.[av]'</code>): <code>AV:LRX-ASD</code> (0.50 M parameters),
+<code>AV:LR-ASD</code> (0.84 M), <code>AV:Light-ASD</code> (1.02 M) and <code>AV:TalkNet</code> (15.7 M), all with their AVA
+weights, and <code>AV:FabuLight</code> (1.02 M): FabuLight-ASD without body pose, the Light-ASD network
+trained on <strong>WASD</strong>. <code>AV:CAST-ASD</code> (16.0 M plus the frozen 39.4 M Mimi audio encoder) is the
+causal scene model CAST-ASD with its AVA weights: every face is scored together with up to two
+other faces seen in the same frames, from the raw audio. Its code (<code>cast-asd</code>), <code>moshi</code> and
+<code>torchaudio</code> are installed with <code>--no-deps</code> (see <code>docker/Dockerfile</code>), because their pins would
+replace the torch build. The other networks come from <a href="https://github.com/SebastianJanampa/LRX-ASD">pyasd</a>, pinned to a
+commit; the weights are downloaded on first use into <code>$ASD4HRI_WEIGHTS</code> (default <code>src/models</code>,
+in the image <code>/opt/asd4hri/weights</code>) and checked by SHA-256. TalkNet uses the authors' original
+checkpoint, because pyasd's TalkNet file is a retrained model. They
+use the video's own audio track; every face is scored for its newest frame from the last
+<code>--av_window</code> frames (default 25) and the audio of the same span. Without audio,
+<code>--audio_fallback noise</code> (default) feeds low-level noise and <code>visual</code> uses the model's
+visual-only head (CAST-ASD always gets noise); <code>--no_audio</code> forces the fallback.</p>
+<p>UniTalk videos are downloaded from YouTube one at a time during the run; AVA videos are fetched all at once. The ground-truth CSV for either dataset is downloaded and built automatically if missing. With <code>--no_download</code>, nothing is downloaded and videos missing from <code>--data_dir</code> are skipped with a warning.</p>
+<p>The run above writes to the host:</p>
+<ul>
+<li><code>/Data/data/predictions_cnn1d_scores/</code>: one <code>&lt;video_id&gt;.csv</code> per video plus <code>aggregate_time.csv</code>
+  (frames processed and elapsed time).</li>
+<li><code>/Data/data/stats/predictions_cnn1d_scores/</code>: the stats output described below.</li>
+<li><code>/Data/data/logs_stats/</code>: stats log files.</li>
+</ul>
+<h4 id="benchmark-all-models-x-datasets-x-protocols">Benchmark: all models x datasets x protocols</h4>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>src.experiments.run_benchmark<span class="w"> </span>--data_dir<span class="w"> </span>/app/data<span class="w"> </span>--no_download<span class="w"> </span>--tag<span class="w"> </span>gpu<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--architectures<span class="w"> </span>LipShapeCausal<span class="w"> </span>CNN2Plus1D_Light<span class="w"> </span>--datasets<span class="w"> </span>ava<span class="w"> </span>unitalk<span class="w"> </span>wasd<span class="w"> </span>easycom<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--boxes<span class="w"> </span>gt<span class="w"> </span>detector<span class="w"> </span><span class="o">[</span>--<span class="w"> </span>&lt;extra<span class="w"> </span>run_evaluation<span class="w"> </span>flags&gt;<span class="o">]</span>
+</code></pre></div>
+<p>Every combination is one <code>run_evaluation</code> run into <code>&lt;data_dir&gt;/benchmark/&lt;tag&gt;_&lt;dataset&gt;_&lt;arch&gt;_&lt;boxes&gt;/</code>
+(predictions + stats). Runs that already have a <code>stats/summary.json</code> are skipped, so an interrupted
+benchmark resumes, and <code>--tag</code> keeps cluster and Pi results apart. At the end all summaries are
+collected into <code>benchmark/benchmark.csv</code> and a booktabs <code>benchmark/benchmark.tex</code>.
+<code>--dry_run</code> prints the commands, <code>--collect_only</code> only rebuilds the table.</p>
+<h4 id="wasd">WASD</h4>
+<p><code>--dataset wasd</code> evaluates on the WASD val split (Roxo et al.; 751 annotated 30-s sub-clips of
+164 YouTube videos, CC-BY-SA-4.0). Without <code>--no_download</code>, the CSVs (0.3 GB) and the source
+videos (28.9 GB) are fetched with gdown from the official repository's Google Drive links into
+<code>&lt;data_dir&gt;/wasd</code>, and the sub-clips are cut exactly like WASD's own <code>prepare_setup.py</code> does.
+<code>protocol_results.csv</code> then also has one <code>category:&lt;code&gt;</code> row per WASD category: OC (optimal
+conditions), SI (speech impairment), FO (face occlusion), HVN (human voice noise) and SS
+(surveillance settings), taken from WASD's <code>wasd_metadata.csv</code>.</p>
+<h4 id="easycom">EasyCom</h4>
+<p><code>--dataset easycom --split test</code> (sessions 10, 11; <code>val</code> = 4, 12) evaluates on EasyCom
+(Donley et al. 2021; AR glasses at a table, 20 fps, CC-BY-NC-4.0), the dataset closest to a
+stationary social robot. EasyCom has no official ASD protocol; <code>easycom_dataset.py</code> defines one:
+a face counts as speaking in the frames covered by that participant's speech transcription
+segments, and the face boxes become AVA-style rows (<code>video_id</code> = <code>Session_&lt;s&gt;_&lt;file&gt;</code>). The
+videos carry a participant-photo banner on the left; it is cropped away before detection and
+the boxes are converted to the cropped image. Download (~36 GB of the 70 GB release, only the
+needed folders) with the command in the module docstring into <code>&lt;data_dir&gt;/easycom</code>.</p>
+<h4 id="comparable-metrics">Comparable metrics</h4>
+<p>Every run is scored with the <strong>official AVA script</strong> (<code>src/eval/get_ava_active_speaker_performance.py</code>)
+in the protocol that matches <code>--boxes</code>:</p>
+<table>
+<thead>
+<tr>
+<th><code>--boxes</code></th>
+<th>Protocol</th>
+<th>Comparable with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt</code></td>
+<td>The classifier runs on the ground-truth face tracks; the detector is skipped. mAP over all GT boxes.</td>
+<td>The mAP that AVA / UniTalk / WASD papers report</td>
+</tr>
+<tr>
+<td><code>detector</code></td>
+<td><strong>End-to-end mAP@0.5</strong>: detections are matched one-to-one to GT boxes at IoU ≥ 0.5; detections without a GT box count as false positives.</td>
+<td>Ego4D's mAP@0.5; the whole pipeline (detector + tracking + classifier)</td>
+</tr>
+</tbody>
+</table>
+<p>In both protocols, a GT box without a score (missed by the detector, or no prediction yet while
+a buffer fills) gets score 0, because the official script needs a score for every GT box.</p>
+<p><code>&lt;stats_dir&gt;/protocol_results.csv</code> has one row per video and a <code>pooled</code> row (all GT boxes of the
+run ranked together, as papers report it):</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map</code></td>
+<td>Official AVA mAP in the run's protocol</td>
+</tr>
+<tr>
+<td><code>auc</code></td>
+<td>Area under the ROC curve</td>
+</tr>
+<tr>
+<td><code>precision</code>, <code>recall</code>, <code>f1</code>, <code>balanced_accuracy</code>, <code>tp</code>/<code>fp</code>/<code>fn</code>/<code>tn</code></td>
+<td>At the decision threshold 0.5</td>
+</tr>
+<tr>
+<td><code>coverage</code></td>
+<td>Share of GT boxes that got a score</td>
+</tr>
+<tr>
+<td><code>det_recall</code>, <code>dropped_faces</code>, <code>det_precision</code></td>
+<td>Face detector: share of GT faces found at IoU ≥ 0.5, number missed, share of detections that are GT faces (<code>detector</code> runs only)</td>
+</tr>
+<tr>
+<td><code>n_&lt;bin&gt;</code>, <code>map_&lt;bin&gt;</code>, <code>det_recall_&lt;bin&gt;</code></td>
+<td>The same per face width: <code>small</code> &lt; 64 px, <code>medium</code> 64–128 px, <code>large</code> &gt; 128 px</td>
+</tr>
+</tbody>
+</table>
+<p><code>summary.json</code> holds the pooled numbers together with the run configuration (dataset,
+architecture, boxes, stride, host, CPU architecture, git commit) and the speed. For <code>gt</code> runs,
+<code>ava_groundtruth.csv</code> and <code>ava_predictions.csv</code> can be re-scored with the official script itself:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>src/eval/get_ava_active_speaker_performance.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-g<span class="w"> </span>stats/&lt;run&gt;/ava_groundtruth.csv<span class="w"> </span>-p<span class="w"> </span>stats/&lt;run&gt;/ava_predictions.csv
+</code></pre></div>
+<h4 id="where-the-time-goes">Where the time goes</h4>
+<p><code>ASD</code> records the time of every pipeline stage (switch off with <code>ASD(profile=False)</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read</code></td>
+<td>Decoding the next video frame</td>
+</tr>
+<tr>
+<td><code>detect</code>, <code>track</code></td>
+<td>Face detector, ordering/tracking of the boxes</td>
+</tr>
+<tr>
+<td><code>crop</code></td>
+<td>Squaring, clipping and cropping the faces</td>
+</tr>
+<tr>
+<td><code>preprocess</code></td>
+<td>Resize (image models) or dlib landmarks (<code>*Shape</code> models)</td>
+</tr>
+<tr>
+<td><code>buffer</code>, <code>normalize</code></td>
+<td>Per-face temporal buffers, landmark normalisation</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>The classifier's forward pass, including the GPU sync</td>
+</tr>
+<tr>
+<td><code>average</code></td>
+<td>Smoothing the scores over the last predictions</td>
+</tr>
+<tr>
+<td><code>audio_decode</code>, <code>audio</code></td>
+<td>Audio-visual models: decoding the track, MFCCs per window</td>
+</tr>
+<tr>
+<td><code>frame</code></td>
+<td>Everything per frame, from <code>detect</code> to <code>average</code></td>
+</tr>
+</tbody>
+</table>
+<p>Per video, <code>&lt;predictions_dir&gt;/timing/&lt;video_id&gt;.csv</code> has calls, total, mean/median/p95/max ms and
+ms per face for each stage. Over the run, <code>&lt;stats_dir&gt;/stage_times.csv</code> gives ms per frame and
+the share of the frame time, and <code>summary.json</code> has <code>stage_ms_per_frame</code>.</p>
+<p><code>aggregate_results.csv</code> keeps the older metrics (threshold metrics and AP over <em>matched</em> boxes only)
+for comparison with earlier runs.</p>
+<h2 id="individual-steps">Individual steps</h2>
+<p>The prediction and the stats phase can also be run on their own, and the stats phase can run
+outside the Docker image. Both, and the files the stats phase writes, are described in the
+<a href="https://github.com/adriandavidauer/ASD-for-HRI#individual-steps">README</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.sections"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
