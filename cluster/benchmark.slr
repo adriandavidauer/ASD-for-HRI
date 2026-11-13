@@ -23,6 +23,9 @@ IMAGE=$(readlink -f "${IMAGE:-$HOME/SCRATCH/images/asd4hri.sif}")
 DATA=${DATA:-$HOME/SCRATCH/asd4hri}
 DATA=$(readlink -f "$DATA")         # ~/SCRATCH is a link; bind the real folder
 TAG=${TAG:-cluster}
+# options passed on to every run, e.g. EXTRA="--shape_start_box ava_gt"; they become part of the
+# run folder's name, so these runs never collide with the runs without them
+EXTRA=${EXTRA:-}
 
 # MODELS="LipShapeCausal AV:LR-ASD" sbatch ... runs only these; the indices of --list change with it
 read -ra MODELS <<< "${MODELS:-LipShapeCausal FaceShapeCausal CNN2Plus1D_Light AV:LR-ASD AV:TalkNet \
@@ -62,4 +65,4 @@ export SINGULARITYENV_TF_NUM_INTEROP_THREADS=2
 echo "CPU: $(lscpu | sed -n 's/^Model name: *//p'), $THREADS threads per library"
 singularity exec --nv --containall --home "$DATA/home" --bind "$DATA:/app/data" "$IMAGE" \
   bash -c "cd /app && python -m src.experiments.run_benchmark --data_dir /app/data --no_download \
-    --tag $TAG --architectures $MODEL --datasets $DATASET --boxes $BOX"
+    --tag $TAG --architectures $MODEL --datasets $DATASET --boxes $BOX ${EXTRA:+-- $EXTRA}"
