@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ASD-for-HRI Results</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one control bar on top; the speed/accuracy plot as the main view, two smaller views
+   side by side below it, the table last. All legends are HTML below their plot. Colours: cool
+   neutral ground, one colour per model, the same in every view. */
+:root {
+  --bg: #f4f6f7; --panel: #ffffff; --ink: #18212b; --muted: #5a6672; --line: #dbe1e6;
+  --accent: #0d7a6f; --notice: #fff5e0; --notice-ink: #6b4a00;
+  --m1: #0d8a7c; --m2: #4f9a2e; --m3: #c25210; --m4: #4f5cc0; --m5: #2f7fc1;
+  --m6: #8a4fc0; --m7: #6b6f8f; --m8: #b8408a; --m9: #1a9bb0;
+  --st-read: #9aa4ae; --st-detect: #d98a2b; --st-track: #e7c15a; --st-crop: #a9bb6a;
+  --st-pre: #2a9d8f; --st-buffer: #8ccfc6; --st-audio: #8a78d6; --st-model: #3b5998;
+  --st-average: #c46a86; --st-other: #cfd6dc;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1418; --panel: #161d23; --ink: #e5eaee; --muted: #97a3ae; --line: #2a333c;
+    --accent: #3cc7b4; --notice: #2e2615; --notice-ink: #f1d08a;
+    --m1: #35c4b1; --m2: #7cc65a; --m3: #f08a45; --m4: #8f99f3; --m5: #5fb0f0;
+    --m6: #b88af0; --m7: #a3a8c8; --m8: #e57ab8; --m9: #4fd0e3;
+    --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b; --st-crop: #a7bb63;
+    --st-pre: #36b3a3; --st-buffer: #6fb8ae; --st-audio: #9d8de6; --st-model: #6d8fd6;
+    --st-average: #d784a0; --st-other: #46505a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1418; --panel: #161d23; --ink: #e5eaee; --muted: #97a3ae; --line: #2a333c;
+  --accent: #3cc7b4; --notice: #2e2615; --notice-ink: #f1d08a;
+  --m1: #35c4b1; --m2: #7cc65a; --m3: #f08a45; --m4: #8f99f3; --m5: #5fb0f0;
+  --m6: #b88af0; --m7: #a3a8c8; --m8: #e57ab8; --m9: #4fd0e3;
+  --st-read: #6f7a85; --st-detect: #e09a43; --st-track: #e9c96b; --st-crop: #a7bb63;
+  --st-pre: #36b3a3; --st-buffer: #6fb8ae; --st-audio: #9d8de6; --st-model: #6d8fd6;
+  --st-average: #d784a0; --st-other: #46505a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font: 15px/1.55 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font: 700 clamp(26px, 4vw, 36px)/1.1 var(--f-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font: 600 18px/1.3 var(--f-display); margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); margin: 0; max-width: 72ch; }
+.notice { background: var(--notice); color: var(--notice-ink); border-radius: 8px; padding: 10px 14px; margin: 0; }
+.controls {
+  display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+}
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > span, .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+select, input[type="search"] {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; min-width: 0; max-width: 100%;
+}
+.versions { flex: 1 1 300px; display: grid; gap: 4px; min-width: 0; }
+.slider-row { display: flex; gap: 10px; align-items: center; }
+.slider-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.ticks { display: flex; justify-content: space-between; gap: 12px; font: 12px/1.3 var(--f-data); color: var(--muted); }
+.ticks span { flex: 1 1 0; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.ticks span:first-child { text-align: left; } .ticks span:last-child { text-align: right; }
+.ticks span.on { color: var(--ink); font-weight: 500; }
+.vnote { font-size: 13px; color: var(--muted); min-height: 1.3em; }
+button {
+  font: 600 13px/1 var(--f-body); color: var(--panel); background: var(--accent); border: 0;
+  border-radius: 6px; padding: 8px 12px; cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button:focus-visible, select:focus-visible, input:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 10px; min-width: 0; align-content: start; }
+.panel .sub { color: var(--muted); font-size: 13px; margin: 0; }
+.toggles { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; }
+.toggles label { display: inline-flex; gap: 6px; align-items: center; }
+.plotbox { width: 100%; min-width: 0; overflow: hidden; }
+.plot { width: 100%; height: 360px; }
+.plot.main { height: 440px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend .sep { flex-basis: 100%; height: 0; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.sw.sq { border-radius: 2px; } .sw.ring { background: transparent !important; border: 2px solid var(--muted); }
+.sw.bar { border-radius: 2px; width: 14px; }
+.caption { font-size: 13px; color: var(--muted); margin: 0; }
+.table-tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.table-tools label { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); cursor: pointer; user-select: none; background: var(--panel); }
+th[aria-sort="ascending"]::after { content: " ▲"; } th[aria-sort="descending"]::after { content: " ▼"; }
+td.n { text-align: right; font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.pill { font: 500 11px/1 var(--f-data); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.pill.pi { color: var(--accent); border-color: var(--accent); }
+textarea.copy { position: absolute; left: -9999px; }
+#copied { font-size: 13px; color: var(--accent); }
+footer { color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>ASD-for-HRI Results</h1>
+    <p class="lede">Active speaker detection on AVA, UniTalk, WASD and EasyCom, scored with the official AVA script (mAP at 0.5 IoU). Each model runs in the full pipeline with our face detector, and on the dataset's ground-truth face boxes. Move the version slider to see how each configuration changes from release to release.</p>
+    <p class="notice" id="banner" hidden></p>
+  </header>
+
+  <section class="controls" aria-label="Filters">
+    <label class="field"><span>Dataset</span><select id="dataset"></select></label>
+    <label class="field"><span>Metric</span><select id="metric"></select></label>
+    <label class="field"><span>Timing</span><select id="axis">
+      <option value="pi">Raspberry Pi 4</option>
+      <option value="gpu">GPU machine</option>
+    </select></label>
+    <div class="versions">
+      <span class="label">Version</span>
+      <div class="slider-row">
+        <button id="play" type="button" aria-label="Play through the versions">Play</button>
+        <input id="version" type="range" min="0" max="0" step="1" value="0" aria-label="Version">
+      </div>
+      <div class="ticks" id="ticks"></div>
+      <div class="vnote" id="vnote"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Speed and accuracy</h2>
+    <p class="sub" id="scatter-sub"></p>
+    <div class="toggles">
+      <label><input type="checkbox" id="show-det" checked> Full pipeline (face detector)</label>
+      <label><input type="checkbox" id="show-gt" checked> Model only (GT boxes)</label>
+      <label><input type="checkbox" id="show-front"> Show best trade-offs</label>
+    </div>
+    <div id="scatter" class="plot main"></div>
+    <p class="caption" id="front-caption" hidden>Line = best trade-offs: no other configuration is both faster and more accurate.</p>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Progress per configuration</h2>
+      <p class="sub">The selected metric of every configuration of this dataset, version by version.</p>
+      <div class="toggles"><label><input type="checkbox" id="only-changed" checked> Only configurations that changed</label></div>
+      <div class="plotbox"><div id="progress" class="plot"></div></div>
+      <p class="caption" id="progress-empty" hidden>No configuration changed between versions.</p>
+      <div class="legend" id="legend-progress"></div>
+    </section>
+    <section class="panel">
+      <h2>Where the time goes</h2>
+      <p class="sub" id="stages-sub"></p>
+      <div class="plotbox"><div id="stages" class="plot"></div></div>
+      <div class="legend" id="legend-stages"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>All runs</h2>
+    <div class="table-tools">
+      <input type="search" id="filter" placeholder="Filter, e.g. LR-ASD wasd" aria-label="Filter the runs">
+      <label><input type="checkbox" id="only-version" checked> Only the selected version</label>
+      <button type="button" class="ghost" id="copy">Copy as CSV</button>
+      <span id="copied" aria-live="polite"></span>
+    </div>
+    <div class="scroll"><table id="table"><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <footer>Timing on the GPU machine comes from a shared workstation and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed. The time is end to end per frame; runs on ground-truth boxes have no detection stage.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script>
+const D = {"versions":["v0.0.0"],"notes":{},"banner":"","runs":[{"v":"v0.0.0","dataset":"ava","model":"AV:CAST-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":30.9978,"fps":30.526,"stages":{"audio_decode":1.1435,"read":1.3655,"crop":0.0133,"preprocess":0.1782,"buffer":0.4212,"audio":0.0776,"model":30.205},"run":"v0.0.0_ava_AV-CAST-ASD_gt","started":"2026-11-18T00:36:05","map":0.8906066304485326,"f1":0.8051935039452262,"map_small":0.6791149047879661,"coverage":0.9889952844370805,"det_recall":null,"auc":0.9426848488663246,"balanced_accuracy":0.8562119576711451},{"v":"v0.0.0","dataset":"ava","model":"AV:FabuLight","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":12.3425,"fps":68.397,"stages":{"audio_decode":1.1927,"read":1.7531,"crop":0.0141,"preprocess":0.2028,"buffer":0.0223,"audio":2.9435,"model":8.7498},"run":"v0.0.0_ava_AV-FabuLight_gt","started":"2026-11-17T20:26:49","map":0.7780739219355864,"f1":0.693999260689202,"map_small":0.5173737005940247,"coverage":0.9889952844370805,"det_recall":null,"auc":0.8780355958245242,"balanced_accuracy":0.7890074635562243},{"v":"v0.0.0","dataset":"ava","model":"AV:LR-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":10.6092,"fps":78.196,"stages":{"audio_decode":1.1477,"read":1.6688,"crop":0.0134,"preprocess":0.2042,"buffer":0.0207,"audio":2.8157,"model":7.1786},"run":"v0.0.0_ava_AV-LR-ASD_gt","started":"2026-11-17T12:16:11","map":0.8929306654860856,"f1":0.7860864925749177,"map_small":0.6741289281506755,"coverage":0.9889952844370805,"det_recall":null,"auc":0.9446464282559324,"balanced_accuracy":0.8335321435885258,"pi":{"ms":1602.5965,"stages":{"audio_decode":1.6864,"read":1.3011,"crop":0.0221,"preprocess":0.1989,"buffer":0.0406,"audio":10.8395,"model":1590.5212},"run":"v0.0.0-pi_ava_AV-LR-ASD_gt"}},{"v":"v0.0.0","dataset":"ava","model":"AV:LRX-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":10.7623,"fps":74.388,"stages":{"audio_decode":1.2006,"read":1.995,"crop":0.0149,"preprocess":0.2318,"buffer":0.0246,"audio":3.1891,"model":6.8562},"run":"v0.0.0_ava_AV-LRX-ASD_gt","started":"2026-11-17T17:01:12","map":0.8834751866558259,"f1":0.7624504480495685,"map_small":0.6616486207205434,"coverage":0.9889952844370805,"det_recall":null,"auc":0.9413952609304838,"balanced_accuracy":0.8164935502553642,"pi":{"ms":986.7693,"stages":{"audio_decode":1.6066,"read":1.3161,"crop":0.0235,"preprocess":0.198,"buffer":0.0403,"audio":10.773,"model":974.7609},"run":"v0.0.0-pi_ava_AV-LRX-ASD_gt"}},{"v":"v0.0.0","dataset":"ava","model":"AV:Light-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":12.5438,"fps":66.183,"stages":{"audio_decode":1.1917,"read":1.91,"crop":0.0144,"preprocess":0.224,"buffer":0.0225,"audio":3.0134,"model":8.8583},"run":"v0.0.0_ava_AV-Light-ASD_gt","started":"2026-11-17T13:50:53","map":0.8875606112823508,"f1":0.7307984815072919,"map_small":0.6702269870058553,"coverage":0.9889952844370805,"det_recall":null,"auc":0.9424295598690396,"balanced_accuracy":0.7920720603539255},{"v":"v0.0.0","dataset":"ava","model":"AV:TalkNet","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":24.5145,"fps":37.271,"stages":{"audio_decode":1.3014,"read":1.7733,"crop":0.0154,"preprocess":0.2108,"buffer":0.0255,"audio":3.2094,"model":20.6075},"run":"v0.0.0_ava_AV-TalkNet_gt","started":"2026-11-17T16:03:01","map":0.8558197670277219,"f1":0.701720675417316,"map_small":0.6050232770662981,"coverage":0.9889952844370805,"det_recall":null,"auc":0.9256720871866512,"balanced_accuracy":0.7751967478363879},{"v":"v0.0.0","dataset":"ava","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":41.2274,"fps":23.224,"stages":{"read":1.5738,"detect":33.7377,"track":0.0228,"crop":0.0549,"preprocess":6.6509,"model":0.2679,"average":0.1746},"run":"v0.0.0_ava_FaceShapeCausal_ava_detector","started":"2026-11-17T18:25:35","map":0.37973503322716834,"f1":0.3197813337194989,"map_small":0.19892612342692892,"coverage":0.8426683604340452,"det_recall":0.8426683604340452,"auc":0.6561670740943981,"balanced_accuracy":0.5939221685961135,"pi":{"ms":62.9278,"stages":{"read":1.0078,"detect":44.6725,"track":0.0308,"crop":0.0824,"preprocess":16.709,"model":0.5459,"average":0.2989},"run":"v0.0.0-pi_ava_FaceShapeCausal_ava_detector"}},{"v":"v0.0.0","dataset":"ava","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":5.2715,"fps":137.175,"stages":{"read":1.6451,"crop":0.0412,"preprocess":4.6764,"model":0.2048,"average":0.1478},"run":"v0.0.0_ava_FaceShapeCausal_ava_gt_shape_start_box_ava_gt","started":"2026-11-17T20:01:58","map":0.5114204511126268,"f1":0.36693068509302895,"map_small":0.2673635834278359,"coverage":0.9889952844370805,"det_recall":null,"auc":0.731219039862006,"balanced_accuracy":0.6037001192299297,"pi":{"ms":11.7378,"stages":{"read":1.0348,"crop":0.0689,"preprocess":10.5848,"model":0.4434,"average":0.2474},"run":"v0.0.0-pi_ava_FaceShapeCausal_ava_gt"}},{"v":"v0.0.0","dataset":"ava","model":"FaceShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":42.8454,"fps":22.322,"stages":{"read":1.6709,"detect":35.0145,"track":0.0227,"crop":0.0578,"preprocess":7.002,"model":0.2599,"average":0.1713},"run":"v0.0.0_ava_FaceShapeCausal_detector","started":"2026-11-17T18:09:00","map":0.2241644365238724,"f1":0.2585235870005227,"map_small":0.169899682161658,"coverage":0.8426683604340452,"det_recall":0.8426683604340452,"auc":0.5353809211608903,"balanced_accuracy":0.5391451916918691},{"v":"v0.0.0","dataset":"ava","model":"FaceShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":3.9551,"fps":192.445,"stages":{"read":0.9869,"crop":0.0377,"preprocess":3.4746,"model":0.1633,"average":0.1238},"run":"v0.0.0_ava_FaceShapeCausal_gt","started":"2026-11-17T09:15:16","map":0.3337842410341568,"f1":0.380453681285647,"map_small":0.16736200095434176,"coverage":0.9889952844370805,"det_recall":null,"auc":0.5921806645752988,"balanced_accuracy":0.5640519824095479},{"v":"v0.0.0","dataset":"ava","model":"LipShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":41.8448,"fps":22.876,"stages":{"read":1.5965,"detect":34.2417,"track":0.0223,"crop":0.0566,"preprocess":6.7937,"model":0.2495,"average":0.1698},"run":"v0.0.0_ava_LipShapeCausal_ava_detector","started":"2026-11-17T17:17:09","map":0.40760736236427025,"f1":0.40968323572296805,"map_small":0.23071103624474437,"coverage":0.8426683604340452,"det_recall":0.8426683604340452,"auc":0.6768827446344202,"balanced_accuracy":0.6434366271993714,"pi":{"ms":63.7051,"stages":{"read":0.952,"detect":45.4667,"track":0.0312,"crop":0.0842,"preprocess":16.7366,"model":0.5219,"average":0.2886},"run":"v0.0.0-pi_ava_LipShapeCausal_ava_detector"}},{"v":"v0.0.0","dataset":"ava","model":"LipShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":4.9874,"fps":139.314,"stages":{"read":1.8025,"crop":0.0418,"preprocess":4.4121,"model":0.1969,"average":0.1462},"run":"v0.0.0_ava_LipShapeCausal_ava_gt_shape_start_box_ava_gt","started":"2026-11-17T19:44:09","map":0.5161407551574216,"f1":0.45017917231795274,"map_small":0.24447286472320337,"coverage":0.9889952844370805,"det_recall":null,"auc":0.7344090434481485,"balanced_accuracy":0.6380185376078201,"pi":{"ms":11.6274,"stages":{"read":1.0075,"crop":0.0695,"preprocess":10.523,"model":0.4059,"average":0.2448},"run":"v0.0.0-pi_ava_LipShapeCausal_ava_gt"}},{"v":"v0.0.0","dataset":"ava","model":"LipShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":45.3899,"fps":21.124,"stages":{"read":1.651,"detect":37.2378,"track":0.0209,"crop":0.0555,"preprocess":7.3253,"model":0.2598,"average":0.1771},"run":"v0.0.0_ava_LipShapeCausal_detector","started":"2026-11-17T17:36:47","map":0.2880871695981454,"f1":0.3200737316149253,"map_small":0.17380684978671818,"coverage":0.8426683604340452,"det_recall":0.8426683604340452,"auc":0.5980544141776667,"balanced_accuracy":0.5855968531150056},{"v":"v0.0.0","dataset":"ava","model":"LipShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":33.0,"ms":4.2192,"fps":180.832,"stages":{"read":1.0407,"crop":0.0366,"preprocess":3.7207,"model":0.1708,"average":0.1271},"run":"v0.0.0_ava_LipShapeCausal_gt","started":"2026-11-17T08:31:48","map":0.3600431153184975,"f1":0.4091133838186692,"map_small":0.16837147055237076,"coverage":0.9889952844370805,"det_recall":null,"auc":0.6157494943449783,"balanced_accuracy":0.5811602578238886},{"v":"v0.0.0","dataset":"easycom","model":"AV:CAST-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":56.2151,"fps":16.061,"stages":{"audio_decode":0.5574,"read":5.2885,"crop":0.022,"preprocess":0.3614,"buffer":1.2291,"audio":0.1659,"model":54.2706},"run":"v0.0.0_easycom_AV-CAST-ASD_gt","started":"2026-11-17T07:54:39","map":0.7661893597060458,"f1":0.6225414539554395,"map_small":0.12688237052087548,"coverage":1.0,"det_recall":null,"auc":0.8868138544518064,"balanced_accuracy":0.7311233637584447},{"v":"v0.0.0","dataset":"easycom","model":"AV:FabuLight","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":30.1238,"fps":24.199,"stages":{"audio_decode":0.6456,"read":9.7639,"crop":0.0244,"preprocess":0.3898,"buffer":0.0436,"audio":7.6698,"model":21.0707},"run":"v0.0.0_easycom_AV-FabuLight_gt","started":"2026-11-17T07:07:32","map":0.5682708041949881,"f1":0.221990391214825,"map_small":0.02921234942875583,"coverage":1.0,"det_recall":null,"auc":0.7640506234303768,"balanced_accuracy":0.5601884880714947},{"v":"v0.0.0","dataset":"easycom","model":"AV:LR-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":26.1953,"fps":26.852,"stages":{"audio_decode":0.6636,"read":9.6853,"crop":0.0225,"preprocess":0.384,"buffer":0.0449,"audio":7.5548,"model":17.2679},"run":"v0.0.0_easycom_AV-LR-ASD_gt","started":"2026-11-17T04:04:49","map":0.6449907607144671,"f1":0.3297725273344225,"map_small":0.0486152183191671,"coverage":1.0,"det_recall":null,"auc":0.830780428680823,"balanced_accuracy":0.5952533653141988},{"v":"v0.0.0","dataset":"easycom","model":"AV:LRX-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":25.8265,"fps":25.898,"stages":{"audio_decode":0.6579,"read":11.1354,"crop":0.0226,"preprocess":0.3919,"buffer":0.045,"audio":7.7085,"model":16.7461},"run":"v0.0.0_easycom_AV-LRX-ASD_gt","started":"2026-11-17T06:26:26","map":0.6496495394647008,"f1":0.30308228078382454,"map_small":0.0504980489785166,"coverage":1.0,"det_recall":null,"auc":0.8178184068323988,"balanced_accuracy":0.5869143906437325},{"v":"v0.0.0","dataset":"easycom","model":"AV:Light-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":29.1079,"fps":25.011,"stages":{"audio_decode":0.6285,"read":9.5615,"crop":0.0206,"preprocess":0.3662,"buffer":0.0404,"audio":7.1047,"model":20.7316},"run":"v0.0.0_easycom_AV-Light-ASD_gt","started":"2026-11-17T05:47:51","map":0.582754736664867,"f1":0.1528307842405808,"map_small":0.06226570638429651,"coverage":1.0,"det_recall":null,"auc":0.7963118651434565,"balanced_accuracy":0.5395146892226429},{"v":"v0.0.0","dataset":"easycom","model":"AV:TalkNet","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":44.0765,"fps":18.543,"stages":{"audio_decode":0.6691,"read":8.5588,"crop":0.0225,"preprocess":0.3768,"buffer":0.044,"audio":7.3787,"model":35.3714},"run":"v0.0.0_easycom_AV-TalkNet_gt","started":"2026-11-17T05:31:53","map":0.585137911543911,"f1":0.19169008988951658,"map_small":0.03821735524577806,"coverage":1.0,"det_recall":null,"auc":0.7785799974419391,"balanced_accuracy":0.5501695186621244},{"v":"v0.0.0","dataset":"easycom","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":94.4056,"fps":9.969,"stages":{"read":5.3488,"detect":84.341,"track":0.0214,"crop":0.0541,"preprocess":9.1224,"model":0.3071,"average":0.2026},"run":"v0.0.0_easycom_FaceShapeCausal_ava_detector","started":"2026-11-17T04:48:44","map":0.421946052663542,"f1":0.2381657919188368,"map_small":0.02440463825560788,"coverage":0.9662244155003641,"det_recall":0.9662244155003641,"auc":0.6630013068993582,"balanced_accuracy":0.5580518599066474},{"v":"v0.0.0","dataset":"easycom","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":15.1725,"fps":40.415,"stages":{"read":8.1448,"crop":0.0752,"preprocess":13.9645,"model":0.4089,"average":0.2744},"run":"v0.0.0_easycom_FaceShapeCausal_ava_gt","started":"2026-11-17T03:27:39","map":0.479257142984151,"f1":0.26039018250471996,"map_small":0.08011164833054987,"coverage":1.0,"det_recall":null,"auc":0.7220540421824684,"balanced_accuracy":0.5661593861989246},{"v":"v0.0.0","dataset":"easycom","model":"FaceShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":129.7529,"fps":7.231,"stages":{"read":7.6536,"detect":117.19,"track":0.0228,"crop":0.0605,"preprocess":11.4626,"model":0.3553,"average":0.2367},"run":"v0.0.0_easycom_FaceShapeCausal_detector","started":"2026-11-17T05:08:15","map":0.35077770042446477,"f1":0.31629686867571843,"map_small":0.04728853327187697,"coverage":0.9662244155003641,"det_recall":0.9662244155003641,"auc":0.6096366547112317,"balanced_accuracy":0.5655372033192029},{"v":"v0.0.0","dataset":"easycom","model":"FaceShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":14.6294,"fps":41.395,"stages":{"read":8.0795,"crop":0.0722,"preprocess":13.4672,"model":0.3971,"average":0.2679},"run":"v0.0.0_easycom_FaceShapeCausal_gt","started":"2026-11-17T03:01:43","map":0.4464418535174686,"f1":0.37557381009905777,"map_small":0.0399447769145765,"coverage":1.0,"det_recall":null,"auc":0.6692571883500005,"balanced_accuracy":0.6001168487143705},{"v":"v0.0.0","dataset":"easycom","model":"LipShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":125.5478,"fps":7.477,"stages":{"read":7.3545,"detect":113.0113,"track":0.0234,"crop":0.0598,"preprocess":11.4665,"model":0.3455,"average":0.2335},"run":"v0.0.0_easycom_LipShapeCausal_ava_detector","started":"2026-11-17T04:38:28","map":0.43541383682620916,"f1":0.2991518541911035,"map_small":0.02358800783686679,"coverage":0.9662244155003641,"det_recall":0.9662244155003641,"auc":0.6722639216350873,"balanced_accuracy":0.5747415241142692},{"v":"v0.0.0","dataset":"easycom","model":"LipShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":13.8315,"fps":42.803,"stages":{"read":8.1818,"crop":0.0719,"preprocess":12.7166,"model":0.3806,"average":0.2584},"run":"v0.0.0_easycom_LipShapeCausal_ava_gt","started":"2026-11-17T02:30:37","map":0.5086235507233738,"f1":0.36041358936484486,"map_small":0.061169514547411694,"coverage":1.0,"det_recall":null,"auc":0.7299780382593144,"balanced_accuracy":0.5980300536607862},{"v":"v0.0.0","dataset":"easycom","model":"LipShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":106.4914,"fps":8.745,"stages":{"read":7.1893,"detect":95.7344,"track":0.0206,"crop":0.0533,"preprocess":9.7872,"model":0.3198,"average":0.2164},"run":"v0.0.0_easycom_LipShapeCausal_detector","started":"2026-11-17T02:56:12","map":0.3965245666055858,"f1":0.39046306835200384,"map_small":0.05068926049443981,"coverage":0.9662244155003641,"det_recall":0.9662244155003641,"auc":0.6351756723812398,"balanced_accuracy":0.5957177804860503},{"v":"v0.0.0","dataset":"easycom","model":"LipShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":47.0,"ms":12.241,"fps":44.773,"stages":{"read":8.7014,"crop":0.0641,"preprocess":11.2181,"model":0.3504,"average":0.244},"run":"v0.0.0_easycom_LipShapeCausal_gt","started":"2026-11-17T01:06:44","map":0.4795506802659945,"f1":0.44038414183698604,"map_small":0.034284436765861806,"coverage":1.0,"det_recall":null,"auc":0.6872448220240238,"balanced_accuracy":0.6255149333737549},{"v":"v0.0.0","dataset":"unitalk","model":"AV:CAST-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":39.447,"fps":24.706,"stages":{"audio_decode":0.126,"read":0.7183,"crop":0.0175,"preprocess":0.1846,"buffer":1.2905,"audio":0.1252,"model":37.7046},"run":"v0.0.0_unitalk_AV-CAST-ASD_gt","started":"2026-11-16T16:48:55","map":0.7020380276441053,"f1":0.5895908142931509,"map_small":0.6578530446724746,"coverage":0.9946499364920519,"det_recall":null,"auc":0.8665229655920116,"balanced_accuracy":0.7202466897737797},{"v":"v0.0.0","dataset":"unitalk","model":"AV:FabuLight","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":21.8754,"fps":43.175,"stages":{"audio_decode":0.1178,"read":0.8728,"crop":0.016,"preprocess":0.1752,"buffer":0.0327,"audio":6.2306,"model":14.7393},"run":"v0.0.0_unitalk_AV-FabuLight_gt","started":"2026-11-16T14:59:27","map":0.653376801567173,"f1":0.6006097942883771,"map_small":0.612072813228233,"coverage":0.9946499364920519,"det_recall":null,"auc":0.8566752322216239,"balanced_accuracy":0.7571741466562765},{"v":"v0.0.0","dataset":"unitalk","model":"AV:LR-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":18.9832,"fps":49.658,"stages":{"audio_decode":0.118,"read":0.7859,"crop":0.0158,"preprocess":0.1817,"buffer":0.0368,"audio":6.3378,"model":11.6996},"run":"v0.0.0_unitalk_AV-LR-ASD_gt","started":"2026-11-16T12:07:05","map":0.6735829860129081,"f1":0.5854332265843296,"map_small":0.6273008951589808,"coverage":0.9946499364920519,"det_recall":null,"auc":0.8504794544293499,"balanced_accuracy":0.7216512969136446},{"v":"v0.0.0","dataset":"unitalk","model":"AV:LRX-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":17.2897,"fps":53.416,"stages":{"audio_decode":0.1223,"read":0.9789,"crop":0.0154,"preprocess":0.1806,"buffer":0.0338,"audio":6.3275,"model":10.0333},"run":"v0.0.0_unitalk_AV-LRX-ASD_gt","started":"2026-11-16T14:04:35","map":0.6624202041782462,"f1":0.5445833876377904,"map_small":0.6213497442898287,"coverage":0.9946499364920519,"det_recall":null,"auc":0.847355083277552,"balanced_accuracy":0.6950826763271131},{"v":"v0.0.0","dataset":"unitalk","model":"AV:Light-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":22.6299,"fps":41.289,"stages":{"audio_decode":0.1263,"read":1.0512,"crop":0.0179,"preprocess":0.1853,"buffer":0.0343,"audio":6.6324,"model":15.0356},"run":"v0.0.0_unitalk_AV-Light-ASD_gt","started":"2026-11-16T13:33:28","map":0.6770656492859665,"f1":0.44845416138404115,"map_small":0.6324061890452637,"coverage":0.9946499364920519,"det_recall":null,"auc":0.8500506443802119,"balanced_accuracy":0.6452410524525156},{"v":"v0.0.0","dataset":"unitalk","model":"AV:TalkNet","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":30.1956,"fps":32.014,"stages":{"audio_decode":0.1269,"read":0.7273,"crop":0.0162,"preprocess":0.1708,"buffer":0.0306,"audio":5.7948,"model":23.551},"run":"v0.0.0_unitalk_AV-TalkNet_gt","started":"2026-11-16T13:20:33","map":0.6194347335311343,"f1":0.4909675663285772,"map_small":0.5759682216562461,"coverage":0.9946499364920519,"det_recall":null,"auc":0.8186899603720349,"balanced_accuracy":0.6670391605423317},{"v":"v0.0.0","dataset":"unitalk","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":24.3299,"fps":39.587,"stages":{"read":0.7825,"detect":11.7774,"track":0.0247,"crop":0.0751,"preprocess":11.5869,"model":0.2852,"average":0.2089},"run":"v0.0.0_unitalk_FaceShapeCausal_ava_detector","started":"2026-11-16T12:37:30","map":0.36873814465776616,"f1":0.32829920460314777,"map_small":0.36339493102643855,"coverage":0.9425998119504913,"det_recall":0.9425998119504913,"auc":0.6996475378384968,"balanced_accuracy":0.5958520357843571},{"v":"v0.0.0","dataset":"unitalk","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":9.6356,"fps":95.974,"stages":{"read":0.5806,"crop":0.0521,"preprocess":8.8953,"model":0.2385,"average":0.1855},"run":"v0.0.0_unitalk_FaceShapeCausal_ava_gt","started":"2026-11-16T11:07:50","map":0.44245798442243256,"f1":0.3667825827679101,"map_small":0.3909828123369137,"coverage":0.9946499364920519,"det_recall":null,"auc":0.7348577840478414,"balanced_accuracy":0.6078927352950909},{"v":"v0.0.0","dataset":"unitalk","model":"FaceShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":24.6207,"fps":39.117,"stages":{"read":0.793,"detect":11.8445,"track":0.0242,"crop":0.0738,"preprocess":11.8111,"model":0.285,"average":0.2124},"run":"v0.0.0_unitalk_FaceShapeCausal_detector","started":"2026-11-16T12:39:20","map":0.2475684180748108,"f1":0.30196828579204266,"map_small":0.27782603229356484,"coverage":0.9425998119504913,"det_recall":0.9425998119504913,"auc":0.6011638873472334,"balanced_accuracy":0.5670545375082827},{"v":"v0.0.0","dataset":"unitalk","model":"FaceShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":8.8404,"fps":104.57,"stages":{"read":0.5287,"crop":0.0532,"preprocess":8.14,"model":0.2229,"average":0.1751},"run":"v0.0.0_unitalk_FaceShapeCausal_gt","started":"2026-11-16T11:02:49","map":0.38468849216326,"f1":0.41529531370621753,"map_small":0.33475027102785665,"coverage":0.9946499364920519,"det_recall":null,"auc":0.6956679866759528,"balanced_accuracy":0.6330841444215172},{"v":"v0.0.0","dataset":"unitalk","model":"LipShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":23.9616,"fps":40.212,"stages":{"read":0.7575,"detect":11.4885,"track":0.0248,"crop":0.0819,"preprocess":11.5176,"model":0.2756,"average":0.2064},"run":"v0.0.0_unitalk_LipShapeCausal_ava_detector","started":"2026-11-16T12:35:16","map":0.39756632470361436,"f1":0.4066319632068344,"map_small":0.3677681184521934,"coverage":0.9425998119504913,"det_recall":0.9425998119504913,"auc":0.7177556800969668,"balanced_accuracy":0.6441750547536355},{"v":"v0.0.0","dataset":"unitalk","model":"LipShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":8.8656,"fps":104.317,"stages":{"read":0.5251,"crop":0.0527,"preprocess":8.1821,"model":0.2136,"average":0.1743},"run":"v0.0.0_unitalk_LipShapeCausal_ava_gt","started":"2026-11-16T11:02:57","map":0.45935274533511944,"f1":0.4340333504069204,"map_small":0.3971353588772184,"coverage":0.9946499364920519,"det_recall":null,"auc":0.7378289864190547,"balanced_accuracy":0.6431339697146801},{"v":"v0.0.0","dataset":"unitalk","model":"LipShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":24.0352,"fps":40.1,"stages":{"read":0.755,"detect":11.5274,"track":0.0248,"crop":0.0789,"preprocess":11.552,"model":0.2739,"average":0.2081},"run":"v0.0.0_unitalk_LipShapeCausal_detector","started":"2026-11-16T12:35:43","map":0.2564793961722684,"f1":0.32232873081583197,"map_small":0.2726686793093105,"coverage":0.9425998119504913,"det_recall":0.9425998119504913,"auc":0.6105303663231206,"balanced_accuracy":0.5787547030660217},{"v":"v0.0.0","dataset":"unitalk","model":"LipShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":18.0,"ms":5.5827,"fps":161.766,"stages":{"read":0.4547,"crop":0.035,"preprocess":5.0652,"model":0.167,"average":0.1299},"run":"v0.0.0_unitalk_LipShapeCausal_gt","started":"2026-11-16T10:07:28","map":0.3650368141771971,"f1":0.4070010943673111,"map_small":0.3156681510920229,"coverage":0.9946499364920519,"det_recall":null,"auc":0.6780565127958036,"balanced_accuracy":0.6259890673334196},{"v":"v0.0.0","dataset":"wasd","model":"AV:CAST-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":57.7484,"fps":16.656,"stages":{"audio_decode":0.4691,"read":1.6279,"crop":0.0219,"preprocess":0.3574,"buffer":1.5467,"audio":0.151,"model":55.5025},"run":"v0.0.0_wasd_AV-CAST-ASD_gt","started":"2026-11-17T10:16:26","map":0.870254390872947,"f1":0.7070271183022155,"map_small":0.6538385954259378,"coverage":0.9991990764560005,"det_recall":null,"auc":0.9118747541811122,"balanced_accuracy":0.7738137069205324},{"v":"v0.0.0","dataset":"wasd","model":"AV:FabuLight","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":26.5521,"fps":34.089,"stages":{"audio_decode":0.4506,"read":1.9345,"crop":0.0212,"preprocess":0.3515,"buffer":0.0429,"audio":7.4063,"model":17.8251},"run":"v0.0.0_wasd_AV-FabuLight_gt","started":"2026-11-17T03:08:23","map":0.8873034562201353,"f1":0.7770896478588492,"map_small":0.7260141292057259,"coverage":0.9991990764560005,"det_recall":null,"auc":0.9288763801711768,"balanced_accuracy":0.823024215713589},{"v":"v0.0.0","dataset":"wasd","model":"AV:LR-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":21.2859,"fps":43.122,"stages":{"audio_decode":0.4253,"read":1.3988,"crop":0.0204,"preprocess":0.349,"buffer":0.041,"audio":7.2027,"model":12.7896},"run":"v0.0.0_wasd_AV-LR-ASD_gt","started":"2026-11-16T20:26:30","map":0.8326055184026989,"f1":0.6797796006590721,"map_small":0.6370991123302753,"coverage":0.9991990764560005,"det_recall":null,"auc":0.8785122267095089,"balanced_accuracy":0.7567161763422723},{"v":"v0.0.0","dataset":"wasd","model":"AV:LRX-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":23.007,"fps":37.354,"stages":{"audio_decode":0.4676,"read":2.6187,"crop":0.0219,"preprocess":0.364,"buffer":0.045,"audio":7.8806,"model":13.7308},"run":"v0.0.0_wasd_AV-LRX-ASD_gt","started":"2026-11-17T02:01:23","map":0.8272533942295568,"f1":0.6535969125486999,"map_small":0.6133627169214049,"coverage":0.9991990764560005,"det_recall":null,"auc":0.876978808093856,"balanced_accuracy":0.7412346153642235},{"v":"v0.0.0","dataset":"wasd","model":"AV:Light-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":26.1243,"fps":34.652,"stages":{"audio_decode":0.4509,"read":1.9039,"crop":0.0213,"preprocess":0.3525,"buffer":0.0428,"audio":7.5435,"model":17.2534},"run":"v0.0.0_wasd_AV-Light-ASD_gt","started":"2026-11-16T23:42:56","map":0.8323432377478344,"f1":0.5986308773194019,"map_small":0.6095411684639496,"coverage":0.9991990764560005,"det_recall":null,"auc":0.8805209115471305,"balanced_accuracy":0.7117529862918213},{"v":"v0.0.0","dataset":"wasd","model":"AV:TalkNet","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":35.2913,"fps":26.795,"stages":{"audio_decode":0.4432,"read":1.4435,"crop":0.0223,"preprocess":0.3445,"buffer":0.0447,"audio":7.4029,"model":26.5551},"run":"v0.0.0_wasd_AV-TalkNet_gt","started":"2026-11-16T23:07:59","map":0.8162013963768419,"f1":0.615120927418232,"map_small":0.5874626657394109,"coverage":0.9991990764560005,"det_recall":null,"auc":0.8731669980126485,"balanced_accuracy":0.7196543723104316},{"v":"v0.0.0","dataset":"wasd","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":46.65,"fps":20.543,"stages":{"read":1.6947,"detect":32.7311,"track":0.0247,"crop":0.0722,"preprocess":12.7982,"model":0.342,"average":0.2633},"run":"v0.0.0_wasd_FaceShapeCausal_ava_detector","started":"2026-11-17T00:39:47","map":0.5497752797223099,"f1":0.4244154161944208,"map_small":0.45416481623200083,"coverage":0.8408872140001972,"det_recall":0.8408872140001972,"auc":0.7063575750512902,"balanced_accuracy":0.626354001037755},{"v":"v0.0.0","dataset":"wasd","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":11.7625,"fps":74.311,"stages":{"read":1.2842,"crop":0.0694,"preprocess":10.7649,"model":0.3262,"average":0.2697},"run":"v0.0.0_wasd_FaceShapeCausal_ava_gt","started":"2026-11-16T18:51:01","map":0.6437733518087703,"f1":0.4389196634911582,"map_small":0.4293522019221864,"coverage":0.9991990764560005,"det_recall":null,"auc":0.7567252000592425,"balanced_accuracy":0.6256426068379526},{"v":"v0.0.0","dataset":"wasd","model":"FaceShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":42.0359,"fps":22.831,"stages":{"read":1.4692,"detect":29.5589,"track":0.0243,"crop":0.0745,"preprocess":11.4109,"model":0.3224,"average":0.2471},"run":"v0.0.0_wasd_FaceShapeCausal_detector","started":"2026-11-16T23:36:38","map":0.44166065444821484,"f1":0.390410529545612,"map_small":0.4026707288427396,"coverage":0.8408872140001972,"det_recall":0.8408872140001972,"auc":0.6438416789496552,"balanced_accuracy":0.5947657878759778},{"v":"v0.0.0","dataset":"wasd","model":"FaceShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":12.4044,"fps":70.444,"stages":{"read":1.3232,"crop":0.0668,"preprocess":11.387,"model":0.3353,"average":0.2834},"run":"v0.0.0_wasd_FaceShapeCausal_gt","started":"2026-11-16T18:02:54","map":0.5998094836202352,"f1":0.5179854117792781,"map_small":0.4011625190199395,"coverage":0.9991990764560005,"det_recall":null,"auc":0.7328480468919246,"balanced_accuracy":0.643651536503505},{"v":"v0.0.0","dataset":"wasd","model":"LipShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":40.2825,"fps":23.917,"stages":{"read":1.2774,"detect":28.4758,"track":0.0242,"crop":0.0719,"preprocess":10.7838,"model":0.3075,"average":0.2414},"run":"v0.0.0_wasd_LipShapeCausal_ava_detector","started":"2026-11-16T22:05:49","map":0.5716207160105027,"f1":0.4991419383489957,"map_small":0.4510100504374434,"coverage":0.8408872140001972,"det_recall":0.8408872140001972,"auc":0.7191541550492334,"balanced_accuracy":0.6604788175402513},{"v":"v0.0.0","dataset":"wasd","model":"LipShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":10.8854,"fps":80.325,"stages":{"read":1.1728,"crop":0.0632,"preprocess":9.9585,"model":0.3017,"average":0.2598},"run":"v0.0.0_wasd_LipShapeCausal_ava_gt","started":"2026-11-16T16:25:20","map":0.6782278034755137,"f1":0.5487348496795827,"map_small":0.42327897966282685,"coverage":0.9991990764560005,"det_recall":null,"auc":0.7773843998187994,"balanced_accuracy":0.6723197540256507},{"v":"v0.0.0","dataset":"wasd","model":"LipShapeCausal","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":42.7002,"fps":22.575,"stages":{"read":1.3208,"detect":29.8342,"track":0.0245,"crop":0.0705,"preprocess":11.8157,"model":0.3139,"average":0.2468},"run":"v0.0.0_wasd_LipShapeCausal_detector","started":"2026-11-16T21:29:33","map":0.49562876453777405,"f1":0.4701611207243238,"map_small":0.43377857536156017,"coverage":0.8408872140001972,"det_recall":0.8408872140001972,"auc":0.6700493907975141,"balanced_accuracy":0.6343824158456471},{"v":"v0.0.0","dataset":"wasd","model":"LipShapeCausal","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"gpu","videos":751.0,"ms":11.5078,"fps":74.174,"stages":{"read":1.4975,"crop":0.067,"preprocess":10.5084,"model":0.3247,"average":0.2849},"run":"v0.0.0_wasd_LipShapeCausal_gt","started":"2026-11-16T16:07:44","map":0.6309118059136372,"f1":0.5853713867218028,"map_small":0.41539565534923795,"coverage":0.9991990764560005,"det_recall":null,"auc":0.7522643628781558,"balanced_accuracy":0.6752932440478804},{"v":"v0.0.0","dataset":"ava","model":"AV:LR-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"pi","videos":1.0,"ms":1602.5965,"fps":0.623,"stages":{"audio_decode":1.6864,"read":1.3011,"crop":0.0221,"preprocess":0.1989,"buffer":0.0406,"audio":10.8395,"model":1590.5212},"run":"v0.0.0-pi_ava_AV-LR-ASD_gt","started":"2026-11-13T23:33:17","map":0.571966133270597,"f1":0.4150779896013864,"map_small":0.3970653708643588,"coverage":1.0,"det_recall":null,"auc":0.832705331953234,"balanced_accuracy":0.6337581480012737},{"v":"v0.0.0","dataset":"ava","model":"AV:LRX-ASD","family":"av","boxes":"gt","variant":"","settings":"streaming","device":"pi","videos":1.0,"ms":986.7693,"fps":1.011,"stages":{"audio_decode":1.6066,"read":1.3161,"crop":0.0235,"preprocess":0.198,"buffer":0.0403,"audio":10.773,"model":974.7609},"run":"v0.0.0-pi_ava_AV-LRX-ASD_gt","started":"2026-11-14T22:22:47","map":0.5610370258023893,"f1":0.3935534768398512,"map_small":0.4391798155780612,"coverage":1.0,"det_recall":null,"auc":0.8314683566071617,"balanced_accuracy":0.6238550790732236},{"v":"v0.0.0","dataset":"ava","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"pi","videos":1.0,"ms":62.9278,"fps":15.539,"stages":{"read":1.0078,"detect":44.6725,"track":0.0308,"crop":0.0824,"preprocess":16.709,"model":0.5459,"average":0.2989},"run":"v0.0.0-pi_ava_FaceShapeCausal_ava_detector","started":"2026-11-13T13:29:17","map":0.15432309368035216,"f1":0.0812875068194217,"map_small":0.1931651107279283,"coverage":0.7038422950730768,"det_recall":0.7038422950730768,"auc":0.5362832971333276,"balanced_accuracy":0.5184033718450317},{"v":"v0.0.0","dataset":"ava","model":"FaceShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"pi","videos":1.0,"ms":11.7378,"fps":75.088,"stages":{"read":1.0348,"crop":0.0689,"preprocess":10.5848,"model":0.4434,"average":0.2474},"run":"v0.0.0-pi_ava_FaceShapeCausal_ava_gt","started":"2026-11-13T13:04:38","map":0.2184148944277719,"f1":0.008986071589036993,"map_small":0.13914149925347316,"coverage":1.0,"det_recall":null,"auc":0.5635912705571131,"balanced_accuracy":0.5003695144848114},{"v":"v0.0.0","dataset":"ava","model":"LipShapeCausal_ava","family":"landmarks","boxes":"detector","variant":"","settings":"streaming","device":"pi","videos":1.0,"ms":63.7051,"fps":15.367,"stages":{"read":0.952,"detect":45.4667,"track":0.0312,"crop":0.0842,"preprocess":16.7366,"model":0.5219,"average":0.2886},"run":"v0.0.0-pi_ava_LipShapeCausal_ava_detector","started":"2026-11-13T12:59:07","map":0.16338825628574977,"f1":0.18734863896154222,"map_small":0.20299706503352108,"coverage":0.7038422950730768,"det_recall":0.7038422950730768,"auc":0.5501506928183741,"balanced_accuracy":0.5492907506521822},{"v":"v0.0.0","dataset":"ava","model":"LipShapeCausal_ava","family":"landmarks","boxes":"gt","variant":"","settings":"streaming","device":"pi","videos":1.0,"ms":11.6274,"fps":75.882,"stages":{"read":1.0075,"crop":0.0695,"preprocess":10.523,"model":0.4059,"average":0.2448},"run":"v0.0.0-pi_ava_LipShapeCausal_ava_gt","started":"2026-11-13T12:34:10","map":0.2300251798872883,"f1":0.034316505955757234,"map_small":0.18427275950783378,"coverage":1.0,"det_recall":null,"auc":0.606051489721639,"balanced_accuracy":0.5026584531143744}]};
+const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces'};
+const MODELS = ['LipShapeCausal', 'FaceShapeCausal', 'CNN2Plus1D_Light', 'AV:LR-ASD', 'AV:Light-ASD', 'AV:LRX-ASD', 'AV:TalkNet', 'AV:CAST-ASD', 'AV:FabuLight'];
+const STAGES = [
+  ['read', ['read'], 'Read frame'], ['detect', ['detect'], 'Face detection'], ['track', ['track'], 'Tracking'],
+  ['crop', ['crop'], 'Crop'], ['pre', ['preprocess'], 'Preprocess / landmarks'], ['buffer', ['buffer'], 'Buffer'],
+  ['audio', ['audio', 'audio_decode'], 'Audio'], ['model', ['model'], 'Model'], ['average', ['average'], 'Averaging'],
+];
+const DATASETS = ['ava', 'unitalk', 'wasd', 'easycom'];
+const DNAME = {ava: 'AVA val', unitalk: 'UniTalk val', wasd: 'WASD val', easycom: 'EasyCom test'};
+const PROTO = {det: 'Full pipeline', gt: 'GT boxes'};
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = id => document.getElementById(id);
+const S = {dataset: null, metric: 'map', axis: null, vi: D.versions.length - 1, timer: null, sort: ['fps', -1]};
+
+const gpu = D.runs.filter(r => r.device === 'gpu');
+const pi = D.runs.filter(r => r.device === 'pi');
+const vIndex = Object.fromEntries(D.versions.map((v, i) => [v, i]));
+const cfg = r => [r.dataset, r.model, r.boxes, r.variant].join('|');
+const proto = r => r.boxes === 'gt' ? 'gt' : 'det';
+const label = r => r.model.replace(/^AV:/, '') + (r.variant ? ' (visual only)' : '');
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const pct = v => v == null ? null : v * 100;
+const otherModels = [...new Set(D.runs.map(r => r.model))].filter(m => !MODELS.includes(m)).sort();
+const mIndex = m => { const i = MODELS.indexOf(m); return i >= 0 ? i : MODELS.length + otherModels.indexOf(m); };
+const colorOf = m => tok('--m' + ((mIndex(m) % 9) + 1));
+const symbolOf = r => proto(r) === 'gt' ? 'square' : 'circle';
+const shown = r => $(proto(r) === 'gt' ? 'show-gt' : 'show-det').checked;
+
+function piTiming(r) {
+  // the Pi run of exactly this version, dataset, architecture, settings and boxes (matched by the
+  // generator); no other run stands in for it
+  return r.pi || null;
+}
+function xOf(r, vi, axis) {
+  // end-to-end frames per second of the run
+  const src = axis === 'gpu' ? r : piTiming(r);
+  return src && src.ms ? 1000 / src.ms : null;
+}
+const runsAt = vi => gpu.filter(r => vIndex[r.v] === vi && r.dataset === S.dataset);
+
+function defaultAxis() {
+  const rs = runsAt(S.vi);
+  const withPi = rs.filter(r => piTiming(r)).length;
+  return rs.length && withPi / rs.length >= 0.5 ? 'pi' : 'gpu';
+}
+
+function baseLayout(extra) {
+  const muted = tok('--muted'), line = tok('--line');
+  const ax = {gridcolor: line, zerolinecolor: line, linecolor: line, tickfont: {color: muted, size: 11}, automargin: true};
+  return Object.assign({
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    font: {family: tok('--f-body'), color: tok('--ink'), size: 12},
+    margin: {l: 10, r: 12, t: 8, b: 10}, hoverlabel: {font: {family: tok('--f-data')}},
+    showlegend: false, xaxis: Object.assign({}, ax), yaxis: Object.assign({}, ax),
+  }, extra || {});
+}
+const axTitle = t => ({text: t, font: {color: tok('--muted'), size: 12}, standoff: 8});
+const CONF = {responsive: true, displaylogo: false, displayModeBar: false};
+
+function yRange() {
+  // fixed over all versions, so movement on the slider is real movement
+  const ys = gpu.filter(r => r.dataset === S.dataset).map(r => pct(r[S.metric])).filter(v => v != null);
+  if (!ys.length) return [0, 100];
+  return [Math.max(0, Math.min(...ys) - 5), Math.min(100, Math.max(...ys) + 5)];
+}
+function xRange() {
+  const xs = [];
+  D.versions.forEach((_, i) => runsAt(i).forEach(r => { const x = xOf(r, i, S.axis); if (x != null) xs.push(x); }));
+  if (!xs.length) return undefined;
+  return [Math.log10(Math.min(...xs)) - 0.12, Math.log10(Math.max(...xs)) + 0.12];
+}
+
+function drawScatter() {
+  const vi = S.vi, axis = S.axis, m = S.metric;
+  const rs = runsAt(vi).filter(shown);
+  const pts = rs.map(r => ({r, x: xOf(r, vi, axis), y: pct(r[m])})).filter(p => p.x != null && p.y != null);
+  const hidden = rs.length - pts.length;
+  const tx = [], ty = [], trails = [];
+  for (const p of pts) {
+    const path = [];
+    for (let i = 0; i <= vi; i++) {
+      const q = gpu.find(g => vIndex[g.v] === i && cfg(g) === cfg(p.r));
+      if (q) { const x = xOf(q, i, axis), y = pct(q[m]); if (x != null && y != null) path.push([x, y]); }
+    }
+    if (path.length > 1) { for (const [x, y] of path) { tx.push(x); ty.push(y); } tx.push(null); ty.push(null); trails.push(path); }
+  }
+  const traces = [{x: tx, y: ty, mode: 'lines', line: {color: tok('--muted'), width: 1.5}, opacity: 0.35, hoverinfo: 'skip'}];
+  const showFront = $('show-front').checked;
+  for (const pr of ['det', 'gt']) {
+    const fx = [], fy = [];
+    if (showFront) {
+      let best = -Infinity;
+      // fastest first: a point is on the front when nothing faster is also more accurate
+      for (const p of pts.filter(p => proto(p.r) === pr).sort((a, b) => b.x - a.x || b.y - a.y)) if (p.y > best) { fx.unshift(p.x); fy.unshift(p.y); best = p.y; }
+    }
+    traces.push({x: fx, y: fy, mode: 'lines', line: {color: tok('--ink'), width: 1.2, dash: pr === 'gt' ? 'dot' : 'dash', shape: 'vh'}, opacity: 0.55, hoverinfo: 'skip'});
+  }
+  traces.push({
+    x: pts.map(p => p.x), y: pts.map(p => p.y), mode: 'markers', cliponaxis: false,
+    marker: {size: 12, color: pts.map(p => colorOf(p.r.model)), symbol: pts.map(p => symbolOf(p.r)), line: {color: tok('--panel'), width: 1.5}},
+    customdata: pts.map(p => [label(p.r), PROTO[proto(p.r)], p.r.settings, p.r.v, (1000 / p.x).toFixed(1)]),
+    hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.0f} fps (%{customdata[4]} ms/frame)<br>version %{customdata[3]}<extra></extra>',
+  });
+  // thin arrow from the GT-box square to the full-pipeline circle of the same model and audio setting
+  const arrows = [];
+  if ($('show-det').checked && $('show-gt').checked) {
+    for (const g of pts.filter(p => proto(p.r) === 'gt')) {
+      const d = pts.find(p => proto(p.r) === 'det' && p.r.model === g.r.model && p.r.variant === g.r.variant);
+      if (!d) continue;
+      arrows.push({x: Math.log10(d.x), y: d.y, ax: Math.log10(g.x), ay: g.y, xref: 'x', yref: 'y', axref: 'x', ayref: 'y',
+        text: '', showarrow: true, arrowhead: 2, arrowsize: 0.9, arrowwidth: 1, arrowcolor: colorOf(g.r.model),
+        opacity: 0.45, standoff: 7, startstandoff: 7});
+    }
+  }
+  S.scatterPts = pts; S.arrows = arrows; S.trails = trails;
+  const layout = baseLayout({
+    annotations: arrows,
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'log', range: xRange(), tickvals: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000],
+      title: axTitle($('scatter').clientWidth < 560 ? 'Frames per second (log)'
+        : 'Frames per second, end to end, ' + (axis === 'pi' ? 'Raspberry Pi 4' : 'GPU machine') + ' (log, faster to the right)')}),
+    yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
+    transition: {duration: reduced ? 0 : 450, easing: 'cubic-in-out'},
+  });
+  Plotly.react('scatter', traces, layout, CONF).then(placeLabels);
+  $('front-caption').hidden = !showFront;
+  const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
+  $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. Up is better, right is faster. ${timing}` +
+    (hidden ? ` ${hidden} run${hidden > 1 ? 's have' : ' has'} no ${axis === 'pi' ? 'Pi ' : ''}timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
+}
+
+// name labels next to the markers: right, left, above or below, the first spot that collides
+// with no marker and no label placed before; dropped when nothing fits (the hover still works)
+let measureCtx = null;
+function textWidth(t) {
+  measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+  measureCtx.font = `11px ${tok('--f-body')}`;
+  return measureCtx.measureText(t).width;
+}
+function placeLabels() {
+  const gd = $('scatter'), fl = gd._fullLayout;
+  if (!fl || !fl.xaxis || !S.scatterPts) return;
+  const xa = fl.xaxis, ya = fl.yaxis, W = fl._size.w, H = fl._size.h;
+  const P = S.scatterPts.map(p => ({p, x: xa.l2p(Math.log10(p.x)), y: ya.l2p(p.y)}));
+  const R = 7, GAP = 4, TH = 13;
+  const taken = P.map(q => [q.x - R, q.y - R, q.x + R, q.y + R]);
+  // the arrows and the trails too, as points every 3 px along each segment
+  const along = [];
+  const segment = (x0, y0, x1, y1) => {
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 3));
+    for (let i = 0; i <= n; i++) along.push([x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n]);
+  };
+  for (const a of S.arrows || []) segment(xa.l2p(a.ax), ya.l2p(a.ay), xa.l2p(a.x), ya.l2p(a.y));
+  for (const path of S.trails || [])
+    for (let i = 1; i < path.length; i++)
+      segment(xa.l2p(Math.log10(path[i - 1][0])), ya.l2p(path[i - 1][1]), xa.l2p(Math.log10(path[i][0])), ya.l2p(path[i][1]));
+  const hit = b => b[0] < 6 || b[1] < 0 || b[2] > W || b[3] > H ||
+    taken.some(t => b[0] < t[2] && b[2] > t[0] && b[1] < t[3] && b[3] > t[1]) ||
+    along.some(([x, y]) => x > b[0] - 2 && x < b[2] + 2 && y > b[1] - 2 && y < b[3] + 2);
+  const labels = [];
+  for (const q of [...P].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const text = label(q.p.r), tw = textWidth(text);
+    const spots = [
+      {b: [q.x + R + GAP, q.y - TH / 2, q.x + R + GAP + tw, q.y + TH / 2], xanchor: 'left', yanchor: 'middle', xshift: R + GAP, yshift: 0},
+      {b: [q.x - R - GAP - tw, q.y - TH / 2, q.x - R - GAP, q.y + TH / 2], xanchor: 'right', yanchor: 'middle', xshift: -R - GAP, yshift: 0},
+      {b: [q.x - tw / 2, q.y - R - GAP - TH, q.x + tw / 2, q.y - R - GAP], xanchor: 'center', yanchor: 'bottom', xshift: 0, yshift: R + GAP},
+      {b: [q.x - tw / 2, q.y + R + GAP, q.x + tw / 2, q.y + R + GAP + TH], xanchor: 'center', yanchor: 'top', xshift: 0, yshift: -R - GAP},
+      {b: [q.x + R, q.y - R - TH, q.x + R + tw, q.y - R], xanchor: 'left', yanchor: 'bottom', xshift: R, yshift: R},
+      {b: [q.x - R - tw, q.y - R - TH, q.x - R, q.y - R], xanchor: 'right', yanchor: 'bottom', xshift: -R, yshift: R},
+      {b: [q.x + R, q.y + R, q.x + R + tw, q.y + R + TH], xanchor: 'left', yanchor: 'top', xshift: R, yshift: -R},
+      {b: [q.x - R - tw, q.y + R, q.x - R, q.y + R + TH], xanchor: 'right', yanchor: 'top', xshift: -R, yshift: -R},
+    ];
+    const s = spots.find(c => !hit(c.b));
+    if (!s) continue;
+    taken.push(s.b);
+    labels.push({x: Math.log10(q.p.x), y: q.p.y, xref: 'x', yref: 'y', text, showarrow: false,
+      xanchor: s.xanchor, yanchor: s.yanchor, xshift: s.xshift, yshift: s.yshift,
+      font: {size: 11, color: colorOf(q.p.r.model), family: tok('--f-body')}, captureevents: false});
+  }
+  Plotly.relayout(gd, {annotations: (S.arrows || []).concat(labels)});
+}
+
+function modelChips() {
+  const ms = [...new Set(gpu.filter(r => r.dataset === S.dataset).map(r => r.model))].sort((a, b) => mIndex(a) - mIndex(b));
+  return ms.map(m => `<span><i class="sw" style="background:${colorOf(m)}"></i>${m.replace(/^AV:/, '')}</span>`).join('');
+}
+function drawLegends() {
+  const shapes = '<span><i class="sw ring"></i>Full pipeline</span><span><i class="sw sq ring"></i>GT boxes</span>';
+  $('legend').innerHTML = modelChips() + '<i class="sep"></i>' + shapes + '<span>faint line: earlier versions</span><span>arrow: GT boxes → full pipeline</span>';
+  $('legend-stages').innerHTML = STAGES.map(([id, , nm]) => `<span><i class="sw bar" style="background:var(--st-${id})"></i>${nm}</span>`).join('') +
+    '<span><i class="sw bar" style="background:var(--st-other)"></i>Other</span>';
+}
+
+function wrapTick(v) {
+  // break a long version name into lines of about 16 characters
+  const out = []; let line = '';
+  for (const w of v.split(' ')) { if (line && (line + ' ' + w).length > 16) { out.push(line); line = w; } else line = line ? line + ' ' + w : w; }
+  return out.concat(line ? [line] : []).join('<br>');
+}
+function changed(k, m) {
+  // the metric differs between two versions of this configuration by more than 0.05 points
+  const ys = gpu.filter(g => cfg(g) === k && g[m] != null).map(g => g[m] * 100);
+  return ys.length > 1 && Math.max(...ys) - Math.min(...ys) > 0.05;
+}
+function drawProgress() {
+  const m = S.metric;
+  let keys = [...new Set(gpu.filter(r => r.dataset === S.dataset && shown(r)).map(cfg))];
+  if ($('only-changed').checked) keys = keys.filter(k => changed(k, m));
+  $('progress-empty').hidden = keys.length > 0;
+  const models = [...new Set(keys.map(k => k.split('|')[1]))].sort((a, b) => mIndex(a) - mIndex(b));
+  $('legend-progress').innerHTML = models.map(mo => `<span><i class="sw" style="background:${colorOf(mo)}"></i>${mo.replace(/^AV:/, '')}</span>`).join('') +
+    (keys.length ? '<i class="sep"></i><span>● ─ Full pipeline</span><span>■ ┄ GT boxes</span>' : '');
+  $('progress').parentElement.hidden = !keys.length;
+  const traces = keys.map(k => {
+    const ys = D.versions.map((v, i) => { const r = gpu.find(g => vIndex[g.v] === i && cfg(g) === k); return r ? pct(r[m]) : null; });
+    const r = gpu.find(g => cfg(g) === k);
+    return {x: D.versions.map(wrapTick), y: ys, mode: 'lines+markers',
+      line: {color: colorOf(r.model), width: 2, dash: proto(r) === 'gt' ? 'dot' : 'solid'}, marker: {size: 8, symbol: symbolOf(r)},
+      hovertemplate: `<b>${label(r)}</b><br>${PROTO[proto(r)]}<br>%{x}: %{y:.1f}<extra></extra>`};
+  });
+  const layout = baseLayout({
+    margin: {l: 10, r: 16, t: 8, b: 16},
+    xaxis: Object.assign(baseLayout().xaxis, {type: 'category', range: [-0.3, D.versions.length - 0.7], tickangle: 0}),
+    yaxis: Object.assign(baseLayout().yaxis, {range: yRange(), title: axTitle(METRICS[m] + ' (%)')}),
+    shapes: [{type: 'line', xref: 'x', yref: 'paper', x0: wrapTick(D.versions[S.vi]), x1: wrapTick(D.versions[S.vi]), y0: 0, y1: 1, line: {color: tok('--accent'), width: 2}, opacity: 0.4}],
+  });
+  if (keys.length) Plotly.react('progress', traces, layout, CONF).then(() => Plotly.Plots.resize('progress'));
+}
+
+function drawStages() {
+  const vi = S.vi;
+  const all = runsAt(vi).filter(shown);
+  const rows = all.map(r => {
+    const src = S.axis === 'pi' ? piTiming(r) : r;
+    return src && {r, src, dev: S.axis === 'pi' ? 'Pi' : 'GPU', total: src.ms || 0};
+  }).filter(x => x && x.total).sort((a, b) => a.total - b.total);
+  const missing = all.length - rows.length;
+  const names = rows.map(x => `${label(x.r)}, ${proto(x.r) === 'gt' ? 'GT boxes' : 'full pipeline'} (${x.dev})`);
+  const traces = STAGES.map(([id, raw, nm]) => ({
+    type: 'bar', orientation: 'h', y: names,
+    x: rows.map(x => raw.reduce((s, k) => s + (x.src.stages[k] || 0), 0)),
+    marker: {color: tok('--st-' + id)}, hovertemplate: nm + ': %{x:.2f} ms<extra>%{y}</extra>',
+  }));
+  traces.push({type: 'bar', orientation: 'h', y: names, marker: {color: tok('--st-other')},
+    x: rows.map(x => Math.max(0, x.total - Object.values(x.src.stages).reduce((s, v) => s + v, 0))),
+    hovertemplate: 'Other: %{x:.2f} ms<extra>%{y}</extra>'});
+  // the names go above their bars, so they always fit, also at phone width
+  const annotations = names.map(n => ({x: 0, y: n, xref: 'x', yref: 'y', xanchor: 'left', yanchor: 'bottom', yshift: 10,
+    showarrow: false, text: n, font: {size: 11, color: tok('--muted'), family: tok('--f-body')}}));
+  const layout = baseLayout({
+    barmode: 'stack', bargap: 0.55, annotations, margin: {l: 4, r: 16, t: 22, b: 10},
+    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle('ms per frame'), rangemode: 'tozero'}),
+    yaxis: Object.assign(baseLayout().yaxis, {showticklabels: false, showgrid: false}),
+  });
+  $('stages').style.height = Math.max(240, 80 + rows.length * 46) + 'px';
+  Plotly.react('stages', traces, layout, CONF).then(() => Plotly.Plots.resize('stages'));
+  $('stages-sub').textContent = `Per frame, ${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. ` +
+    (S.axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing.') +
+    (missing ? ` ${missing} run${missing > 1 ? 's have' : ' has'} no ${S.axis === 'pi' ? 'Pi ' : ''}timing and ${missing > 1 ? 'are' : 'is'} not shown.` : '');
+}
+
+const COLS = [
+  ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['protocol', 'Protocol'], ['device', 'Device'],
+  ['videos', 'Videos', 0], ['map', 'mAP', 1], ['f1', 'F1', 1], ['map_small', 'mAP small', 1],
+  ['det_recall', 'Faces found', 1], ['fps', 'fps', 2], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
+];
+const val = (r, k) => k === 'protocol' ? PROTO[proto(r)] : k === 'model' ? label(r) : k === 'fps' ? (r.ms ? 1000 / r.ms : null) : r[k];
+function tableRows() {
+  const q = $('filter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let rs = D.runs.filter(r => !$('only-version').checked || vIndex[r.v] === S.vi);
+  rs = rs.filter(r => { const s = [r.v, r.dataset, DNAME[r.dataset], label(r), PROTO[proto(r)], r.device, r.settings].join(' ').toLowerCase(); return q.every(w => s.includes(w)); });
+  const [k, dir] = S.sort;
+  return rs.sort((a, b) => { const x = val(a, k), y = val(b, k); if (x == null) return 1; if (y == null) return -1; return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+}
+function fmt(v, kind) {
+  if (v == null || v === '') return '–';
+  if (kind === 1) return (v * 100).toFixed(1);
+  if (kind === 2) return v.toFixed(1);
+  return String(v);
+}
+function drawTable() {
+  const head = $('table').tHead, body = $('table').tBodies[0];
+  head.innerHTML = '<tr>' + COLS.map(([k, h]) => `<th data-k="${k}" aria-sort="${S.sort[0] === k ? (S.sort[1] > 0 ? 'ascending' : 'descending') : 'none'}" tabindex="0">${h}</th>`).join('') + '</tr>';
+  body.innerHTML = tableRows().map(r => '<tr>' + COLS.map(([k, , kind]) => {
+    const timingOnly = r.device === 'pi' && kind != null && kind !== 2;
+    if (k === 'model') return `<td><span class="dot" style="background:${colorOf(r.model)}"></span>${label(r)}</td>`;
+    if (k === 'device') return `<td><span class="pill ${r.device}">${r.device === 'pi' ? 'Pi 4' : 'GPU'}</span></td>`;
+    if (k === 'dataset') return `<td>${DNAME[r.dataset] || r.dataset}${r.device === 'pi' ? ' (timing only)' : ''}</td>`;
+    if (k === 'det_recall' && proto(r) === 'gt') return '<td class="n">–</td>';
+    return `<td class="${kind != null ? 'n' : ''}">${timingOnly ? '–' : fmt(val(r, k), kind)}</td>`;
+  }).join('') + '</tr>').join('');
+  head.querySelectorAll('th').forEach(th => {
+    const go = () => { const k = th.dataset.k; S.sort = [k, S.sort[0] === k ? -S.sort[1] : 1]; drawTable(); };
+    th.onclick = go; th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+  });
+}
+function copyCsv() {
+  const rs = tableRows();
+  const keys = ['v', 'dataset', 'model', 'protocol', 'device', 'settings', 'videos', 'map', 'f1', 'map_small', 'det_recall', 'ms', 'fps'];
+  const esc = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  const text = [keys.join(',')].concat(rs.map(r => keys.map(k => esc(val(r, k))).join(','))).join('\n');
+  const done = msg => { $('copied').textContent = msg; setTimeout(() => { $('copied').textContent = ''; }, 2500); };
+  const fallback = () => { const t = document.createElement('textarea'); t.className = 'copy'; t.value = text; document.body.appendChild(t); t.select(); done('Selected: press Ctrl+C to copy'); setTimeout(() => t.remove(), 8000); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(`Copied ${rs.length} rows`), fallback);
+  else fallback();
+}
+
+function drawVersion() {
+  $('version').value = S.vi;
+  [...$('ticks').children].forEach((t, i) => t.classList.toggle('on', i === S.vi));
+  $('vnote').textContent = D.notes[D.versions[S.vi]] || '';
+}
+function drawPlots() { drawScatter(); drawProgress(); drawStages(); }
+function drawAll() { drawVersion(); drawLegends(); drawPlots(); drawTable(); }
+
+function init() {
+  if (D.banner) { $('banner').textContent = D.banner; $('banner').hidden = false; }
+  const present = DATASETS.filter(d => gpu.some(r => r.dataset === d)).concat([...new Set(gpu.map(r => r.dataset))].filter(d => !DATASETS.includes(d)));
+  $('dataset').innerHTML = present.map(d => `<option value="${d}">${DNAME[d] || d}</option>`).join('');
+  S.dataset = present.find(d => gpu.some(r => r.dataset === d && r.boxes !== 'gt')) || present[0];
+  $('dataset').value = S.dataset;
+  $('metric').innerHTML = Object.entries(METRICS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('version').max = D.versions.length - 1;
+  $('ticks').innerHTML = D.versions.map(v => `<span>${v}</span>`).join('');
+  S.axis = defaultAxis(); $('axis').value = S.axis;
+  $('dataset').onchange = e => { S.dataset = e.target.value; S.axis = defaultAxis(); $('axis').value = S.axis; drawAll(); };
+  $('metric').onchange = e => { S.metric = e.target.value; drawScatter(); drawProgress(); };
+  $('axis').onchange = e => { S.axis = e.target.value; drawScatter(); drawStages(); };
+  for (const id of ['show-det', 'show-gt', 'show-front']) $(id).onchange = drawPlots;
+  $('version').oninput = e => { stop(); S.vi = +e.target.value; drawAll(); };
+  $('play').onclick = () => S.timer ? stop() : play();
+  $('only-changed').onchange = drawProgress; $('filter').oninput = drawTable; $('only-version').onchange = drawTable; $('copy').onclick = copyCsv;
+  drawAll();
+  let resizeTimer = null;
+  new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => {
+    Plotly.Plots.resize('scatter').then(drawScatter);
+    for (const id of ['progress', 'stages']) if ($(id).data) Plotly.Plots.resize(id);
+  }, 150); }).observe(document.querySelector('.wrap'));
+  const redraw = () => drawAll();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+  new MutationObserver(redraw).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+}
+function play() {
+  if (S.vi >= D.versions.length - 1) { S.vi = 0; drawAll(); }
+  $('play').textContent = 'Pause';
+  S.timer = setInterval(() => { if (S.vi >= D.versions.length - 1) return stop(); S.vi++; drawAll(); }, 1600);
+}
+function stop() { clearInterval(S.timer); S.timer = null; $('play').textContent = 'Play'; }
+if (window.Plotly) init(); else window.addEventListener('load', init);
+</script>
+</body>
+</html>
