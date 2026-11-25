@@ -177,7 +177,7 @@ footer { color: var(--muted); font-size: 13px; }
     <div class="scroll"><table id="table"><thead></thead><tbody></tbody></table></div>
   </section>
 
-  <footer>Timing on the GPU machine comes from a shared workstation and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed. The time is end to end per frame; runs on ground-truth boxes have no detection stage.</footer>
+  <footer>Timing on the GPU machine comes from a shared node of the DFKI cluster (TITAN Xp, from v0.0.0 on) and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed. The time is end to end per frame; runs on ground-truth boxes have no detection stage.</footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
@@ -202,7 +202,8 @@ const pi = D.runs.filter(r => r.device === 'pi');
 const vIndex = Object.fromEntries(D.versions.map((v, i) => [v, i]));
 const cfg = r => [r.dataset, r.model, r.boxes, r.variant].join('|');
 const proto = r => r.boxes === 'gt' ? 'gt' : 'det';
-const label = r => r.model.replace(/^AV:/, '') + (r.variant ? ' (visual only)' : '');
+const label = r => r.model.replace(/^AV:/, '') +
+  (r.variant ? ` (${r.variant === 'face only' ? 'visual only' : r.variant})` : '');
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const pct = v => v == null ? null : v * 100;
 const otherModels = [...new Set(D.runs.map(r => r.model))].filter(m => !MODELS.includes(m)).sort();
@@ -308,7 +309,7 @@ function drawScatter() {
   });
   Plotly.react('scatter', traces, layout, CONF).then(placeLabels);
   $('front-caption').hidden = !showFront;
-  const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared workstation; it varies with the machine\'s load.';
+  const timing = axis === 'pi' ? 'Raspberry Pi 4 timing.' : 'GPU timing from a shared cluster node; it varies with the machine\'s load.';
   $('scatter-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[vi]}. Up is better, right is faster. ${timing}` +
     (hidden ? ` ${hidden} run${hidden > 1 ? 's have' : ' has'} no ${axis === 'pi' ? 'Pi ' : ''}timing for this version and ${hidden > 1 ? 'are' : 'is'} not shown.` : '');
 }

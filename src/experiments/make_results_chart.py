@@ -113,16 +113,21 @@ def settings(row):
 
 
 def variant(row):
-    """Part of the configuration key besides model and boxes: AV models without audio.
+    """Part of the configuration key besides model and boxes.
+
+    AV models without audio, and landmark models whose box is placed from the AVA ground truth
+    (``shape_start_box=ava_gt``, #105), are configurations of their own.
 
     Args:
         row: One CSV row.
 
     Returns:
-        str: '' or 'face only'.
+        str: '', 'face only' or 'ava_gt start box'.
     """
     if row.get('architecture', '').startswith('AV:') and not _flag(row.get('audio')):
         return 'face only'
+    if row.get('shape_start_box') == 'ava_gt':
+        return 'ava_gt start box'
     return ''
 
 

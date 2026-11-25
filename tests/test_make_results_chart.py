@@ -61,6 +61,16 @@ def test_duplicate_configuration_keeps_the_later_run(tmp_path):
     assert '<html' not in out.read_text()
 
 
+def test_ava_gt_start_box_is_its_own_configuration(tmp_path):
+    """The ava_gt start-box run (#105) is not dropped as a duplicate of the normal run."""
+    write_csv([_summary('LipShapeCausal_ava', shape_start_box='none', map=0.4),
+               _summary('LipShapeCausal_ava', shape_start_box='ava_gt', map=0.5)],
+              tmp_path / 'a.csv')
+    data = build([('0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html', fragment=True)
+    assert sorted((r['variant'], r['map']) for r in data['runs']) == [
+        ('', 0.4), ('ava_gt start box', 0.5)]
+
+
 def test_settings_name_what_changes_results():
     """Defaults are left out; window mode, stride and dlib passes are named."""
     base = {'architecture': 'LipShapeCausal', 'causal_mode': 'streaming', 'stride': '1',
