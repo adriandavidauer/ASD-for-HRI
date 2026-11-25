@@ -1168,7 +1168,7 @@ def load_box_scores(result_dir):
 
 
 def map_on_faces(gt_rows, keys):
-    """mAP of one run over a subset of GT boxes, given by another run (#127).
+    """The mAP of one run over a subset of GT boxes, given by another run (#127).
 
     Args:
         gt_rows: GT rows of a run (``load_box_scores``).

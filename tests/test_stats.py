@@ -189,7 +189,11 @@ def test_annotated_range_covers_the_annotations_plus_warmup():
 
 
 def _gt_df(times_by_entity):
-    """GT rows of one video, one row per (entity, time), all of the given entity's label."""
+    """GT rows of one video, one row per (entity, time); only the entity 'speaker' speaks.
+
+    Returns:
+        pandas.DataFrame: The rows with the AVA columns.
+    """
     import pandas as pd
     rows = [('v', t, 0, 0, 1, 1, POS if e == 'speaker' else NEG, e)
             for e, times in times_by_entity.items() for t in times]

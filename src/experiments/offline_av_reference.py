@@ -115,7 +115,11 @@ def score_tracks(model, tracks, audio, fps, max_frames=1500):
 
 
 def main(argv=None):
-    """Command line entry point."""
+    """Command line entry point.
+
+    Raises:
+        SystemExit: For a dataset other than AVA.
+    """
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('--data_dir', default='data')
     p.add_argument('--dataset', default='ava', choices=list(_DEFAULT_GROUNDTRUTH))
