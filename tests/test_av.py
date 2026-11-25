@@ -98,3 +98,21 @@ def test_av_classifier_with_real_audio_uses_av_backend():
     image = np.full((120, 120, 3), 128, dtype=np.uint8)
     out = [clf(image, [(0, 0, 100, 100)], ['x'], t / 25.0)[0] for t in range(5)]
     assert all(s is not None for s in out)
+
+
+def test_detector_boxes_are_squared_for_av_models_as_for_landmark_models():
+    """Same detections, same output boxes as the landmark path; given boxes stay as they are (#124)."""
+    from paz.abstract.messages import Box2D
+
+    from asd4hri.asd import ASD
+    pipeline = ASD(architecture='AV:LR-ASD')
+    image = np.full((240, 320, 3), 128, dtype=np.uint8)
+    raw = (100, 40, 160, 140)                           # 60 wide, 100 high, like YuNet's faces
+    pipeline.detect = lambda img: {'boxes2D': [Box2D(np.array(raw, dtype=float), 1.0, 'face')]}
+    expected = pipeline.clip(image, pipeline.square([Box2D(np.array(raw, dtype=float), 1.0, 'face')]))
+    out = pipeline(image, timestamp=0.0)['boxes2D']
+    assert [tuple(b.coordinates) for b in out] == [tuple(expected[0].coordinates)]
+    x1, y1, x2, y2 = out[0].coordinates
+    assert x2 - x1 == y2 - y1                            # square
+    given = pipeline(image, [Box2D(np.array(raw, dtype=float), 1.0, 'face')], ['a'], 0.04)
+    assert tuple(given['boxes2D'][0].coordinates) == raw
