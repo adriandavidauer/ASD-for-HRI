@@ -202,7 +202,8 @@ const pi = D.runs.filter(r => r.device === 'pi');
 const vIndex = Object.fromEntries(D.versions.map((v, i) => [v, i]));
 const cfg = r => [r.dataset, r.model, r.boxes, r.variant].join('|');
 const proto = r => r.boxes === 'gt' ? 'gt' : 'det';
-const label = r => r.model.replace(/^AV:/, '') + (r.variant ? ' (visual only)' : '');
+const label = r => r.model.replace(/^AV:/, '') +
+  (r.variant ? ` (${r.variant === 'face only' ? 'visual only' : r.variant})` : '');
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const pct = v => v == null ? null : v * 100;
 const otherModels = [...new Set(D.runs.map(r => r.model))].filter(m => !MODELS.includes(m)).sort();
