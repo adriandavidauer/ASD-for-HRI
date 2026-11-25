@@ -121,20 +121,25 @@ def settings(row):
 def variant(row):
     """Part of the configuration key besides model and boxes.
 
-    AV models without audio, and landmark models whose box is placed from the AVA ground truth
-    (``shape_start_box=ava_gt``, #105), are configurations of their own.
+    AV models without audio, landmark models with dlib's start box for AVA's GT boxes
+    (``shape_start_box=ava_gt``, #105) and models gated by a voice activity detector
+    (``audio_gate``, #103) are configurations of their own.
 
     Args:
         row: One CSV row.
 
     Returns:
-        str: '', 'face only' or 'ava_gt start box'.
+        str: '' or the parts joined by ', ', e.g. 'VAD gate (silero), ava_gt start box'.
     """
     if row.get('architecture', '').startswith('AV:') and not _flag(row.get('audio')):
         return 'face only'
+    parts = []
+    if (row.get('audio_gate') or 'none') != 'none':
+        mode = row.get('gate_mode') or 'product'
+        parts.append(f"VAD gate ({row['audio_gate']}{'' if mode == 'product' else ', ' + mode})")
     if row.get('shape_start_box') == 'ava_gt':
-        return 'ava_gt start box'
-    return ''
+        parts.append('ava_gt start box')
+    return ', '.join(parts)
 
 
 def run_version(row, label):

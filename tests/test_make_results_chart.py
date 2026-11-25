@@ -71,6 +71,17 @@ def test_ava_gt_start_box_is_its_own_configuration(tmp_path):
         ('', 0.4), ('ava_gt start box', 0.5)]
 
 
+def test_audio_gate_is_its_own_configuration(tmp_path):
+    """Gated runs (#103) don't replace the plain run; the variant names gate and start box."""
+    write_csv([_summary('LipShapeCausal_ava'),
+               _summary('LipShapeCausal_ava', audio_gate='silero', gate_mode='product'),
+               _summary('LipShapeCausal_ava', audio_gate='silero', shape_start_box='ava_gt')],
+              tmp_path / 'a.csv')
+    data = build([('0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html', fragment=True)
+    assert sorted(r['variant'] for r in data['runs']) == [
+        '', 'VAD gate (silero)', 'VAD gate (silero), ava_gt start box']
+
+
 def test_runs_not_rerun_are_carried_from_the_latest_earlier_version(tmp_path):
     """A configuration without a new run shows its latest earlier run, marked (#129)."""
     write_csv([_summary('AV:LR-ASD', map=0.8), _summary('LipShapeCausal', map=0.3),
