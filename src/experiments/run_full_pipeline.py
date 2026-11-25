@@ -73,6 +73,11 @@ def build_parser():
     p.add_argument('--shape_start_box', default='none', choices=['none', 'ava_gt'],
                    help="Box of dlib's first pass for the landmark models: the whole crop, or "
                         "the typical landmark box of AVA's GT boxes (#105)")
+    p.add_argument('--audio_gate', default='none', choices=['none', 'webrtc', 'silero'],
+                   help='Gate every score with the per-frame speech probability of a voice '
+                        'activity detector (#103)')
+    p.add_argument('--gate_mode', default='product', choices=['product', 'min', 'hard'],
+                   help='How --audio_gate combines score and speech probability')
     p.add_argument('--boxes', default='detector', choices=['detector', 'gt'],
                    help='Face boxes to classify: the face detector (end-to-end protocol) or the '
                         'ground-truth boxes (literature protocol, detector skipped); see #75')
@@ -271,6 +276,8 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 window=getattr(args, 'window', 38),
                 shape_passes=getattr(args, 'shape_passes', 1),
                 shape_start_box=getattr(args, 'shape_start_box', 'none'),
+                audio_gate=getattr(args, 'audio_gate', 'none'),
+                gate_mode=getattr(args, 'gate_mode', 'product'),
                 time_range=annotated_range(all_gt.get(vid)),
                 frame_crop=_frame_crop(args.dataset, video_path)
             )

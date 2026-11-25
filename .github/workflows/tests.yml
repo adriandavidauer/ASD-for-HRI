@@ -33,6 +33,10 @@ jobs:
           path: src/models
           key: model-weights-v1
 
+      # ffmpeg decodes the test video's audio for the audio gate tests (#103)
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: Install
         # TensorFlow comes unpinned through pypaz; pin the version of the Docker image.
         # onnxruntime-gpu (picked on x86_64) falls back to its CPU provider without CUDA.

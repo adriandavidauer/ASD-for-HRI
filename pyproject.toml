@@ -22,6 +22,7 @@ dependencies = [
     "keras==3.6.0", 
     "opencv-python<5", # pypaz uses cv2.SOLVEPNP_UPNP, which OpenCV 5 removed
     "tqdm", # TODO: fix version or upper bound at least
+    "webrtcvad-wheels>=2.0.14,<3", # audio gate (#103); wheels for x86_64 and aarch64
     # Never install both: they share the `onnxruntime` import package and the CPU build overwrites
     # the GPU one. onnxruntime-gpu also ships the CPU provider; it has no ARM wheels (Raspberry Pi).
     "onnxruntime<2.0; platform_machine != 'x86_64'",

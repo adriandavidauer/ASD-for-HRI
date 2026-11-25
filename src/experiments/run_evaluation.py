@@ -122,7 +122,9 @@ def run_info(args):
             'audio': not args.no_audio,
             'causal_mode': args.causal_mode, 'window': args.window,
             'shape_passes': getattr(args, 'shape_passes', 1),
-            'shape_start_box': getattr(args, 'shape_start_box', 'none'), 'host': platform.node(),
+            'shape_start_box': getattr(args, 'shape_start_box', 'none'),
+            'audio_gate': getattr(args, 'audio_gate', 'none'),
+            'gate_mode': getattr(args, 'gate_mode', 'product'), 'host': platform.node(),
             'machine': platform.machine(), 'version': version, 'git_commit': commit,
             'started_at': datetime.now().isoformat(timespec='seconds')}
 
