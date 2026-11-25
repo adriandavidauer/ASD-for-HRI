@@ -823,6 +823,39 @@ def roc_auc(scores, positives):
     return float((ranks[positives].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
 
 
+EARLY_WINDOWS = ((0.5, '0.5s'), (1.0, '1s'), (2.0, '2s'))   # #118
+TRACK_GAP_STEPS = 3.0     # a gap of more than 3 median steps (>= 2 missing frames) starts a track
+
+
+def track_time(gt_df):
+    """Seconds since the start of its face track, for every GT row (#118).
+
+    A track is the run of one entity's GT boxes in one video. It starts at the entity's first
+    box and again after a gap of more than ``TRACK_GAP_STEPS`` of the entity's median frame
+    step, i.e. at least two missing frames. That is where the pipeline drops a face's buffer
+    (``max_consecutive_empty=2``), so the model starts from nothing there as well.
+
+    Args:
+        gt_df: GT rows with ``video_id``, ``entity_id`` and ``frame_timestamp``.
+
+    Returns:
+        pandas.Series: Seconds since track start, aligned with ``gt_df``'s index.
+    """
+    if gt_df.empty:
+        return pd.Series(dtype=float, index=gt_df.index)
+    df = gt_df[['video_id', 'entity_id', 'frame_timestamp']].copy()
+    df['frame_timestamp'] = df['frame_timestamp'].astype(float)
+    df = df.sort_values(['video_id', 'entity_id', 'frame_timestamp'])
+    key = df['video_id'].astype(str) + '\0' + df['entity_id'].astype(str)
+    step = df['frame_timestamp'].diff()
+    first = key.ne(key.shift())
+    step[first] = np.nan
+    median_step = step.groupby(key).transform('median')
+    new_track = first | (step > TRACK_GAP_STEPS * median_step.fillna(np.inf))
+    start = df['frame_timestamp'].where(new_track).ffill()
+    return (df['frame_timestamp'] - start).reindex(gt_df.index)
+
+
 def protocol_metrics(gt_df, fp_scores, n_detections, protocol,
                      decision_threshold=DECISION_THRESHOLD):
     """Headline metrics of one protocol over the given GT rows and unmatched detections.
@@ -834,7 +867,10 @@ def protocol_metrics(gt_df, fp_scores, n_detections, protocol,
         dict: ``map``, ``auc``, ``precision``, ``recall``, ``f1``, ``balanced_accuracy``,
         ``coverage`` (share of GT boxes with a score), detector ``det_recall`` /
         ``det_precision`` (detector protocol only) and per face-size bin ``map_<bin>``,
-        ``det_recall_<bin>`` and ``n_<bin>``.
+        ``det_recall_<bin>`` and ``n_<bin>``. Also ``map_first_<w>`` / ``n_first_<w>``: mAP over
+        the GT boxes of the first 0.5 s, 1 s and 2 s of each face track (#118), and for the
+        detector protocol ``map_detected``: mAP over the GT boxes the detector found, without
+        unmatched detections (#127).
     """
     fp_scores = np.asarray(fp_scores, dtype=float)
     pos = (gt_df['label'] == _AVA_POSITIVE).to_numpy()
@@ -867,6 +903,17 @@ def protocol_metrics(gt_df, fp_scores, n_detections, protocol,
         out['det_precision'] = (float(detected.sum() / n_detections) if n_detections
                                 else float('nan'))
         out['dropped_faces'] = int((~detected).sum())
+    if protocol == 'detector':
+        # the classifier on the faces it was given, without the cost of missed faces and of
+        # detections that match no face (#127)
+        out['map_detected'] = official_map(gt_df[gt_df['detected'].to_numpy(dtype=bool)])
+    elapsed = track_time(gt_df)
+    for seconds, name in EARLY_WINDOWS:
+        # like the face-size bins: the window's GT boxes ranked on their own, strict (a box
+        # without a prediction scores 0)
+        sub = gt_df[(elapsed < seconds).to_numpy()]
+        out[f'n_first_{name}'] = len(sub)
+        out[f'map_first_{name}'] = official_map(sub) if len(sub) else float('nan')
     for name, _lo, _hi in FACE_SIZE_BINS:
         sub = gt_df[gt_df['size_bin'] == name]
         out[f'n_{name}'] = len(sub)
@@ -1007,7 +1054,8 @@ def _score_video(vid, predictions_csv, gt_rows, iou_threshold, tol_s, result_dir
 _PROTOCOL_FIELDS = ['video_id', 'protocol', 'map', 'auc', 'precision', 'recall', 'f1',
                     'balanced_accuracy', 'tp', 'fp', 'fn', 'tn', 'coverage', 'gt_boxes',
                     'gt_positives', 'det_recall', 'det_precision', 'dropped_faces'] + \
-    [f'{m}_{b}' for b, _lo, _hi in FACE_SIZE_BINS for m in ('n', 'map', 'det_recall')]
+    [f'{m}_{b}' for b, _lo, _hi in FACE_SIZE_BINS for m in ('n', 'map', 'det_recall')] + \
+    ['map_detected'] + [f'{m}_first_{w}' for _s, w in EARLY_WINDOWS for m in ('n', 'map')]
 
 
 def _fmt(value):
@@ -1084,6 +1132,59 @@ def aggregate_stage_times(predictions_dir, result_dir):
     return out
 
 
+BOX_SCORES = 'box_scores.csv.gz'
+_BOX_SCORE_COLUMNS = ['video_id', 'frame_timestamp', 'entity_id', 'label', 'score', 'detected']
+
+
+def write_box_scores(result_dir, gt_df):
+    """Write one score per GT box (``box_scores.csv.gz``), for comparisons across runs (#127).
+
+    Args:
+        result_dir: Output directory.
+        gt_df: GT rows of all videos with ``score`` and ``detected``.
+    """
+    out = gt_df[_BOX_SCORE_COLUMNS].copy()
+    out['label'] = (out['label'] == _AVA_POSITIVE).astype(int)
+    out['detected'] = out['detected'].astype(int)
+    out.to_csv(os.path.join(result_dir, BOX_SCORES), index=False, float_format='%.6f')
+
+
+def load_box_scores(result_dir):
+    """Read ``box_scores.csv.gz`` back into AVA-style GT rows.
+
+    Args:
+        result_dir: The run's stats directory.
+
+    Returns:
+        pandas.DataFrame | None: The rows (``label`` as the AVA label), None if there is none.
+    """
+    path = os.path.join(result_dir, BOX_SCORES)
+    if not os.path.isfile(path):
+        return None
+    df = pd.read_csv(path, dtype={'video_id': str, 'entity_id': str})
+    df['label'] = np.where(df['label'] == 1, _AVA_POSITIVE, 'NOT_SPEAKING')
+    df['detected'] = df['detected'].astype(bool)
+    return df
+
+
+def map_on_faces(gt_rows, keys):
+    """mAP of one run over a subset of GT boxes, given by another run (#127).
+
+    Args:
+        gt_rows: GT rows of a run (``load_box_scores``).
+        keys: ``(video_id, frame_timestamp, entity_id)`` of the boxes to keep.
+
+    Returns:
+        float: The official mAP over those boxes, without unmatched detections.
+    """
+    index = pd.MultiIndex.from_frame(gt_rows[['video_id', 'frame_timestamp', 'entity_id']])
+    keep = index.isin(pd.MultiIndex.from_frame(keys))
+    sub = gt_rows[keep].copy()
+    for col in ('entity_box_x1', 'entity_box_y1', 'entity_box_x2', 'entity_box_y2'):
+        sub[col] = 0.0
+    return official_map(sub)
+
+
 def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, run_info=None,
                            categories=None):
     """Write ``protocol_results.csv`` (per video + pooled), the AVA CSVs and ``summary.json``.
@@ -1139,6 +1240,7 @@ def write_protocol_results(result_dir, per_video_protocol, times_by_video=None, 
         for row in rows:
             writer.writerow({k: _fmt(row.get(k)) for k in _PROTOCOL_FIELDS})
 
+    write_box_scores(result_dir, all_gt)
     if protocol == 'gt':
         all_gt[_AVA_COLUMNS].to_csv(os.path.join(result_dir, 'ava_groundtruth.csv'),
                                     header=False, index=False)

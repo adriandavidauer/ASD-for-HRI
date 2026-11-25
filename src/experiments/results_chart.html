@@ -167,6 +167,14 @@ footer { color: var(--muted); font-size: 13px; }
   </div>
 
   <section class="panel">
+    <h2>What the detector costs</h2>
+    <p class="sub" id="cost-sub"></p>
+    <div class="plotbox"><div id="cost" class="plot"></div></div>
+    <p class="caption" id="cost-empty" hidden>No run of this dataset and version has the breakdown yet.</p>
+    <div class="legend" id="legend-cost"></div>
+  </section>
+
+  <section class="panel">
     <h2>All runs</h2>
     <div class="table-tools">
       <input type="search" id="filter" placeholder="Filter, e.g. LR-ASD wasd" aria-label="Filter the runs">
@@ -183,7 +191,16 @@ footer { color: var(--muted); font-size: 13px; }
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 <script>
 const D = /*__DATA__*/null;
-const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces'};
+const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces',
+  'map_first_0.5s': 'mAP, first 0.5 s of a track', map_first_1s: 'mAP, first 1 s of a track',
+  map_first_2s: 'mAP, first 2 s of a track'};
+// the detector-cost breakdown (#127): from GT boxes on all faces to the full pipeline
+const COST = [
+  ['map_gt', 'GT boxes, all faces', 'square-open'],
+  ['map_gt_on_detected', 'GT boxes, faces the detector found', 'square'],
+  ['map_detected', 'Detector boxes, the same faces', 'circle'],
+  ['map', 'Full pipeline (missed faces and false detections count)', 'circle-open'],
+];
 const MODELS = ['LipShapeCausal', 'FaceShapeCausal', 'CNN2Plus1D_Light', 'AV:LR-ASD', 'AV:Light-ASD', 'AV:LRX-ASD', 'AV:TalkNet', 'AV:CAST-ASD', 'AV:FabuLight'];
 const STAGES = [
   ['read', ['read'], 'Read frame'], ['detect', ['detect'], 'Face detection'], ['track', ['track'], 'Tracking'],
@@ -446,10 +463,40 @@ function drawStages() {
     (missing ? ` ${missing} run${missing > 1 ? 's have' : ' has'} no ${S.axis === 'pi' ? 'Pi ' : ''}timing and ${missing > 1 ? 'are' : 'is'} not shown.` : '');
 }
 
+function drawCost() {
+  // per model: the GT-box run on all faces, on the faces the detector found, the detector run on
+  // those faces, and the full pipeline; the gaps are which faces are found, the crops, and the
+  // missed faces plus false detections (#127)
+  const rows = runsAt(S.vi).filter(r => proto(r) === 'det' && r.map_gt_on_detected != null && r.map_detected != null)
+    .sort((a, b) => (b.map_gt || 0) - (a.map_gt || 0));
+  $('cost-empty').hidden = rows.length > 0;
+  $('cost').style.display = rows.length ? '' : 'none';
+  const names = rows.map(r => label(r));
+  const traces = rows.map((r, i) => ({x: COST.map(([k]) => pct(r[k])), y: COST.map(() => names[i]), mode: 'lines',
+    line: {color: colorOf(r.model), width: 2}, opacity: 0.5, hoverinfo: 'skip', showlegend: false}));
+  for (const [k, nm, sym] of COST) {
+    traces.push({x: rows.map(r => pct(r[k])), y: names, mode: 'markers', name: nm,
+      marker: {size: 11, symbol: sym, color: rows.map(r => colorOf(r.model)), line: {width: 1.5, color: rows.map(r => colorOf(r.model))}},
+      customdata: rows.map(r => [vText(r), r.gt_partner || '']),
+      hovertemplate: `<b>%{y}</b><br>${nm}: %{x:.1f}<br>version %{customdata[0]}<extra></extra>`});
+  }
+  const layout = baseLayout({margin: {l: 8, r: 16, t: 10, b: 10}, showlegend: false,
+    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle('mAP (%)')}),
+    yaxis: Object.assign(baseLayout().yaxis, {autorange: 'reversed'})});
+  if (rows.length) {
+    $('cost').style.height = Math.max(220, 70 + rows.length * 34) + 'px';
+    Plotly.react('cost', traces, layout, CONF).then(() => Plotly.Plots.resize('cost'));
+  }
+  $('cost-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[S.vi]}. Left to right on a line: ` +
+    'which faces the detector finds, the different crops, then missed faces and detections without a face.';
+  $('legend-cost').innerHTML = COST.map(([, nm, sym]) =>
+    `<span><i class="sw${sym.startsWith('square') ? ' sq' : ''}${sym.endsWith('open') ? ' ring' : ''}" style="background:var(--muted)"></i>${nm}</span>`).join('');
+}
+
 const COLS = [
   ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['protocol', 'Protocol'], ['device', 'Device'],
   ['videos', 'Videos', 0], ['map', 'mAP', 1], ['f1', 'F1', 1], ['map_small', 'mAP small', 1],
-  ['det_recall', 'Faces found', 1], ['fps', 'fps', 2], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
+  ['det_recall', 'Faces found', 1], ['map_first_1s', 'mAP 1st s', 1], ['fps', 'fps', 2], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
 ];
 const val = (r, k) => k === 'protocol' ? PROTO[proto(r)] : k === 'model' ? label(r) : k === 'v' ? vText(r) : k === 'fps' ? (r.ms ? 1000 / r.ms : null) : r[k];
 function tableRows() {
@@ -497,7 +544,7 @@ function drawVersion() {
   [...$('ticks').children].forEach((t, i) => t.classList.toggle('on', i === S.vi));
   $('vnote').textContent = D.notes[D.versions[S.vi]] || '';
 }
-function drawPlots() { drawScatter(); drawProgress(); drawStages(); }
+function drawPlots() { drawScatter(); drawProgress(); drawStages(); drawCost(); }
 function drawAll() { drawVersion(); drawLegends(); drawPlots(); drawTable(); }
 
 function init() {
