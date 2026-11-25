@@ -2065,7 +2065,12 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 <span class="normal">462</span>
 <span class="normal">463</span>
 <span class="normal">464</span>
-<span class="normal">465</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="normal">465</span>
+<span class="normal">466</span>
+<span class="normal">467</span>
+<span class="normal">468</span>
+<span class="normal">469</span>
+<span class="normal">470</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">timestamp</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Detect faces in one frame and classify each of them as speaking or not speaking.</span>
 
 <span class="sd">    Args:</span>
@@ -2084,8 +2089,9 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 <span class="sd">        The image has the boxes drawn on it if ``annotate_output`` is True.</span>
 <span class="sd">    """</span>
     <span class="n">timer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timer</span>
+    <span class="n">detected</span> <span class="o">=</span> <span class="n">boxes2D</span> <span class="ow">is</span> <span class="kc">None</span>
     <span class="k">with</span> <span class="n">timer</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s1">'frame'</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">boxes2D</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">detected</span><span class="p">:</span>
             <span class="c1"># get the face boxes and crop the faces from the image</span>
             <span class="k">with</span> <span class="n">timer</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s1">'detect'</span><span class="p">):</span>
                 <span class="n">image_copy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
@@ -2095,8 +2101,12 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
             <span class="n">ids</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes2D</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">av</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># TalkNet-style models crop the (unsquared) box themselves</span>
+            <span class="c1"># detector boxes are squared as for the landmark models, so every model is scored</span>
+            <span class="c1"># on the same boxes and the crop isn't stretched (#124); given boxes (e.g. the</span>
+            <span class="c1"># ground truth) are used as they are, as in the models' own AVA preprocessing</span>
             <span class="k">with</span> <span class="n">timer</span><span class="o">.</span><span class="n">stage</span><span class="p">(</span><span class="s1">'crop'</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">detected</span><span class="p">:</span>
+                    <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">boxes2D</span><span class="p">)</span>
                 <span class="n">boxes2D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">)</span>
             <span class="n">scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">av</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="p">[</span><span class="n">b</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">boxes2D</span><span class="p">],</span> <span class="n">ids</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">score</span><span class="p">,</span> <span class="n">box</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">boxes2D</span><span class="p">):</span>
@@ -2185,18 +2195,18 @@ The image has the boxes drawn on it if <code>annotate_output</code> is True.</p>
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>src/asd4hri/asd.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">469</span>
-<span class="normal">470</span>
-<span class="normal">471</span>
-<span class="normal">472</span>
-<span class="normal">473</span>
-<span class="normal">474</span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">474</span>
 <span class="normal">475</span>
 <span class="normal">476</span>
 <span class="normal">477</span>
 <span class="normal">478</span>
 <span class="normal">479</span>
-<span class="normal">480</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<span class="normal">480</span>
+<span class="normal">481</span>
+<span class="normal">482</span>
+<span class="normal">483</span>
+<span class="normal">484</span>
+<span class="normal">485</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">architecture</span><span class="o">=</span><span class="s1">'CNN2Plus1D_Light'</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">averaging_window_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
              <span class="n">average_type</span><span class="o">=</span><span class="s1">'weighted'</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">colors</span><span class="o">=</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">min_frames</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span> <span class="n">patience</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Fail on construction because the class is deprecated.</span>
 
