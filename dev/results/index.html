@@ -371,6 +371,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#which-runs-a-release-has" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which runs a release has
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-the-data-comes-from" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -587,6 +598,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#which-runs-a-release-has" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which runs a release has
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-the-data-comes-from" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -624,6 +646,14 @@ version slider, the progress of each configuration, the time per pipeline stage 
 all runs.</p>
 <p><strong><a href="https://adriandavidauer.github.io/ASD-for-HRI/results/">Open the results page</a></strong></p>
 <p>The page is also attached to every release as <code>results.html</code>.</p>
+<h2 id="which-runs-a-release-has">Which runs a release has</h2>
+<p>All models run on every major release. In between, a release reruns only the configurations
+its changes affect, e.g. our own models after retraining them, or one protocol after a pipeline
+fix. The baselines from the literature don't have to be rerun every time.</p>
+<p>On the page, a configuration (dataset, model, boxes, variant) without a run in the selected
+version shows its latest earlier run, marked with <code>*</code>; the hover text and the table name the
+version the result comes from. Runs are never carried into a new major version, so a model
+that was dropped disappears there. A carried run keeps the Pi timing of its own version.</p>
 <h2 id="where-the-data-comes-from">Where the data comes from</h2>
 <p>The results only live in the releases; nothing is committed to the repository. Each <code>v*</code>
 release carries:</p>
