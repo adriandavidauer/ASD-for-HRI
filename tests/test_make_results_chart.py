@@ -43,7 +43,7 @@ def test_page_holds_all_versions_and_runs(tmp_path):
     assert html.startswith('<!doctype html>') and '<!--BODY-->' not in html
     data = _embedded(html)
     assert data['versions'] == ['0.0.0', '0.1.0'] and data['notes'] == {'0.1.0': 'fine-tuned'}
-    runs = data['runs']
+    runs = [r for r in data['runs'] if not r.get('from')]      # without carried runs (#129)
     assert [r['v'] for r in runs] == ['0.0.0'] * 3 + ['0.1.0']
     assert sorted(r['device'] for r in runs if r['v'] == '0.0.0') == ['gpu', 'gpu', 'pi']
     assert [r['variant'] for r in runs if r['model'] == 'AV:LR-ASD'] == ['face only']
@@ -71,6 +71,46 @@ def test_ava_gt_start_box_is_its_own_configuration(tmp_path):
         ('', 0.4), ('ava_gt start box', 0.5)]
 
 
+def test_runs_not_rerun_are_carried_from_the_latest_earlier_version(tmp_path):
+    """A configuration without a new run shows its latest earlier run, marked (#129)."""
+    write_csv([_summary('AV:LR-ASD', map=0.8), _summary('LipShapeCausal', map=0.3),
+               _summary('AV:LR-ASD', boxes='detector', map=0.1)], tmp_path / 'a.csv')
+    write_csv([_summary('LipShapeCausal', map=0.4)], tmp_path / 'b.csv')
+    write_csv([_summary('AV:LR-ASD', boxes='detector', map=0.6)], tmp_path / 'c.csv')
+    data = build([('v0.0.0', tmp_path / 'a.csv'), ('v0.0.1', tmp_path / 'b.csv'),
+                  ('v0.0.2', tmp_path / 'c.csv')], tmp_path / 'page.html', fragment=True)
+    shown = {(r['v'], r['model'], r['boxes']): (r['map'], r.get('from')) for r in data['runs']}
+    assert shown[('v0.0.1', 'LipShapeCausal', 'gt')] == (0.4, None)
+    assert shown[('v0.0.1', 'AV:LR-ASD', 'gt')] == (0.8, 'v0.0.0')
+    assert shown[('v0.0.2', 'AV:LR-ASD', 'gt')] == (0.8, 'v0.0.0')     # from its own run
+    assert shown[('v0.0.2', 'LipShapeCausal', 'gt')] == (0.4, 'v0.0.1')
+    assert shown[('v0.0.2', 'AV:LR-ASD', 'detector')] == (0.6, None)
+    assert len(data['runs']) == 3 + 1 + 2 + 1 + 2
+
+
+def test_nothing_is_carried_into_a_new_major_version(tmp_path):
+    """Every model runs on a major release, so a dropped model disappears there (#129)."""
+    write_csv([_summary('AV:LR-ASD'), _summary('LipShapeCausal')], tmp_path / 'a.csv')
+    write_csv([_summary('LipShapeCausal')], tmp_path / 'b.csv')
+    data = build([('v0.3.0', tmp_path / 'a.csv'), ('v1.0.0', tmp_path / 'b.csv')],
+                 tmp_path / 'page.html', fragment=True)
+    assert [r['model'] for r in data['runs'] if r['v'] == 'v1.0.0'] == ['LipShapeCausal']
+
+
+def test_carried_run_keeps_its_own_pi_timing(tmp_path):
+    """Pi timing is matched per version before carrying; a new run never gets an old one."""
+    write_csv([_summary('AV:LR-ASD'), _summary('LipShapeCausal')], tmp_path / 'a.csv')
+    write_csv([_summary('AV:LR-ASD', fps=1.0, stage_ms_per_frame={'frame': 1000.0}),
+               _summary('LipShapeCausal', fps=50.0, stage_ms_per_frame={'frame': 20.0})],
+              tmp_path / 'a_pi.csv')
+    write_csv([_summary('LipShapeCausal', map=0.7)], tmp_path / 'b.csv')
+    data = build([('v0.0.0', tmp_path / 'a.csv'), ('v0.0.1', tmp_path / 'b.csv')],
+                 tmp_path / 'page.html', fragment=True, pi={'v0.0.0': tmp_path / 'a_pi.csv'})
+    late = {r['model']: r for r in data['runs'] if r['v'] == 'v0.0.1'}
+    assert late['AV:LR-ASD']['pi']['ms'] == 1000.0 and late['AV:LR-ASD']['from'] == 'v0.0.0'
+    assert 'pi' not in late['LipShapeCausal'] and 'from' not in late['LipShapeCausal']
+
+
 def test_settings_name_what_changes_results():
     """Defaults are left out; window mode, stride and dlib passes are named."""
     base = {'architecture': 'LipShapeCausal', 'causal_mode': 'streaming', 'stride': '1',
@@ -86,7 +126,7 @@ def test_version_column_wins_over_the_label(tmp_path):
                _summary('FaceShapeCausal', version='0.0.1-dev'),
                _summary('CNN2Plus1D_Light')], tmp_path / 'a.csv')
     data = build([('v0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html')
-    assert {r['model']: r['v'] for r in data['runs']} == {
+    assert {r['model']: r['v'] for r in data['runs'] if not r.get('from')} == {
         'LipShapeCausal': 'v0.0.0', 'FaceShapeCausal': '0.0.1-dev', 'CNN2Plus1D_Light': 'v0.0.0'}
     assert data['versions'] == ['v0.0.0', '0.0.1-dev']
 
@@ -115,7 +155,7 @@ def test_pi_timing_only_from_the_same_configuration(tmp_path):
     data = build([('v0.0.0', tmp_path / 'a.csv'), ('v0.1.0', tmp_path / 'b.csv')],
                  tmp_path / 'page.html', pi={'v0.0.0': tmp_path / 'pi.csv'})
     timed = {(r['v'], r['dataset'], r['model']): r.get('pi', {}).get('ms')
-             for r in data['runs'] if r['device'] == 'gpu'}
+             for r in data['runs'] if r['device'] == 'gpu' and not r.get('from')}
     assert timed == {('v0.0.0', 'unitalk', 'LipShapeCausal'): 100.0,
                      ('v0.0.0', 'wasd', 'LipShapeCausal'): None,
                      ('v0.0.0', 'unitalk', 'FaceShapeCausal'): None,

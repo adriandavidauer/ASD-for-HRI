@@ -9,6 +9,17 @@ all runs.
 
 The page is also attached to every release as `results.html`.
 
+## Which runs a release has
+
+All models run on every major release. In between, a release reruns only the configurations
+its changes affect, e.g. our own models after retraining them, or one protocol after a pipeline
+fix. The baselines from the literature don't have to be rerun every time.
+
+On the page, a configuration (dataset, model, boxes, variant) without a run in the selected
+version shows its latest earlier run, marked with `*`; the hover text and the table name the
+version the result comes from. Runs are never carried into a new major version, so a model
+that was dropped disappears there. A carried run keeps the Pi timing of its own version.
+
 ## Where the data comes from
 
 The results only live in the releases; nothing is committed to the repository. Each `v*`
