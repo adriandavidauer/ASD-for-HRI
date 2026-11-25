@@ -177,7 +177,7 @@ footer { color: var(--muted); font-size: 13px; }
     <div class="scroll"><table id="table"><thead></thead><tbody></tbody></table></div>
   </section>
 
-  <footer>Timing on the GPU machine comes from a shared node of the DFKI cluster (TITAN Xp, from v0.0.0 on) and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed. The time is end to end per frame; runs on ground-truth boxes have no detection stage.</footer>
+  <footer>Timing on the GPU machine comes from a shared node of the DFKI cluster (TITAN Xp, from v0.0.0 on) and varies with its load; the Raspberry Pi timing is the reference for deployment. Pi runs cover only a few videos, so their accuracy is not plotted, only their speed. The time is end to end per frame; runs on ground-truth boxes have no detection stage. A * marks a result of an earlier version: that configuration wasn't rerun for the selected version (all models are rerun on every major release).</footer>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
@@ -203,7 +203,9 @@ const vIndex = Object.fromEntries(D.versions.map((v, i) => [v, i]));
 const cfg = r => [r.dataset, r.model, r.boxes, r.variant].join('|');
 const proto = r => r.boxes === 'gt' ? 'gt' : 'det';
 const label = r => r.model.replace(/^AV:/, '') +
-  (r.variant ? ` (${r.variant === 'face only' ? 'visual only' : r.variant})` : '');
+  (r.variant ? ` (${r.variant === 'face only' ? 'visual only' : r.variant})` : '') + (r.from ? '*' : '');
+// version of a run as shown: carried runs (#129) name the version their result comes from
+const vText = r => r.from ? `${r.v} (result of ${r.from})` : r.v;
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const pct = v => v == null ? null : v * 100;
 const otherModels = [...new Set(D.runs.map(r => r.model))].filter(m => !MODELS.includes(m)).sort();
@@ -284,7 +286,7 @@ function drawScatter() {
   traces.push({
     x: pts.map(p => p.x), y: pts.map(p => p.y), mode: 'markers', cliponaxis: false,
     marker: {size: 12, color: pts.map(p => colorOf(p.r.model)), symbol: pts.map(p => symbolOf(p.r)), line: {color: tok('--panel'), width: 1.5}},
-    customdata: pts.map(p => [label(p.r), PROTO[proto(p.r)], p.r.settings, p.r.v, (1000 / p.x).toFixed(1)]),
+    customdata: pts.map(p => [label(p.r), PROTO[proto(p.r)], p.r.settings, vText(p.r), (1000 / p.x).toFixed(1)]),
     hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]}<br>' + METRICS[m] + ' %{y:.1f} · %{x:.0f} fps (%{customdata[4]} ms/frame)<br>version %{customdata[3]}<extra></extra>',
   });
   // thin arrow from the GT-box square to the full-pipeline circle of the same model and audio setting
@@ -449,11 +451,11 @@ const COLS = [
   ['videos', 'Videos', 0], ['map', 'mAP', 1], ['f1', 'F1', 1], ['map_small', 'mAP small', 1],
   ['det_recall', 'Faces found', 1], ['fps', 'fps', 2], ['ms', 'ms/frame', 2], ['settings', 'Settings'],
 ];
-const val = (r, k) => k === 'protocol' ? PROTO[proto(r)] : k === 'model' ? label(r) : k === 'fps' ? (r.ms ? 1000 / r.ms : null) : r[k];
+const val = (r, k) => k === 'protocol' ? PROTO[proto(r)] : k === 'model' ? label(r) : k === 'v' ? vText(r) : k === 'fps' ? (r.ms ? 1000 / r.ms : null) : r[k];
 function tableRows() {
   const q = $('filter').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   let rs = D.runs.filter(r => !$('only-version').checked || vIndex[r.v] === S.vi);
-  rs = rs.filter(r => { const s = [r.v, r.dataset, DNAME[r.dataset], label(r), PROTO[proto(r)], r.device, r.settings].join(' ').toLowerCase(); return q.every(w => s.includes(w)); });
+  rs = rs.filter(r => { const s = [vText(r), r.dataset, DNAME[r.dataset], label(r), PROTO[proto(r)], r.device, r.settings].join(' ').toLowerCase(); return q.every(w => s.includes(w)); });
   const [k, dir] = S.sort;
   return rs.sort((a, b) => { const x = val(a, k), y = val(b, k); if (x == null) return 1; if (y == null) return -1; return (x > y ? 1 : x < y ? -1 : 0) * dir; });
 }

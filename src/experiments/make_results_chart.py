@@ -23,6 +23,12 @@ The version of a run is its ``version`` column (written by ``run_evaluation`` fr
 ``ASD4HRI_VERSION``) when present, otherwise the label given on the command line; a leading
 ``v`` is ignored when comparing the two.
 
+A configuration without a run in a version shows the latest earlier run of it, marked as
+carried (``from`` = the version it comes from; ``*`` on the page), so the baselines need not be
+rerun for every release (#129). All models run on every major release; runs are never carried
+into a new major version. Pi timing is matched per version before carrying, so a carried run
+keeps its own Pi timing and a new run never gets an old one.
+
 Release assets (see ``release_results``): ``benchmark.csv`` (required) and
 ``benchmark_pi.csv`` (optional) per ``v*`` release.
 
@@ -232,6 +238,47 @@ def attach_pi(runs):
     return runs
 
 
+def _major(version):
+    """The major number of a version label, e.g. ``1`` for ``v1.2.3``; None if not numeric.
+
+    Returns:
+        int | None: The major number.
+    """
+    head = version.lstrip('v').split('.')[0]
+    return int(head) if head.isdigit() else None
+
+
+def carry_forward(runs, order):
+    """Add, for every version, the latest earlier run of each configuration it didn't rerun.
+
+    A configuration is ``(device, dataset, model, boxes, variant)``; Pi runs are not carried
+    (their timing is already attached). Runs are not carried into another major version.
+
+    Args:
+        runs: The runs, Pi timing attached (``attach_pi``).
+        order: The versions, oldest first.
+
+    Returns:
+        list[dict]: ``runs`` plus the carried copies; a copy has ``v`` = the version it is shown
+        in and ``from`` = the version of its run.
+    """
+    def key(r):
+        """Identity of a configuration on one device.
+
+        Returns:
+            tuple: The key.
+        """
+        return r['device'], r['dataset'], r['model'], r['boxes'], r['variant']
+    latest, out = {}, list(runs)
+    for i, v in enumerate(order):
+        own = {key(r): r for r in runs if r['v'] == v and r['device'] != 'pi'}
+        if i and _major(v) != _major(order[i - 1]):
+            latest = {}
+        out += [dict(r, v=v, **{'from': r['v']}) for k, r in latest.items() if k not in own]
+        latest.update(own)
+    return out
+
+
 def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-for-HRI Results',
           pi=None):
     """Write the page.
@@ -254,6 +301,7 @@ def build(versions, out_path, notes=None, banner='', fragment=False, title='ASD-
     for v in [label for label, _ in versions] + [r['v'] for r in runs]:
         if v not in order and any(r['v'] == v for r in runs):
             order.append(v)
+    runs = carry_forward(runs, order)
     data = {'versions': order, 'notes': notes or {}, 'banner': banner, 'runs': runs}
     html = TEMPLATE.read_text()
     payload = json.dumps(data, separators=(',', ':')).replace('</', '<\\/')
