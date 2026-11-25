@@ -428,8 +428,9 @@ class ASD(Processor):
             The image has the boxes drawn on it if ``annotate_output`` is True.
         """
         timer = self.timer
+        detected = boxes2D is None
         with timer.stage('frame'):
-            if boxes2D is None:
+            if detected:
                 # get the face boxes and crop the faces from the image
                 with timer.stage('detect'):
                     image_copy = self.copy(image)
@@ -439,8 +440,12 @@ class ASD(Processor):
                 ids = None
             n = len(boxes2D)
             if self.av is not None:
-                # TalkNet-style models crop the (unsquared) box themselves
+                # detector boxes are squared as for the landmark models, so every model is scored
+                # on the same boxes and the crop isn't stretched (#124); given boxes (e.g. the
+                # ground truth) are used as they are, as in the models' own AVA preprocessing
                 with timer.stage('crop', n):
+                    if detected:
+                        boxes2D = self.square(boxes2D)
                     boxes2D = self.clip(image, boxes2D)
                 scores = self.av(image, [b.coordinates for b in boxes2D], ids, timestamp)
                 for score, box in zip(scores, boxes2D):
