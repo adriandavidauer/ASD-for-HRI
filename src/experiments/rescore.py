@@ -6,7 +6,9 @@ run's own settings, version and timing, and notes the code that rescored it unde
 ``rescored``. A carried baseline therefore gets the new metrics without being rerun.
 
 It also fills in the detector-cost breakdown (``detector_cost``): for every detector run, the
-GT-box run of the same configuration is scored on exactly the faces the detector found.
+GT-box run of the same configuration is scored as if it had missed the faces the detector run
+missed, which splits the drop to the full pipeline into faces not found, crop shape and extra
+detections.
 
 Usage (in the image, from ``/app``)::
 
@@ -20,7 +22,7 @@ import os
 from pathlib import Path
 
 from .run_evaluation import _DEFAULT_GROUNDTRUTH, code_version
-from .stats import load_box_scores, map_on_faces, run_stats
+from .stats import EARLY_WINDOWS, load_box_scores, map_without_faces, run_stats
 
 LOGGER = logging.getLogger('rescore')
 
@@ -87,14 +89,26 @@ def rescore(run_dir, data_dir, workers=None):
 
 
 def detector_cost(benchmark_dir, tag=''):
-    """Score every detector run's GT-box partner on the faces the detector found (#127).
+    """Split each detector run's drop from GT boxes to the full pipeline into its causes (#134).
 
     The partner is the GT-box run of the same configuration (``CONFIG_KEYS``), of the same tag
-    if there is one, otherwise the latest. Writes into the detector run's ``summary.json``:
-    ``gt_partner`` (its run), ``map_gt`` (its mAP on all faces) and ``map_gt_on_detected`` (its
-    mAP on the faces the detector found). With the detector run's own ``map_detected`` and
-    ``map``, the drop from GT boxes to the full pipeline splits into: which faces are found,
-    different crops, and missed faces plus detections without a face.
+    if there is one, otherwise the latest. Four mAPs, each one step closer to the full pipeline,
+    so that the differences add up to the whole drop:
+
+    ``map_gt``
+        The partner: GT boxes, all faces.
+    ``map_gt_found``
+        The partner with a score of 0 for every face the detector run gave no score (missed by
+        the detector, or no landmarks / buffer yet). ``map_gt - map_gt_found``: faces not found.
+    ``map_no_fp``
+        The detector run without its detections that match no face (its own summary). Same
+        faces missing as the step before, only the boxes differ: ``map_gt_found - map_no_fp``
+        is the crop shape.
+    ``map``
+        The full pipeline. ``map_no_fp - map``: extra detections.
+
+    The same four exist per early-track window (``<step>_first_<w>``). Writes them, with
+    ``gt_partner``, into the detector run's ``summary.json``.
 
     Args:
         benchmark_dir: The benchmark folder.
@@ -121,12 +135,18 @@ def detector_cost(benchmark_dir, tag=''):
         same_tag = [c for c in candidates if tag and c.name.startswith(f'{tag}_')]
         partner = max(same_tag or candidates, key=lambda c: runs[c].get('started_at', ''))
         det_rows, gt_rows = (load_box_scores(r / 'stats') for r in (run, partner))
-        if det_rows is None or gt_rows is None:
-            LOGGER.warning('%s: no box_scores.csv.gz yet, rescore first', run.name)
+        if det_rows is None or gt_rows is None or 'map_no_fp' not in s:
+            LOGGER.warning('%s: scored before #134, rescore it and its partner first', run.name)
             continue
-        found = det_rows.loc[det_rows['detected'], ['video_id', 'frame_timestamp', 'entity_id']]
-        s.update({'gt_partner': partner.name, 'map_gt': runs[partner].get('map'),
-                  'map_gt_on_detected': map_on_faces(gt_rows, found)})
+        scored = det_rows.loc[det_rows['has_score'], ['video_id', 'frame_timestamp', 'entity_id']]
+        found = map_without_faces(gt_rows, scored)
+        p = runs[partner]
+        s.pop('map_gt_on_detected', None)            # the #127 split, replaced by this one
+        s.update({'gt_partner': partner.name, 'map_gt': p.get('map'),
+                  'map_gt_found': found['map']})
+        for _sec, w in EARLY_WINDOWS:
+            s[f'map_gt_first_{w}'] = p.get(f'map_first_{w}')
+            s[f'map_gt_found_first_{w}'] = found[f'map_first_{w}']
         with open(run / 'stats' / 'summary.json', 'w') as f:
             json.dump(s, f, indent=2, default=str)
         updated += 1

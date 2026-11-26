@@ -232,14 +232,45 @@ def test_map_detected_leaves_out_missed_faces_and_false_detections():
     assert m['map_detected'] == pytest.approx(1.0)
 
 
-def test_box_scores_round_trip_and_map_on_faces(tmp_path):
-    """The per-box scores of a GT run, restricted to another run's faces (#127)."""
+def test_box_scores_round_trip_and_map_without_faces(tmp_path):
+    """A GT run's per-box scores, with another run's unscored faces set to missed (#134)."""
     gt = _gt_rows()
     perfect = _preds(gt, lambda r: float(r['ava_label'] == POS), True)
     _, gt_df, _, _ = stats.protocol_rows('v', stats.GroundTruthIndex(gt), perfect, 0.02)
     stats.write_box_scores(tmp_path, gt_df)
     rows = stats.load_box_scores(tmp_path)
-    assert len(rows) == len(gt_df) and rows['detected'].all()
-    keys = rows.loc[rows['entity_id'] == 'v:1', ['video_id', 'frame_timestamp', 'entity_id']]
-    assert stats.map_on_faces(rows, keys) == pytest.approx(1.0)
-    assert stats.map_on_faces(rows, keys.iloc[:0]) != stats.map_on_faces(rows, keys)
+    assert len(rows) == len(gt_df) and rows['detected'].all() and rows['has_score'].all()
+    keys = rows[['video_id', 'frame_timestamp', 'entity_id']]
+    assert stats.map_without_faces(rows, keys)['map'] == pytest.approx(1.0)
+    # the speaker's faces missed in the first second: its early boxes score 0
+    late = keys[~((keys['entity_id'] == 'v:1') & (keys['frame_timestamp'] < 1.0))]
+    m = stats.map_without_faces(rows, late)
+    assert m['map'] < 1.0 and m['map_first_0.5s'] < m['map_first_2s'] <= 1.0
+
+
+def test_detection_track_time_links_detections_across_frames():
+    """Detections continue a track at enough IoU and start one after a gap (#134)."""
+    box = (0.1, 0.1, 0.3, 0.4)
+    far = (0.6, 0.6, 0.9, 0.9)
+    by_ts = {round(f * 0.04, 2): [stats._PredBox(box, 'speaking', 0.5)] for f in range(10)}
+    by_ts[0.2].append(stats._PredBox(far, 'speaking', 0.5))         # appears once
+    for f in range(20, 23):                                          # after 9 missing frames
+        by_ts[round(f * 0.04, 2)] = [stats._PredBox(box, 'speaking', 0.5)]
+    t = stats.detection_track_time(by_ts)
+    times = {(ts, p.coordinates): t[id(p)] for ts, ps in by_ts.items() for p in ps}
+    assert times[(0.36, box)] == pytest.approx(0.36)
+    assert times[(0.2, far)] == 0.0
+    assert times[(0.84, box)] == pytest.approx(0.04)
+
+
+def test_early_track_map_of_a_detector_run_counts_its_early_false_detections():
+    """Unmatched detections count in the windows of their own detection track (#134)."""
+    gt = _gt_rows(100)
+    score = lambda r: 0.9 if r['ava_label'] == POS else 0.2  # noqa: E731
+    # a face nobody annotated, seen from 3.0 s on and always scored as speaking
+    extra = [(round(f * 0.04, 2), (0.4, 0.5, 0.55, 0.9), 0.95) for f in range(75, 100)]
+    _, m = _metrics(gt, _preds(gt, score, False, extra=extra))
+    assert m['map_no_fp'] == pytest.approx(1.0) and m['map'] < 1.0
+    # the extra face's track starts at 3.0 s: its first 0.5 s fall into the 0.5 s window
+    assert m['map_first_0.5s'] < 1.0
+    assert m['map_no_fp_first_0.5s'] == pytest.approx(1.0)
