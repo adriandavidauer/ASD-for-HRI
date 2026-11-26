@@ -353,14 +353,42 @@ class NormalizeShapeSample(Processor):
                 output_list.append(sample)
         return output_list
 
-# Start boxes of dlib's first pass, as fractions ``(x0, y0, x1, y1)`` of the face crop: where
-# the 2-pass landmarks typically lie in crops of that box source (median over AVA train,
-# ``src/model_training/estimate_landmark_box.py``, #105). Only worth it for loose boxes:
-# AVA val GT 39.7 -> 51.6 mAP, while UniTalk GT and YuNet boxes are better without.
+# Start boxes of dlib's first pass, as fractions ``(x0, y0, x1, y1)`` of the face crop.
+# The adjusted boxes (#132) are where dlib's own frontal face detector, whose boxes the 68-point
+# predictor was trained on, typically puts its box in the crops of a box source: the median of
+# the matched detections on train frames (``src/model_training/estimate_detector_box.py``;
+# n = 1091 AVA, 1968 WASD, 734 EasyCom), one per dataset's GT boxes and one for YuNet over all
+# three datasets (n = 3923; per dataset within 0.05 of it). 'ava_gt' (#105) is the older start
+# box, the median 2-pass landmark box of AVA train's GT crops; it stays so its runs can be redone.
 SHAPE_START_BOXES = {
     'none': None,
+    'ava': (0.201, 0.295, 0.817, 0.919),
+    'wasd': (0.123, 0.187, 0.880, 0.939),
+    'easycom': (0.045, 0.150, 0.924, 1.018),
+    'YuNet': (0.079, 0.135, 0.916, 0.971),
     'ava_gt': (0.150, 0.285, 0.873, 0.994),
 }
+
+
+def adjusted_start_box(dataset, boxes='gt'):
+    """The key of ``SHAPE_START_BOXES`` of the adjusted start box of a box source (#132).
+
+    Args:
+        dataset: Dataset of the run, e.g. 'ava'.
+        boxes: 'gt' for the dataset's GT boxes, else the detector's boxes (YuNet, the
+            pipeline's detector).
+
+    Returns:
+        str: The dataset for GT boxes, 'YuNet' for detector boxes.
+
+    Raises:
+        ValueError: If there is no adjusted start box for the dataset's GT boxes (e.g. UniTalk,
+            whose train split was not available for the estimation).
+    """
+    key = dataset if boxes == 'gt' else 'YuNet'
+    if key not in SHAPE_START_BOXES or key in ('none', 'ava_gt'):
+        raise ValueError(f'no adjusted start box for the GT boxes of {dataset!r}')
+    return key
 
 
 class GetShapeFeatures(Processor):
@@ -376,8 +404,8 @@ class GetShapeFeatures(Processor):
             expects the tight box of its own face detector, so a second pass helps with loose
             boxes such as AVA's GT boxes (#92); it doubles the cost.
         start_box: Box of the first pass, a key of ``SHAPE_START_BOXES``: 'none' for the whole
-            crop, or the typical landmark box of a box source (e.g. 'ava_gt'), which gives the
-            effect of a second pass for free (#105).
+            crop, or the adjusted box of a box source (e.g. 'ava', see ``adjusted_start_box``),
+            where dlib's face detector would put its box, at no extra cost (#105, #132).
     """
     def __init__(self, architecture='FaceShape', shape_predictor_path=None, passes=1,
                  start_box='none'):

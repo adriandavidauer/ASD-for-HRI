@@ -70,9 +70,11 @@ def build_parser():
     p.add_argument('--shape_passes', type=int, default=1,
                    help='dlib passes per face for the landmark models; 2 fits loose boxes '
                         'better (#92)')
-    p.add_argument('--shape_start_box', default='none', choices=['none', 'ava_gt'],
+    p.add_argument('--shape_start_box', default='none', choices=['none', 'adjusted', 'ava_gt'],
                    help="Box of dlib's first pass for the landmark models: the whole crop, or "
-                        "the typical landmark box of AVA's GT boxes (#105)")
+                        "'adjusted': where dlib's face detector typically puts its box in the "
+                        "crops of the run's box source (the dataset's GT boxes or YuNet, #132); "
+                        "'ava_gt' is the older landmark box of AVA's GT boxes (#105)")
     p.add_argument('--audio_gate', default='none', choices=['none', 'webrtc', 'silero'],
                    help='Gate every score with the per-frame speech probability of a voice '
                         'activity detector (#103)')
@@ -184,6 +186,26 @@ def _frame_crop(dataset, video_path):
     return None
 
 
+def resolve_start_box(args):
+    """The key of ``SHAPE_START_BOXES`` that ``--shape_start_box`` stands for in this run.
+
+    'adjusted' picks the constant of the run's box source (#132): the dataset's for GT boxes,
+    YuNet's for detector boxes. ``adjusted_start_box`` raises a ValueError for the GT boxes of
+    a dataset without a constant (UniTalk).
+
+    Args:
+        args: Parsed flags (``shape_start_box``, ``dataset``, ``boxes``).
+
+    Returns:
+        str: A key of ``SHAPE_START_BOXES``.
+    """
+    from asd4hri.processors import adjusted_start_box
+    name = getattr(args, 'shape_start_box', 'none')
+    if name != 'adjusted':
+        return name
+    return adjusted_start_box(args.dataset, getattr(args, 'boxes', 'detector'))
+
+
 def annotated_range(gt_rows, warmup_s=1.0, tail_s=0.5):
     """Time span of a video's annotations, widened by ``warmup_s`` for the temporal buffers.
 
@@ -235,6 +257,8 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
     skipped = []
     failed = []
 
+    # only the landmark models use it; fails before the first video if there is no constant
+    start_box = resolve_start_box(args) if 'Shape' in architecture else 'none'
     gt_boxes = None
     all_gt = load_groundtruth_boxes(groundtruth_csv) \
         if groundtruth_csv is not None and Path(groundtruth_csv).is_file() else {}
@@ -275,7 +299,7 @@ def run_pipeline_phase(args, video_list, result_dir, architecture, stride, groun
                 causal_mode=getattr(args, 'causal_mode', 'streaming'),
                 window=getattr(args, 'window', 38),
                 shape_passes=getattr(args, 'shape_passes', 1),
-                shape_start_box=getattr(args, 'shape_start_box', 'none'),
+                shape_start_box=start_box,
                 audio_gate=getattr(args, 'audio_gate', 'none'),
                 gate_mode=getattr(args, 'gate_mode', 'product'),
                 time_range=annotated_range(all_gt.get(vid)),

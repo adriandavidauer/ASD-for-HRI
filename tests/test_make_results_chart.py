@@ -61,14 +61,26 @@ def test_duplicate_configuration_keeps_the_later_run(tmp_path):
     assert '<html' not in out.read_text()
 
 
-def test_ava_gt_start_box_is_its_own_configuration(tmp_path):
-    """The ava_gt start-box run (#105) is not dropped as a duplicate of the normal run."""
+def test_adjusted_start_box_is_its_own_configuration(tmp_path):
+    """The adjusted start-box run (#132) is not dropped as a duplicate of the normal run."""
     write_csv([_summary('LipShapeCausal_ava', shape_start_box='none', map=0.4),
-               _summary('LipShapeCausal_ava', shape_start_box='ava_gt', map=0.5)],
+               _summary('LipShapeCausal_ava', shape_start_box='adjusted', map=0.5)],
               tmp_path / 'a.csv')
     data = build([('0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html', fragment=True)
     assert sorted((r['variant'], r['map']) for r in data['runs']) == [
-        ('', 0.4), ('ava_gt start box', 0.5)]
+        ('', 0.4), ('adjusted box', 0.5)]
+
+
+def test_old_ava_gt_runs_are_shown_as_adjusted_box(tmp_path):
+    """Runs with the older ava_gt start box (#105) get the same name as 'adjusted' (#132)."""
+    write_csv([_summary('LipShapeCausal_ava', shape_start_box='ava_gt', map=0.5)],
+              tmp_path / 'a.csv')
+    write_csv([_summary('LipShapeCausal_ava', shape_start_box='adjusted', map=0.6)],
+              tmp_path / 'b.csv')
+    data = build([('v0.1.0', tmp_path / 'a.csv'), ('v0.1.1', tmp_path / 'b.csv')],
+                 tmp_path / 'page.html', fragment=True)
+    assert {(r['v'], r['variant'], r['map']) for r in data['runs']} == {
+        ('v0.1.0', 'adjusted box', 0.5), ('v0.1.1', 'adjusted box', 0.6)}
 
 
 def test_audio_gate_is_its_own_configuration(tmp_path):
@@ -79,7 +91,7 @@ def test_audio_gate_is_its_own_configuration(tmp_path):
               tmp_path / 'a.csv')
     data = build([('0.0.0', tmp_path / 'a.csv')], tmp_path / 'page.html', fragment=True)
     assert sorted(r['variant'] for r in data['runs']) == [
-        '', 'VAD gate (silero)', 'VAD gate (silero), ava_gt start box']
+        '', 'VAD gate (silero)', 'VAD gate (silero), adjusted box']
 
 
 def test_runs_not_rerun_are_carried_from_the_latest_earlier_version(tmp_path):

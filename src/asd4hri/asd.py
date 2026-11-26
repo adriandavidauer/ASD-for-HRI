@@ -330,8 +330,10 @@ class ASD(Processor):
         window_size: Frames per prediction in the causal 'window' mode.
         shape_passes: dlib passes per face for the landmark models; 2 fits loose boxes better
             (``GetShapeFeatures``, #92).
-        shape_start_box: Box of dlib's first pass for the landmark models; 'ava_gt' fits AVA's
-            loose GT boxes (``GetShapeFeatures``, #105).
+        shape_start_box: Box of dlib's first pass for the landmark models, a key of
+            ``SHAPE_START_BOXES``: 'none', or the adjusted box of the box source, e.g. 'YuNet'
+            for the detector's boxes or 'ava' for AVA's GT boxes (``adjusted_start_box``,
+            #105, #132).
         audio_gate: Voice activity detector whose per-frame speech probability gates every
             face's score: 'none', 'webrtc' or 'silero' (``asd4hri.vad``, #103). Needs
             ``set_audio`` and the frame timestamps.

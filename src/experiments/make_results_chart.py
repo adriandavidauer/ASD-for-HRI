@@ -122,18 +122,23 @@ def settings(row):
     return ', '.join(parts)
 
 
+# shape_start_box values of the adjusted dlib start box: 'ava_gt' (#105) was its first version
+ADJUSTED_START_BOXES = ('adjusted', 'ava_gt')
+
+
 def variant(row):
     """Part of the configuration key besides model and boxes.
 
-    AV models without audio, landmark models with dlib's start box for AVA's GT boxes
-    (``shape_start_box=ava_gt``, #105) and models gated by a voice activity detector
-    (``audio_gate``, #103) are configurations of their own.
+    AV models without audio, landmark models with an adjusted start box for dlib
+    (``shape_start_box=adjusted``, #132, or the older ``ava_gt``, #105, both shown as
+    'adjusted box') and models gated by a voice activity detector (``audio_gate``, #103) are
+    configurations of their own.
 
     Args:
         row: One CSV row.
 
     Returns:
-        str: '' or the parts joined by ', ', e.g. 'VAD gate (silero), ava_gt start box'.
+        str: '' or the parts joined by ', ', e.g. 'VAD gate (silero), adjusted box'.
     """
     if row.get('architecture', '').startswith('AV:') and not _flag(row.get('audio')):
         return 'face only'
@@ -141,8 +146,8 @@ def variant(row):
     if (row.get('audio_gate') or 'none') != 'none':
         mode = row.get('gate_mode') or 'product'
         parts.append(f"VAD gate ({row['audio_gate']}{'' if mode == 'product' else ', ' + mode})")
-    if row.get('shape_start_box') == 'ava_gt':
-        parts.append('ava_gt start box')
+    if row.get('shape_start_box') in ADJUSTED_START_BOXES:
+        parts.append('adjusted box')
     return ', '.join(parts)
 
 
