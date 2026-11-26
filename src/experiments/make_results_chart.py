@@ -49,7 +49,9 @@ from pathlib import Path
 
 TEMPLATE = Path(__file__).with_name('results_chart.html')
 PI_MACHINES = {'aarch64', 'arm64'}
-METRICS = ['map', 'f1', 'map_small', 'coverage', 'det_recall', 'auc', 'balanced_accuracy']
+METRICS = ['map', 'f1', 'map_small', 'coverage', 'det_recall', 'auc', 'balanced_accuracy',
+           'map_first_0.5s', 'map_first_1s', 'map_first_2s',          # early-track mAP (#118)
+           'map_detected', 'map_gt', 'map_gt_on_detected']           # detector cost (#127)
 
 
 def family(architecture):

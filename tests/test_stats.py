@@ -186,3 +186,60 @@ def test_annotated_range_covers_the_annotations_plus_warmup():
     assert annotated_range(rows) == pytest.approx((899.5, 1800.4))
     assert annotated_range([(0.2, 'a', (0, 0, 1, 1))])[0] == 0.0
     assert annotated_range([]) is None
+
+
+def _gt_df(times_by_entity):
+    """GT rows of one video, one row per (entity, time); only the entity 'speaker' speaks.
+
+    Returns:
+        pandas.DataFrame: The rows with the AVA columns.
+    """
+    import pandas as pd
+    rows = [('v', t, 0, 0, 1, 1, POS if e == 'speaker' else NEG, e)
+            for e, times in times_by_entity.items() for t in times]
+    return pd.DataFrame(rows, columns=stats._AVA_COLUMNS)
+
+
+def test_track_time_restarts_after_a_gap_of_two_missing_frames():
+    """A track starts at an entity's first box and again after >= 2 missing frames (#118)."""
+    times = [0.0, 0.04, 0.08, 0.16, 0.20, 0.36, 0.40]   # 1 missing frame, then 3 missing
+    t = stats.track_time(_gt_df({'a': times, 'b': [1.0, 1.04]}))
+    assert list(np.round(t, 2)) == [0.0, 0.04, 0.08, 0.16, 0.20, 0.0, 0.04, 0.0, 0.04]
+
+
+def test_early_track_map_is_strict_for_models_without_early_predictions():
+    """A model that only predicts after 1 s of a track scores the positive rate early (#118)."""
+    gt = _gt_rows(100)
+    late = _preds(gt, lambda r: float(r['ava_label'] == POS), True,
+                  drop=lambda r: r['frame_timestamp'] < 1.0)
+    _, m = _metrics(gt, late)
+    assert m['n_first_0.5s'] == 2 * 13 and m['n_first_2s'] == 2 * 50
+    # within the first second every box scores 0: the ranking is no better than chance
+    assert m['map_first_0.5s'] == pytest.approx(0.5 * 12 / 26 / 0.5, abs=0.25)
+    assert m['map_first_0.5s'] < 0.6 < m['map_first_2s'] < m['map']
+    _, m = _metrics(gt, _preds(gt, lambda r: float(r['ava_label'] == POS), True))
+    assert m['map_first_0.5s'] == pytest.approx(1.0)
+
+
+def test_map_detected_leaves_out_missed_faces_and_false_detections():
+    """``map_detected`` scores only the faces the detector found (#127)."""
+    gt = _gt_rows()
+    score = lambda r: 0.9 if r['ava_label'] == POS else 0.2  # noqa: E731
+    dropped = lambda r: r['entity_id'] == 'v:1' and r['frame_timestamp'] < 1.0  # noqa: E731
+    extra = [(round(f * 0.04, 2), (0.85, 0.5, 0.95, 0.7), 0.95) for f in range(50)]
+    _, m = _metrics(gt, _preds(gt, score, False, drop=dropped, extra=extra))
+    assert m['map'] < 1.0
+    assert m['map_detected'] == pytest.approx(1.0)
+
+
+def test_box_scores_round_trip_and_map_on_faces(tmp_path):
+    """The per-box scores of a GT run, restricted to another run's faces (#127)."""
+    gt = _gt_rows()
+    perfect = _preds(gt, lambda r: float(r['ava_label'] == POS), True)
+    _, gt_df, _, _ = stats.protocol_rows('v', stats.GroundTruthIndex(gt), perfect, 0.02)
+    stats.write_box_scores(tmp_path, gt_df)
+    rows = stats.load_box_scores(tmp_path)
+    assert len(rows) == len(gt_df) and rows['detected'].all()
+    keys = rows.loc[rows['entity_id'] == 'v:1', ['video_id', 'frame_timestamp', 'entity_id']]
+    assert stats.map_on_faces(rows, keys) == pytest.approx(1.0)
+    assert stats.map_on_faces(rows, keys.iloc[:0]) != stats.map_on_faces(rows, keys)

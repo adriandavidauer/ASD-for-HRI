@@ -39,7 +39,8 @@ TABLE_COLUMNS = [
     ('dataset', 'Dataset', '{}'), ('architecture', 'Model', '{}'), ('boxes', 'Boxes', '{}'),
     ('map', 'mAP', '{:.1%}'), ('auc', 'AUC', '{:.3f}'), ('f1', 'F1', '{:.3f}'),
     ('balanced_accuracy', 'Bal. acc.', '{:.3f}'), ('det_recall', 'Det. recall', '{:.1%}'),
-    ('map_small', 'mAP small', '{:.1%}'), ('fps', 'FPS', '{:.1f}'),
+    ('map_small', 'mAP small', '{:.1%}'), ('map_first_1s', 'mAP 1st s', '{:.1%}'),
+    ('fps', 'FPS', '{:.1f}'),
 ]
 
 
@@ -209,6 +210,9 @@ def main(argv=None):
                     if subprocess.run(cmd).returncode != 0:
                         failed.append(run_dir.name)
 
+    if not args.dry_run and benchmark_dir.is_dir():
+        from .rescore import detector_cost
+        detector_cost(benchmark_dir, args.tag)       # GT run on the detected faces (#127)
     rows = collect(benchmark_dir, args.tag)
     if rows:
         # not with_suffix: a tag like v0.0.0 has dots of its own
