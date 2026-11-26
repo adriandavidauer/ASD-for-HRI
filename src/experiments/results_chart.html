@@ -102,6 +102,7 @@ th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: le
 th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); cursor: pointer; user-select: none; background: var(--panel); }
 th[aria-sort="ascending"]::after { content: " ▲"; } th[aria-sort="descending"]::after { content: " ▼"; }
 td.n { text-align: right; font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+#cost-table th { cursor: default; } #cost-table th:not(:first-child) { text-align: right; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .pill { font: 500 11px/1 var(--f-data); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
 .pill.pi { color: var(--accent); border-color: var(--accent); }
@@ -172,6 +173,7 @@ footer { color: var(--muted); font-size: 13px; }
     <div class="plotbox"><div id="cost" class="plot"></div></div>
     <p class="caption" id="cost-empty" hidden>No run of this dataset and version has the breakdown yet.</p>
     <div class="legend" id="legend-cost"></div>
+    <div class="scroll"><table id="cost-table" hidden><thead></thead><tbody></tbody></table></div>
   </section>
 
   <section class="panel">
@@ -194,13 +196,14 @@ const D = /*__DATA__*/null;
 const METRICS = {map: 'mAP', f1: 'F1', map_small: 'mAP, small faces',
   'map_first_0.5s': 'mAP, first 0.5 s of a track', map_first_1s: 'mAP, first 1 s of a track',
   map_first_2s: 'mAP, first 2 s of a track'};
-// the detector-cost breakdown (#127): from GT boxes on all faces to the full pipeline
+// the detector-cost breakdown (#134): from GT boxes to the full pipeline, one cause per step
 const COST = [
-  ['map_gt', 'GT boxes, all faces', 'square-open'],
-  ['map_gt_on_detected', 'GT boxes, faces the detector found', 'square'],
-  ['map_detected', 'Detector boxes, the same faces', 'circle'],
-  ['map', 'Full pipeline (missed faces and false detections count)', 'circle-open'],
+  ['map_gt', 'GT boxes', 'square-open'],
+  ['map_gt_found', 'GT boxes, the faces the pipeline didn\u2019t score count as missed', 'square'],
+  ['map_no_fp', 'Detector boxes, without detections that match no face', 'circle'],
+  ['map', 'Full pipeline', 'circle-open'],
 ];
+const COST_STEPS = ['Faces not found', 'Crop shape', 'Extra detections'];
 const MODELS = ['LipShapeCausal', 'FaceShapeCausal', 'CNN2Plus1D_Light', 'AV:LR-ASD', 'AV:Light-ASD', 'AV:LRX-ASD', 'AV:TalkNet', 'AV:CAST-ASD', 'AV:FabuLight'];
 const STAGES = [
   ['read', ['read'], 'Read frame'], ['detect', ['detect'], 'Face detection'], ['track', ['track'], 'Tracking'],
@@ -463,35 +466,49 @@ function drawStages() {
     (missing ? ` ${missing} run${missing > 1 ? 's have' : ' has'} no ${S.axis === 'pi' ? 'Pi ' : ''}timing and ${missing > 1 ? 'are' : 'is'} not shown.` : '');
 }
 
+function costSuffix() { return S.metric.startsWith('map_first_') ? S.metric.slice(3) : ''; }
+
 function drawCost() {
-  // per model: the GT-box run on all faces, on the faces the detector found, the detector run on
-  // those faces, and the full pipeline; the gaps are which faces are found, the crops, and the
-  // missed faces plus false detections (#127)
-  const rows = runsAt(S.vi).filter(r => proto(r) === 'det' && r.map_gt_on_detected != null && r.map_detected != null)
-    .sort((a, b) => (b.map_gt || 0) - (a.map_gt || 0));
+  // per model four mAPs, each one step closer to the full pipeline; the steps between them are
+  // the faces not found, the crop shape and the extra detections, and add up to the whole drop
+  const suf = costSuffix(), key = k => k + suf;
+  const rows = runsAt(S.vi).filter(r => proto(r) === 'det' && COST.every(([k]) => r[key(k)] != null))
+    .sort((a, b) => (b[key('map_gt')] || 0) - (a[key('map_gt')] || 0));
   $('cost-empty').hidden = rows.length > 0;
   $('cost').style.display = rows.length ? '' : 'none';
+  $('cost-table').hidden = !rows.length;
   const names = rows.map(r => label(r));
-  const traces = rows.map((r, i) => ({x: COST.map(([k]) => pct(r[k])), y: COST.map(() => names[i]), mode: 'lines',
+  const traces = rows.map((r, i) => ({x: COST.map(([k]) => pct(r[key(k)])), y: COST.map(() => names[i]), mode: 'lines',
     line: {color: colorOf(r.model), width: 2}, opacity: 0.5, hoverinfo: 'skip', showlegend: false}));
-  for (const [k, nm, sym] of COST) {
-    traces.push({x: rows.map(r => pct(r[k])), y: names, mode: 'markers', name: nm,
+  COST.forEach(([k, nm, sym], j) => {
+    traces.push({x: rows.map(r => pct(r[key(k)])), y: names, mode: 'markers', name: nm,
       marker: {size: 11, symbol: sym, color: rows.map(r => colorOf(r.model)), line: {width: 1.5, color: rows.map(r => colorOf(r.model))}},
-      customdata: rows.map(r => [vText(r), r.gt_partner || '']),
-      hovertemplate: `<b>%{y}</b><br>${nm}: %{x:.1f}<br>version %{customdata[0]}<extra></extra>`});
-  }
+      customdata: rows.map(r => [vText(r), j ? `${COST_STEPS[j - 1]}: ${fmtDelta(r[key(k)] - r[key(COST[j - 1][0])])}<br>` : '']),
+      hovertemplate: `<b>%{y}</b><br>${nm}: %{x:.1f}<br>%{customdata[1]}version %{customdata[0]}<extra></extra>`});
+  });
   const layout = baseLayout({margin: {l: 8, r: 16, t: 10, b: 10}, showlegend: false,
-    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle('mAP (%)')}),
+    xaxis: Object.assign(baseLayout().xaxis, {title: axTitle((METRICS[S.metric] && suf ? METRICS[S.metric] : 'mAP') + ' (%)')}),
     yaxis: Object.assign(baseLayout().yaxis, {autorange: 'reversed'})});
   if (rows.length) {
     $('cost').style.height = Math.max(220, 70 + rows.length * 34) + 'px';
     Plotly.react('cost', traces, layout, CONF).then(() => Plotly.Plots.resize('cost'));
   }
-  $('cost-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[S.vi]}. Left to right on a line: ` +
-    'which faces the detector finds, the different crops, then missed faces and detections without a face.';
+  $('cost-sub').textContent = `${DNAME[S.dataset] || S.dataset}, version ${D.versions[S.vi]}` +
+    (suf ? `, ${METRICS[S.metric]}` : '') + '. Left to right on a line, one cause per step: faces the pipeline ' +
+    'never scored (missed by the detector, or no landmarks or buffer yet), the crop of the detector box ' +
+    'instead of the GT box, and detections that match no annotated face. A step to the right is a gain.';
   $('legend-cost').innerHTML = COST.map(([, nm, sym]) =>
     `<span><i class="sw${sym.startsWith('square') ? ' sq' : ''}${sym.endsWith('open') ? ' ring' : ''}" style="background:var(--muted)"></i>${nm}</span>`).join('');
+  $('cost-table').querySelector('thead').innerHTML = '<tr><th>Run</th><th class="n">GT boxes</th>' +
+    COST_STEPS.map(n => `<th class="n">${n}</th>`).join('') + '<th class="n">Full pipeline</th></tr>';
+  $('cost-table').querySelector('tbody').innerHTML = rows.map((r, i) => '<tr>' +
+    `<td>${names[i]}</td><td class="n">${fmtPct(r[key('map_gt')])}</td>` +
+    COST.slice(1).map(([k], j) => `<td class="n">${fmtDelta(r[key(k)] - r[key(COST[j][0])])}</td>`).join('') +
+    `<td class="n">${fmtPct(r[key('map')])}</td></tr>`).join('');
 }
+
+function fmtPct(v) { return v == null ? '' : (100 * v).toFixed(1); }
+function fmtDelta(d) { return d == null || isNaN(d) ? '' : (d >= 0 ? '+' : '\u2212') + Math.abs(100 * d).toFixed(1); }
 
 const COLS = [
   ['v', 'Version'], ['dataset', 'Dataset'], ['model', 'Model'], ['protocol', 'Protocol'], ['device', 'Device'],
@@ -558,7 +575,7 @@ function init() {
   $('ticks').innerHTML = D.versions.map(v => `<span>${v}</span>`).join('');
   S.axis = defaultAxis(); $('axis').value = S.axis;
   $('dataset').onchange = e => { S.dataset = e.target.value; S.axis = defaultAxis(); $('axis').value = S.axis; drawAll(); };
-  $('metric').onchange = e => { S.metric = e.target.value; drawScatter(); drawProgress(); };
+  $('metric').onchange = e => { S.metric = e.target.value; drawScatter(); drawProgress(); drawCost(); };
   $('axis').onchange = e => { S.axis = e.target.value; drawScatter(); drawStages(); };
   for (const id of ['show-det', 'show-gt', 'show-front']) $(id).onchange = drawPlots;
   $('version').oninput = e => { stop(); S.vi = +e.target.value; drawAll(); };
