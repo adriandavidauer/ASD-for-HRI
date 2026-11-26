@@ -26,7 +26,7 @@ def _gt_rows(n_frames=100):
     return rows
 
 
-def _write_run(root, name, gt, score, boxes, drop=lambda r: False, extra=()):
+def _write_run(root, name, gt, score, boxes, drop=lambda r: False, extra=(), **info):
     """Score made-up predictions into ``<root>/<name>/stats``."""
     by_ts = {}
     for r in gt:
@@ -39,7 +39,7 @@ def _write_run(root, name, gt, score, boxes, drop=lambda r: False, extra=()):
         by_ts.setdefault(ts, []).append(stats._PredBox(box, 'x', s, None))
     protocol, gt_df, fp, n = stats.protocol_rows('v', stats.GroundTruthIndex(gt), by_ts, 0.02)
     info = {'dataset': 'ava', 'split': 'val', 'architecture': 'M', 'boxes': boxes,
-            'started_at': '2026-01-01'}
+            'started_at': '2026-01-01', **info}
     stats.write_protocol_results(str(root / name / 'stats'), [('v', protocol, gt_df, fp, n)],
                                  run_info=info)
 
@@ -70,3 +70,15 @@ def test_detector_cost_steps_split_the_drop_into_its_causes(tmp_path):
     assert s['map_gt_found_first_1s'] < s['map_gt_first_1s']   # the misses are early
     assert s['map_gt_found_first_2s'] > s['map_gt_found_first_0.5s']
     assert 'map_gt_on_detected' not in s
+
+
+def test_detector_cost_falls_back_to_the_gt_run_with_another_start_box(tmp_path):
+    """A detector run pairs with the GT run that only differs in its start box."""
+    gt = _gt_rows()
+    perfect = lambda r: float(r['ava_label'] == POS)  # noqa: E731
+    _write_run(tmp_path, 't_ava_M_gt_adjusted', gt, perfect, 'gt', shape_start_box='ava_gt')
+    _write_run(tmp_path, 't_ava_M_detector', gt, perfect, 'detector')
+    _write_run(tmp_path, 't_ava_N_gt', gt, perfect, 'gt', architecture='N')
+    assert detector_cost(tmp_path, 't') == 1
+    s = json.loads((tmp_path / 't_ava_M_detector' / 'stats' / 'summary.json').read_text())
+    assert s['gt_partner'] == 't_ava_M_gt_adjusted'

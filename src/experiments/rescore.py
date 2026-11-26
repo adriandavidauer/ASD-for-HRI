@@ -32,6 +32,8 @@ CONFIG_KEYS = ('dataset', 'split', 'architecture', 'stride', 'av_window', 'audio
                'audio_gate', 'gate_mode')
 CONFIG_DEFAULTS = {'shape_passes': 1, 'shape_start_box': 'none', 'audio_gate': 'none',
                    'gate_mode': 'product'}
+# left out of the configuration when no GT-box run matches exactly (detector_cost)
+LOOSE_KEYS = ('shape_start_box',)
 # what a run's summary.json keeps from its own run (the metrics are recomputed)
 RUN_INFO_KEYS = CONFIG_KEYS + ('boxes', 'host', 'machine', 'version', 'git_commit',
                                'started_at')
@@ -50,13 +52,17 @@ def _summary(run_dir):
         return json.load(f)
 
 
-def _config(summary):
+def _config(summary, ignore=()):
     """The configuration of a run, apart from its boxes.
+
+    Args:
+        summary: The run's summary.
+        ignore: Keys of ``CONFIG_KEYS`` left out.
 
     Returns:
         tuple: The values of ``CONFIG_KEYS``.
     """
-    return tuple(summary.get(k, CONFIG_DEFAULTS.get(k)) for k in CONFIG_KEYS)
+    return tuple(summary.get(k, CONFIG_DEFAULTS.get(k)) for k in CONFIG_KEYS if k not in ignore)
 
 
 def rescore(run_dir, data_dir, workers=None):
@@ -92,7 +98,9 @@ def detector_cost(benchmark_dir, tag=''):
     """Split each detector run's drop from GT boxes to the full pipeline into its causes (#134).
 
     The partner is the GT-box run of the same configuration (``CONFIG_KEYS``), of the same tag
-    if there is one, otherwise the latest. Four mAPs, each one step closer to the full pipeline,
+    if there is one, otherwise the latest. Without one, the start box of the landmark models
+    (``shape_start_box``) is ignored: it only changes how a given GT box is used, so a release
+    whose GT-box runs use the adjusted start box still gets the breakdown. Four mAPs, each one step closer to the full pipeline,
     so that the differences add up to the whole drop:
 
     ``map_gt``
@@ -121,15 +129,16 @@ def detector_cost(benchmark_dir, tag=''):
     for path in sorted(Path(benchmark_dir).glob('*/stats/summary.json')):
         with open(path) as f:
             runs[path.parent.parent] = json.load(f)
-    partners = {}
+    partners, loose = {}, {}
     for run, s in runs.items():
         if s.get('boxes') == 'gt':
             partners.setdefault(_config(s), []).append(run)
+            loose.setdefault(_config(s, LOOSE_KEYS), []).append(run)
     updated = 0
     for run, s in runs.items():
         if s.get('boxes') != 'detector' or (tag and not run.name.startswith(f'{tag}_')):
             continue
-        candidates = partners.get(_config(s), [])
+        candidates = partners.get(_config(s)) or loose.get(_config(s, LOOSE_KEYS), [])
         if not candidates:
             continue
         same_tag = [c for c in candidates if tag and c.name.startswith(f'{tag}_')]
