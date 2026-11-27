@@ -357,15 +357,16 @@ class NormalizeShapeSample(Processor):
 # The adjusted boxes (#132) are where dlib's own frontal face detector, whose boxes the 68-point
 # predictor was trained on, typically puts its box in the crops of a box source: the median of
 # the matched detections on train frames (``src/model_training/estimate_detector_box.py``;
-# n = 1091 AVA, 1968 WASD, 734 EasyCom), one per dataset's GT boxes and one for YuNet over all
-# three datasets (n = 3923; per dataset within 0.05 of it). 'ava_gt' (#105) is the older start
+# n = 1091 AVA, 1968 WASD, 734 EasyCom, 953 UniTalk), one per dataset's GT boxes and one for
+# YuNet over all four datasets (n = 4954; per dataset within 0.05 of it). 'ava_gt' (#105) is the older start
 # box, the median 2-pass landmark box of AVA train's GT crops; it stays so its runs can be redone.
 SHAPE_START_BOXES = {
     'none': None,
     'ava': (0.201, 0.295, 0.817, 0.919),
     'wasd': (0.123, 0.187, 0.880, 0.939),
     'easycom': (0.045, 0.150, 0.924, 1.018),
-    'YuNet': (0.079, 0.135, 0.916, 0.971),
+    'unitalk': (0.084, 0.129, 0.905, 0.955),
+    'YuNet': (0.082, 0.134, 0.914, 0.967),
     'ava_gt': (0.150, 0.285, 0.873, 0.994),
 }
 
@@ -382,8 +383,8 @@ def adjusted_start_box(dataset, boxes='gt'):
         str: The dataset for GT boxes, 'YuNet' for detector boxes.
 
     Raises:
-        ValueError: If there is no adjusted start box for the dataset's GT boxes (e.g. UniTalk,
-            whose train split was not available for the estimation).
+        ValueError: If there is no adjusted start box for the dataset's GT boxes (a dataset
+            that was not part of the estimation).
     """
     key = dataset if boxes == 'gt' else 'YuNet'
     if key not in SHAPE_START_BOXES or key in ('none', 'ava_gt'):

@@ -191,7 +191,7 @@ def resolve_start_box(args):
 
     'adjusted' picks the constant of the run's box source (#132): the dataset's for GT boxes,
     YuNet's for detector boxes. ``adjusted_start_box`` raises a ValueError for the GT boxes of
-    a dataset without a constant (UniTalk).
+    a dataset without a constant.
 
     Args:
         args: Parsed flags (``shape_start_box``, ``dataset``, ``boxes``).

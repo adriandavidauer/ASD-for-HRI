@@ -65,6 +65,24 @@ def test_sample_timestamps_spread_over_the_video():
     assert len(e.sample_timestamps(gt[:3], 5)) == 3
 
 
+def test_unitalk_videos_pairs_downloaded_videos_with_their_gt(tmp_path):
+    """Only fully downloaded videos with GT rows; yt-dlp's partial files are skipped."""
+    (tmp_path / 'csv').mkdir()
+    (tmp_path / 'csv' / 'train_orig.csv').write_text(
+        'video_id,frame_timestamp,entity_box_x1,entity_box_y1,entity_box_x2,entity_box_y2,'
+        'label,entity_id,label_id,instance_id\n'
+        '-a,0.1,0.1,0.2,0.3,0.4,SPEAKING,-a:0,1,-a:0:0\n'
+        'b,0.2,0.1,0.2,0.3,0.4,NOT_SPEAKING,b:0,0,b:0:0\n'
+        'c,0.3,0.1,0.2,0.3,0.4,NOT_SPEAKING,c:0,0,c:0:0\n')
+    videos = tmp_path / 'videos' / 'train'
+    videos.mkdir(parents=True)
+    for name in ('-a.mp4', 'b.f137.mp4', 'b.f140.m4a', 'd.mp4'):
+        (videos / name).touch()
+    out = e.unitalk_videos(tmp_path)
+    assert [(vid, Path(path).name, crop) for vid, path, crop, _ in out] == [('-a', '-a.mp4', None)]
+    assert out[0][3] == [(0.1, '-a:0', (0.1, 0.2, 0.3, 0.4))]
+
+
 def test_matched_fractions_skip_small_crops():
     """Crops smaller than MIN_SIZE are not used."""
     rec = {'gt': [(0, 0, 200, 200), (300, 0, 330, 30)],
@@ -93,7 +111,7 @@ def test_process_video_records_regions_detections_and_proxy_errors():
 
 @pytest.mark.parametrize('dataset, boxes, expected', [
     ('ava', 'gt', 'ava'), ('wasd', 'gt', 'wasd'), ('easycom', 'gt', 'easycom'),
-    ('ava', 'detector', 'YuNet'), ('unitalk', 'detector', 'YuNet'),
+    ('unitalk', 'gt', 'unitalk'), ('ava', 'detector', 'YuNet'), ('unitalk', 'detector', 'YuNet'),
 ])
 def test_adjusted_start_box_is_the_constant_of_the_box_source(dataset, boxes, expected):
     """GT boxes use their dataset's constant, detector boxes the YuNet one."""
@@ -103,11 +121,11 @@ def test_adjusted_start_box_is_the_constant_of_the_box_source(dataset, boxes, ex
     assert 0 <= x0 < x1 and 0 <= y0 < y1
 
 
-def test_no_adjusted_start_box_for_unitalk_gt_boxes():
-    """UniTalk's train split was not available for the estimation: no silent fallback."""
+def test_no_adjusted_start_box_for_a_dataset_without_a_constant():
+    """A dataset that was not part of the estimation: no silent fallback."""
     from asd4hri.processors import adjusted_start_box
     with pytest.raises(ValueError):
-        adjusted_start_box('unitalk', 'gt')
+        adjusted_start_box('other', 'gt')
 
 
 @pytest.mark.parametrize('flag, dataset, boxes, expected', [

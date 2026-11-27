@@ -13,7 +13,9 @@ Box sources (train splits only):
   folder exactly as ``WasdDataset.cut_clips`` does.
 * ``easycom``: EasyCom train sessions, boxes converted with ``easycom_dataset.convert_file``
   and frames cropped to the camera image (``frame_crop``).
-* ``YuNet``: the pipeline's detector, run on the same frames of all three datasets.
+* ``unitalk``: UniTalk train GT boxes (``<root>/videos/train``, ``<root>/csv/train_orig.csv``,
+  as written by ``download_uni_talk``); videos still downloading are skipped.
+* ``YuNet``: the pipeline's detector, run on the same frames of all datasets.
 
 Every sampled frame is stored with the crop regions of the GT boxes and of YuNet and with all
 of dlib's detections (``detector.run(image, 1)``: one upsampling, threshold 0), so the
@@ -36,6 +38,7 @@ Usage (from the repo root, in the image)::
         --clip_dir out/wasd_clips
     python -m src.model_training.estimate_detector_box collect easycom /data/easycom \\
         out/easycom.jsonl
+    python -m src.model_training.estimate_detector_box collect unitalk /data out/unitalk.jsonl
     python -m src.model_training.estimate_detector_box summarize out/*.jsonl
     python -m src.model_training.estimate_detector_box proxy /data/ava out/proxy.json \\
         --groundtruth /data/ava/annotations/ava_val_groundtruth.csv
@@ -55,7 +58,7 @@ from pathlib import Path
 import numpy as np
 
 LOGGER = logging.getLogger('estimate_detector_box')
-DATASETS = ('ava', 'wasd', 'easycom')
+DATASETS = ('ava', 'wasd', 'easycom', 'unitalk')
 MIN_SIZE = 40          # smaller crops give coarse landmarks (as in estimate_landmark_box)
 MIN_INSIDE = 0.8       # share of the dlib box that must lie inside the crop
 MIN_SIDE = 0.3         # dlib box side relative to the crop side
@@ -107,6 +110,27 @@ def ava_videos(root, groundtruth_csv=None):
             gt.update(read_groundtruth(path, vid))
     return [(vid, str(videos[vid]), None, rows) for vid, rows in sorted(gt.items())
             if vid in videos]
+
+
+def unitalk_videos(root, n_videos=None, seed=0):
+    """UniTalk train videos and their GT boxes (AVA format).
+
+    Args:
+        root: Folder with ``videos/train/<id>.mp4`` and ``csv/train_orig.csv``; only read.
+        n_videos: Number of videos to sample, or None for all present.
+        seed: Seed of the sample.
+
+    Returns:
+        list[tuple]: ``(video_id, path, frame_crop, groundtruth)`` per video present.
+    """
+    root = Path(root)
+    gt = read_groundtruth(root / 'csv' / 'train_orig.csv')
+    # yt-dlp's partial and not yet merged files have another stem (``<id>.f137``, ``.part``)
+    videos = {p.stem: p for p in (root / 'videos' / 'train').glob('*.mp4')}
+    ids = sorted(vid for vid in gt if vid in videos)
+    if n_videos is not None:
+        ids = sorted(random.Random(seed).sample(ids, min(n_videos, len(ids))))
+    return [(vid, str(videos[vid]), None, gt[vid]) for vid in ids]
 
 
 def wasd_videos(root, clip_dir, n_clips, seed=0):
@@ -507,6 +531,8 @@ def _videos(args):
                            args.videos or 150, args.seed)
     if args.dataset == 'easycom':
         return easycom_videos(args.root, args.videos, args.seed)
+    if args.dataset == 'unitalk':
+        return unitalk_videos(args.root, args.videos, args.seed)
     raise ValueError(f'dataset must be one of {DATASETS}')
 
 
@@ -563,7 +589,8 @@ def main():
     c.add_argument('out', help='.jsonl to write')
     c.add_argument('--frames_per_video', type=int, default=8)
     c.add_argument('--videos', type=int, default=None,
-                   help='WASD sub-clips (default 150) / EasyCom files (default all) to sample')
+                   help='WASD sub-clips (default 150) / EasyCom files / UniTalk videos (default all) '
+                        'to sample')
     c.add_argument('--clip_dir', default=None, help='writable folder for the WASD sub-clips')
     c.add_argument('--no_yunet', action='store_true', help='skip the YuNet box source')
     c.add_argument('--seed', type=int, default=0)
