@@ -80,7 +80,7 @@ Paths and the run tag can be changed when submitting, for example
 `IMAGE=... DATA=... TAG=volta sbatch --array=0-71 cluster/benchmark.slr`. `MODELS="..."` runs
 only the given models; check the indices with `MODELS="..." bash cluster/benchmark.slr --list`.
 `EXTRA="..."` passes options on to every run (`run_benchmark ... -- <EXTRA>`), for example
-`EXTRA="--shape_start_box ava_gt"`; they are appended to the run folder's name. A finished run is
+`EXTRA="--shape_start_box adjusted"`; they are appended to the run folder's name. A finished run is
 skipped, so failed tasks can be resubmitted with the same command.
 
 Watch the jobs with `squeue -u $USER`; cancel them with `scancel <jobid>`.
